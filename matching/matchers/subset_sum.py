@@ -1,22 +1,28 @@
-"""Customer receipts without a usable reference: who paid (matching/parties.py) + which of the payer's open items sum
-to the amount.  Also hosts the shared engine used by `same_amount` (both are computed in ONE chronological pass so the
+"""Customer receipts without a usable reference: who paid (matching/parties.py) + which of the payer's open items the
+amount settles.  Also hosts the shared engine used by `same_amount` (both are computed in ONE chronological pass so the
 items consumed by one line are not offered to a later one).
 
 Per line (incoming, not claimed by an earlier matcher), in booking-date order:
 1. payer candidates = PartyResolver (IBAN / name / learned aliases / ORD. / EXPTE); then their subsidiaries / group.
-2. pool = the candidate's open AR items in the line's entity & currency, issued on/before the booking date, not used.
-3. solutions, in this order:
-   - one invoice with exactly the amount: unique -> subset_sum; several with the same amount -> same_amount
-     (month named in the text -> the invoice of that service month, issued at the start of the following month;
-     else the oldest = FIFO);
-   - oldest-first prefix of the open invoices summing to the amount (FIFO);
-   - exact subset (meet-in-the-middle over the payer's recent invoices) that is unique and whose "chance" of being a
-     coincidence (density of subset sums around the amount) is tiny.
-4. claim only when exactly one candidate customer has a solution (precision first).
+2. pool = the candidate's open AR items in the line's entity & currency, issued on/before the booking date, minus what
+   earlier matchers (ctx.allocations) and earlier lines of ours took, minus cancelled items (pdf_clauses).
+3. solutions, first hit wins (kind = method suffix):
+   - single       one invoice with exactly the amount (several -> same_amount: month named in the text -> the invoice
+                  of that service month, issued at the start of the following month; else the oldest = FIFO)
+   - discount     one invoice paid net of its early-payment discount (SHORT_DISCOUNT in time, PARTIAL late)
+   - withholding  one invoice of a MX/BR/MA customer net of 1.25 / 1.5 / 10 % withheld tax (SHORT_WITHHOLDING)
+   - cn_pair      one invoice net of its own credit note
+   - fifo/subset  oldest-first prefix / unique exact subset (meet-in-the-middle, recent credit notes negative) whose
+                  chance of being a coincidence (density of subset sums around the amount) is small
+   - *_wht        same with every invoice withheld at one rate;  subset_disc: each invoice full or net of its discount
+   - overpayment  one invoice + a round excess (1, 2, 5, 10, 50, 100 ...) -> OVERPAYMENT
+   - partial      one invoice paid at a round fraction (25-70 %) -> PARTIAL ("RESTO"/"BALANCE" in text -> no exception)
+   An allocation to an item that an earlier matcher settles on a LATER line gets PARTIAL (the item stays open).
+4. claim only when exactly one candidate customer has a solution of the best tier (precision first).
 """
 from __future__ import annotations
 
-import calendar
+import math
 import re
 from datetime import date, timedelta
 
@@ -30,22 +36,29 @@ NAME = "subset_sum"
 
 MITM_MAX = 30          # max pool size for the exhaustive search
 MITM_RECENT_DAYS = 400  # exhaustive search only over invoices issued in the last N days
-DUE_STAGES = (0, 20)    # exhaustive pools: invoices due by booking date + N days
+DUE_STAGES = ((-90, 0), (-9999, 0), (-9999, 20))   # exhaustive pools: due-date windows around booking
 SPURIOUS_MAX = 0.3      # max expected number of coincidental subsets hitting the amount
-SPURIOUS_TIE = -1.0     # same, when several exact subsets exist and the oldest one is taken
 MULTI_ALT = True        # subset search with every invoice withheld / discounted
-OVERPAY = True          # one invoice overpaid by a round amount (1, 2, 5, 10, 50, 100 ...)
+OVERPAY = False         # one invoice overpaid by a round amount (1, 2, 5, 10, 50, 100 ...) - short_payments does it
+FX = True               # foreign-currency receipts: search on orig_amount / orig_currency -> FX_DIFFERENCE
 OVERPAY_MAX = 0.35
 PARTIAL_FRAC = True     # one invoice paid at a round fraction
+MULTI_PART = True       # several invoices in full + one at a round fraction
+PART_FRACTIONS = (0.4, 0.5, 0.6)
+PART_MAX = 12           # max pool for that search (4 states per invoice)
 FRACTIONS = (0.25, 0.3, 0.4, 0.5, 0.6, 0.7)
 OVERPAY_EXCESS = {100, 200, 500, 1000, 2000, 5000, 10000, 20000}   # cents: 1, 2, 5, 10, 20, 50, 100, 200
 TIER = {"discount": 1, "withholding": 1, "cn_pair": 1, "fifo_wht": 2, "subset_wht": 2, "fifo_disc": 2,
-        "subset_disc": 2, "overpayment": 3, "partial": 3}
+        "subset_disc": 2, "overpayment": 3, "partial": 3, "subset_part": 3}
 WHT_COUNTRIES = {"MX", "BR", "MA"}
+REMAINDER = re.compile(r"\b(?:RESTO|RESTANTE|REST|BALANCE|SOLDE|SALDO|REMAINDER|RESTBETRAG|SETTLEMENT)\b")
 WHT_RATES = (0.0125, 0.015, 0.10)
 DISCOUNT = True         # claim one invoice paid net of its early-payment discount
 CN_RECENT_DAYS = 120    # open credit notes issued in the last N days take part (negative) in the exhaustive search
-TIE_MAX = 8             # max number of exact subsets to choose from
+SPURIOUS_ALT = 0.05     # same, for the withheld / discounted valuations
+MULTI_DISC = True       # subset search where each invoice is paid in full or net of its discount
+DISC_MAX = 18           # max pool for that search (3 states per invoice)
+TIE_MAX = 1             # exact subsets enumerated by mitm (only unique ones are used)
 WINDOW = 20000          # +-cents window used to estimate the subset-sum density
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -92,6 +105,11 @@ def service_month(text: str, booking: str) -> tuple[int, int] | None:
     return None
 
 
+def rnd(v: float) -> int:
+    """Round half up (deductions are computed to the cent, half up - Python's round() is half-to-even)."""
+    return int(math.floor(v + 0.5 + 1e-9))
+
+
 def next_month(y: int, m: int) -> str:
     return f"{y + (m == 12):04d}-{(m % 12) + 1:02d}"
 
@@ -127,6 +145,44 @@ def mitm(vals: list[int], target: int, max_sols: int = 1) -> tuple[int, list[lis
     return cnt, sols, dens
 
 
+def _opt_sums(opts: list[list[int]]) -> tuple[np.ndarray, np.ndarray]:
+    """All sums choosing for each item 'absent' or one of its option values -> (sums, codes); code = mixed-radix
+    choice per item (0 = absent, j+1 = option j)."""
+    s = np.zeros(1, dtype=np.int64)
+    c = np.zeros(1, dtype=np.int64)
+    mult = 1
+    for o in opts:
+        s = np.concatenate([s] + [s + v for v in o])
+        c = np.concatenate([c] + [c + (j + 1) * mult for j in range(len(o))])
+        mult *= len(o) + 1
+    return s, c
+
+
+def mitm_opts(opts: list[list[int]], target: int) -> tuple[int, list[int] | None, float]:
+    """Subset-sum where each item is absent or takes one of its alternative values. -> (number of solutions, the
+    choice per item when unique (0 absent, j+1 option j), density of sums around the target)."""
+    h = len(opts) // 2
+    a, ac = _opt_sums(opts[:h])
+    b, bc = _opt_sums(opts[h:])
+    order = np.argsort(b, kind="stable")
+    bs = b[order]
+    need = target - a
+    lo, hi = np.searchsorted(bs, need, "left"), np.searchsorted(bs, need, "right")
+    cnt = int((hi - lo).sum())
+    wl, wh = np.searchsorted(bs, need - WINDOW, "left"), np.searchsorted(bs, need + WINDOW, "right")
+    dens = float((wh - wl).sum()) / (2 * WINDOW + 1)
+    if cnt != 1:
+        return cnt, None, dens
+    i = int(np.nonzero(hi > lo)[0][0])
+    codes = [int(ac[i]), int(bc[order[lo[i]]])]
+    out = []
+    for part, code in ((opts[:h], codes[0]), (opts[h:], codes[1])):
+        for o in part:
+            out.append(code % (len(o) + 1))
+            code //= len(o) + 1
+    return cnt, out, dens
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 def cancelled_set(ctx: Ctx) -> set:
     """Items never settled by bank (cancelled / replaced invoices and their cancelling credit notes), cached on ctx."""
@@ -156,6 +212,12 @@ class Engine:
             full = p.exception.isin(["SHORT_DISCOUNT", "SHORT_WITHHOLDING", "SHORT_BANK_CHARGES", "OVERPAYMENT",
                                      "FX_DIFFERENCE", "DUPLICATE_PAYMENT"])
             taken = p.assign(a=np.where(full, 1e12, p.amount.astype(float))).groupby("item_id").a.sum().to_dict()
+            # when an earlier matcher settles (part of) an item on a LATER line, our line leaves it open -> PARTIAL
+            dates = ctx.bank.set_index("bank_txn_id").booking_date
+            pk = p.assign(k=p.bank_txn_id.map(dates).fillna("") + "|" + p.bank_txn_id)
+            self.last_prior = pk.groupby("item_id").k.max().to_dict()
+        else:
+            self.last_prior = {}
         self.pool: dict[str, list] = {}
         cancelled = cancelled_set(ctx)
         for r in it.itertuples(index=False):
@@ -171,6 +233,7 @@ class Engine:
                       if p}
         self.docs = {i: (a, n) for i, a, n in zip(it.item_id, it.document_alnum, it.document_number_norm)}
         self.used: set[str] = set()
+        self.rem: dict = {}
         cust = ctx.masters["customers"]
         self.country = dict(zip(cust.customer_id, cust.country))
         self.diag: dict = {}
@@ -179,8 +242,14 @@ class Engine:
 
     # -- candidates ---------------------------------------------------------------------------------------------------
     def items(self, cid: str, t) -> list:
-        return [x for x in self.pool.get(cid, ()) if x[0] not in self.used and x[5] == t.entity
-                and x[6] == t.currency and x[1] <= t.booking_date]
+        out = []
+        for x in self.pool.get(cid, ()):
+            if x[0] in self.used or x[5] != t.entity or x[6] != t.currency or x[1] > t.booking_date:
+                continue
+            if x[0] in self.rem:     # partly paid by an earlier line of ours
+                x = x[:3] + (self.rem[x[0]],) + x[4:]
+            out.append(x)
+        return out
 
     def solve(self, cid: str, t, cents: int):
         """-> (kind, [items], {item_id: (amount_cents, exception)}) or None."""
@@ -202,20 +271,22 @@ class Engine:
             if acc > cents:
                 break
         lim_iss = str(date.fromisoformat(t.booking_date) - timedelta(days=MITM_RECENT_DAYS))
+        bd = date.fromisoformat(t.booking_date)
         prev = None
-        for slack in DUE_STAGES:
-            lim_due = str(date.fromisoformat(t.booking_date) + timedelta(days=slack))
-            cand = [(x, v) for x, v in inv if x[1] >= lim_iss and x[2] <= lim_due and v <= cents][:MITM_MAX]
+        for lo, hi in DUE_STAGES:
+            lim_lo, lim_due = str(bd + timedelta(days=lo)), str(bd + timedelta(days=hi))
+            cand = [(x, v) for x, v in inv if x[1] >= lim_iss and lim_lo <= x[2] <= lim_due and v <= cents][:MITM_MAX]
             if not cand or len(cand) + len(cns) < 2 or sum(v for _, v in cand) < cents or len(cand) == prev:
                 continue
             prev = len(cand)
             cand = cand + [(c, -c[3]) for c in cns[:max(0, MITM_MAX + 4 - len(cand))]]
             cnt, sols, dens = mitm([v for _, v in cand], cents, max_sols=TIE_MAX)
             self.diag[(t.bank_txn_id, cid)] = (len(cand), cnt, dens)
-            if cnt == 1 and dens <= SPURIOUS_MAX and len(sols[0]) >= 2 and any(cand[i][1] > 0 for i in sols[0]):
+            if cnt == 1 and dens <= (SPURIOUS_MAX if not tag else SPURIOUS_ALT) and len(sols[0]) >= 2 \
+                    and any(cand[i][1] > 0 for i in sols[0]):
                 self.conf = 0.85 if dens <= 0.01 else 0.75 if dens <= 0.1 else 0.6
                 return "subset" + tag, [cand[i][0] for i in sols[0]]
-            if cnt >= 1:
+            if cnt >= 1 and lo == DUE_STAGES[-1][0]:
                 break   # a wider pool cannot make the solution unique
         return None
 
@@ -255,7 +326,7 @@ class Engine:
         # withholding tax at source (MX / BR / MA customers): cash = total x (1 - rate) on one invoice
         wht = self.country.get(cid, "") in WHT_COUNTRIES
         if wht:
-            hits = [(x, r) for r in WHT_RATES for x in inv if x[3] == x[7] and x[7] - round(x[7] * r) == cents]
+            hits = [(x, r) for r in WHT_RATES for x in inv if x[3] == x[7] and x[7] - rnd(x[7] * r) == cents]
             if len(hits) == 1:
                 x = hits[0][0]
                 return "withholding", [x], {x[0]: (x[3], "SHORT_WITHHOLDING")}
@@ -276,19 +347,54 @@ class Engine:
         if wht and MULTI_ALT:
             for rate in WHT_RATES:
                 r = self._search(t, cid, cents, inv, cns,
-                                 lambda x: x[7] - round(x[7] * rate) if x[3] == x[7] else None, "_wht")
+                                 lambda x: x[7] - rnd(x[7] * rate) if x[3] == x[7] else None, "_wht")
                 if r:
                     return r[0], r[1], {x[0]: (x[3], "SHORT_WITHHOLDING") for x in r[1] if x[4] == "ARI"}
-        # several invoices, all paid net of their early-payment discount
-        if MULTI_ALT and any(self.disc_value(x) is not None for x in inv):
-            r = self._search(t, cid, cents, inv, cns, self.disc_value, "_disc")
-            if r:
-                exc = {}
-                for x in r[1]:
-                    if x[4] == "ARI":
-                        e = self.disc_exc(x, t)
-                        exc[x[0]] = (self.disc_value(x) if e == "PARTIAL" else x[3], e)
-                return r[0], r[1], exc
+        # several invoices, each paid in full or net of its early-payment discount (in time -> SHORT_DISCOUNT, late
+        # -> PARTIAL with the cash applied)
+        if MULTI_DISC and any(self.disc_value(x) is not None for x in inv):
+            bd = date.fromisoformat(t.booking_date)
+            lim_iss = str(bd - timedelta(days=MITM_RECENT_DAYS))
+            for lo, hi in DUE_STAGES:
+                lim_lo, lim_due = str(bd + timedelta(days=lo)), str(bd + timedelta(days=hi))
+                cand = [x for x in inv if x[1] >= lim_iss and lim_lo <= x[2] <= lim_due and x[3] <= cents][:DISC_MAX]
+                if len(cand) < 2:
+                    continue
+                opts = [[x[3]] + ([self.disc_value(x)] if self.disc_value(x) is not None else []) for x in cand]
+                opts += [[-c[3]] for c in cns]
+                allx = cand + cns
+                cnt, ch, dens = mitm_opts(opts, cents)
+                if cnt == 1 and dens <= SPURIOUS_ALT:
+                    sel = [(allx[i], c) for i, c in enumerate(ch) if c]
+                    if len(sel) >= 2 and any(c == 2 for _, c in sel):
+                        exc = {}
+                        for x, c in sel:
+                            if c == 2:
+                                e = self.disc_exc(x, t)
+                                exc[x[0]] = (self.disc_value(x) if e == "PARTIAL" else x[3], e)
+                        return "subset_disc", [x for x, _ in sel], exc
+                if cnt >= 1:
+                    break
+        # several invoices in full + ONE paid at a round fraction (40 / 50 / 60 %) -> that one PARTIAL
+        if MULTI_PART:
+            bd = date.fromisoformat(t.booking_date)
+            lim_iss = str(bd - timedelta(days=MITM_RECENT_DAYS))
+            for lo, hi in DUE_STAGES:
+                lim_lo, lim_due = str(bd + timedelta(days=lo)), str(bd + timedelta(days=hi))
+                cand = [x for x in inv if x[1] >= lim_iss and lim_lo <= x[2] <= lim_due and x[3] <= cents][:PART_MAX]
+                if len(cand) < 2:
+                    continue
+                opts = [[x[3]] + ([int(math.floor(f * x[7] + 1e-9)) for f in PART_FRACTIONS] if x[3] == x[7] else [])
+                        for x in cand]
+                cnt, ch, dens = mitm_opts(opts, cents)
+                if cnt == 1 and dens <= SPURIOUS_ALT:
+                    sel = [(cand[i], c) for i, c in enumerate(ch) if c]
+                    parts = [(x, c) for x, c in sel if c >= 2]
+                    if len(sel) >= 2 and len(parts) == 1:
+                        x, c = parts[0]
+                        return "subset_part", [y for y, _ in sel], {x[0]: (opts[cand.index(x)][c - 1], "PARTIAL")}
+                if cnt >= 1:
+                    break
         # one invoice overpaid by a round amount (the excess stays on the customer account)
         if OVERPAY:
             hits = [x for x in inv if 0 < cents - x[3] <= OVERPAY_MAX * x[3] and (cents - x[3]) in OVERPAY_EXCESS]
@@ -300,18 +406,20 @@ class Engine:
             hits = {}
             for x in inv:
                 for f in FRACTIONS:
-                    if any(abs(round(f * base) - cents) <= 0 for base in (x[7], x[3])) and cents < x[3]:
+                    if cents < x[3] and any(cents in (rnd(f * base), int(math.floor(f * base + 1e-9))) for base in (x[7], x[3])):
                         hits[x[0]] = x
             if len(hits) == 1:
                 x = next(iter(hits.values()))
-                return "partial", [x], {x[0]: (cents, "PARTIAL")}
+                # "RESTO" / "BALANCE": the rest of an earlier partial payment we did not see -> settles the item
+                rest = REMAINDER.search(upper(f"{t.text} {t.remittance_info}"))
+                return "partial", [x], {x[0]: (cents, "" if rest else "PARTIAL")}
         return None
 
     def disc_value(self, x):
         tm = self.terms.get(x[8])
         if not tm or x[3] != x[7] or x[4] != "ARI":
             return None
-        return x[7] - int(round(x[7] * tm[0] / 100))
+        return x[7] - rnd(x[7] * tm[0] / 100)
 
     def disc_exc(self, x, t):
         tm = self.terms[x[8]]
@@ -323,6 +431,12 @@ class Engine:
         b = self.ctx.bank
         b = b[(b.amount > 0) & ~b.bank_txn_id.isin(self.ctx.claimed)].sort_values(["booking_date", "bank_txn_id"])
         for t in b.itertuples(index=False):
+            fx = False
+            oc = t.orig_currency if isinstance(t.orig_currency, str) else ""
+            if FX and oc and oc != t.currency and t.orig_amount == t.orig_amount and t.orig_amount > 0:
+                # the payer paid the invoices in their currency; the bank converted -> search on the original amount
+                t = t._replace(currency=oc, amount=float(t.orig_amount))
+                fx = True
             cents = int(round(t.amount * 100))
             cands = self.pr.resolve(t)
             if not cands:
@@ -343,11 +457,21 @@ class Engine:
                 continue
             kind, its, excs = res
             method = "same_amount" if kind.startswith("same_amount") else "subset_sum"
+            kind = kind + ("_fx" if fx else "")
             conf = self.conf if kind == "subset" else {"single": 0.9, "single_ref": 0.95, "fifo": 0.85, "discount": 0.9, "cn_pair": 0.9, "withholding": 0.85,
                                                        "same_amount_month": 0.9, "same_amount_fifo": 0.75}.get(kind, 0.7)
+            key = f"{t.booking_date}|{t.bank_txn_id}"
             for x in its:
-                self.used.add(x[0])
                 amt, exc = excs.get(x[0], (x[3], ""))
+                if exc == "" and x[4] == "ARI" and self.last_prior.get(x[0], "") > key:
+                    exc = "PARTIAL"
+                if fx and x[4] == "ARI" and exc in ("", "SHORT_DISCOUNT", "SHORT_WITHHOLDING", "SHORT_BANK_CHARGES",
+                                                    "OVERPAYMENT"):
+                    exc = "FX_DIFFERENCE"
+                if exc == "PARTIAL" and amt < x[3]:
+                    self.rem[x[0]] = x[3] - amt
+                else:
+                    self.used.add(x[0])
                 self.rows[method].append((t.bank_txn_id, x[0], amt / 100, exc, conf, f"{method}:{kind}"))
         return self
 
