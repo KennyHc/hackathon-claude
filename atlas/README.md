@@ -5,6 +5,7 @@ how the files connect, where the score points are, exceptions, items per line, e
 
 - **View:** open `atlas/index.html` in a browser (self-contained, ~75 KB; fonts from Google Fonts).
   Published copy: https://claude.ai/artifact/ACHuugFCU13rUYNaWD4m29 (private; ask Kenny to share).
+- **Glossary:** 73 finance, banking and scoring terms, defined at the end of the page; every occurrence in the text has a dotted underline with the definition on hover/tap.
 - **Every number is computed from `data/`.** Only FINAL's ~220k lines is the organisers' announced figure.
   The "LIVE-like window" is TRAIN bank lines booked 2025-01-01 → 2025-06-30 (199,987 lines, 735,474 pairs).
 

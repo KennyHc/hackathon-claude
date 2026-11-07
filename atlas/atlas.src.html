@@ -26,6 +26,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6); color-scheme:dark }
 
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15.5px;line-height:1.55;-webkit-font-smoothing:antialiased;
   padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:0 64px}
 .wrap{max-width:1120px;margin:0 auto}
@@ -241,6 +242,21 @@ dl.vol dt{color:var(--ink-2)} dl.vol dd{margin:0;font-family:var(--mono);font-va
 
 footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);display:grid;gap:8px;font-size:13px;color:var(--muted)}
 
+/* glossary */
+.gloss{text-decoration-line:underline;text-decoration-style:dotted;text-decoration-color:var(--muted);text-decoration-thickness:1.5px;text-underline-offset:3px;cursor:help}
+span.gloss:hover{color:var(--accent);text-decoration-color:var(--accent)}
+tspan.gloss:hover{fill:var(--accent)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#glossary-q{width:100%;max-width:420px;font:15px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:22px}
+#glossary-q:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.glist{columns:2 380px;column-gap:40px}
+.ggroup{margin:0 0 26px}
+.ggroup h3{break-after:avoid}
+.ggroup h3{font-size:13px;font-family:var(--mono);font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.gitem{break-inside:avoid;padding:9px 0;border-bottom:1px solid var(--grid);display:grid;gap:2px;scroll-margin-top:20px}
+.gitem dt{font-weight:600;font-size:14.5px}
+.gitem dd{margin:0;font-size:14px;color:var(--ink-2);line-height:1.5}
+
 /* tooltip */
 #tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12.5px;line-height:1.45;padding:8px 10px;border-radius:8px;max-width:280px;opacity:0;transform:translateY(4px);transition:opacity .12s, transform .12s;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 #tip.on{opacity:1;transform:none}
@@ -272,8 +288,9 @@ footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);display
   <p class="lede rv" style="--d:.1s">Every bank line asks it. Grupo Valtermia is a synthetic water-equipment group: 17 entities, 12 currencies and about 200,000 bank lines every half-year. This page shows what data we get, how the files connect, and which kinds of cases hold the 100 points.</p>
   <div class="stats rv" style="--d:.15s" id="stats"></div>
   <nav class="toc rv" style="--d:.2s" aria-label="Sections">
-    <a href="#task">The task</a><a href="#phases">Phases & drift</a><a href="#files">Files</a><a href="#points">Where the points are</a><a href="#exceptions">Exceptions</a><a href="#shape">Lines & categories</a><a href="#world">Entities & formats</a>
+    <a href="#task">The task</a><a href="#phases">Phases & drift</a><a href="#files">Files</a><a href="#points">Where the points are</a><a href="#exceptions">Exceptions</a><a href="#shape">Lines & categories</a><a href="#world">Entities & formats</a><a href="#glossary">Glossary</a>
   </nav>
+  <p class="note rv" style="--d:.25s">Words with a dotted underline have a definition: hover or tap them. All of them are in the <a href="#glossary">glossary</a> at the end.</p>
 </header>
 
 <!-- ============ 1. TASK ============ -->
@@ -479,6 +496,21 @@ footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);display
   </div>
 </section>
 
+<!-- ============ 8. GLOSSARY ============ -->
+<section id="glossary">
+  <div class="head rv">
+    <div class="eyebrow">Glossary</div>
+    <h2>What do these words mean?</h2>
+    <p class="answer">Plain definitions of the finance, banking and scoring words used on this page. Each one is underlined wherever it appears above.</p>
+  </div>
+  <div class="panel rv">
+    <label class="sr" for="glossary-q">Search the glossary</label>
+    <input id="glossary-q" type="search" autocomplete="off" placeholder="Search terms, e.g. remittance">
+    <div class="glist" id="glist"></div>
+    <p class="note" id="gempty" hidden>No term matches. Try a shorter word.</p>
+  </div>
+</section>
+
 <footer>
   <div><b class="ink">How these numbers were made.</b> Every figure is counted from the hackathon data in <code>data/</code>. The LIVE-like window is TRAIN bank lines booked 2025-01-01 → 2025-06-30, joined to <code>golden_allocations</code>. Family groupings and plain-language names are ours; the codes in grey are the real <code>segment</code> values. “≈ points” is an upper bound that ignores precision and the exception part.</div>
   <div>FINAL sizes are the organisers' announcement; everything else is measured.</div>
@@ -537,6 +569,111 @@ DUPLICATE_PAYMENT:'item paid a second time', OVERPAYMENT:'paid more than the ope
 
 const W = D.window; const TL = W.lines, TP = W.pairs;
 const pts = (l, p) => 30*l/TL + 50*p/TP;
+
+/* ---------- glossary: terms a non-finance reader may not know ---------- */
+const GLOSS = [
+// [term, group, definition, aliases]. An all-caps alias (AR, FX, IBAN) only matches in capitals.
+['Bank reconciliation','Money & documents','Matching every movement on the bank statement to the business documents it belongs to, so the books agree with the bank. This whole hackathon.',['bank reconciliation','reconciliation']],
+['Bank line','Money & documents','One movement on a bank account: money in (+) or money out (−), with a date, an amount and a short text from the bank. Our unit of work: about 200,000 per half-year.',['bank line','bank lines','bank transaction','bank transactions']],
+['Bank statement','Money & documents','The file a bank sends listing every movement on an account over a period. Here: one raw file per account and month.',['bank statement','bank statements','statement','statements']],
+['Invoice','Money & documents','A bill. We send invoices to customers (they owe us money) and receive invoices from suppliers (we owe them).',['invoice','invoices']],
+['Credit note','Money & documents','A “negative invoice” that reduces what someone owes: returned goods, a price correction, a volume rebate. It can be subtracted inside a payment.',['credit note','credit notes']],
+['Open item','Money & documents','An invoice or credit note that is not fully paid yet. The things a bank line can settle. IDs start with ARI, ARC, API or APC.',['open item','open items','item','items']],
+['AR · accounts receivable','Money & documents','Money customers owe us. AR documents are our sales invoices and credit notes.',['AR','accounts receivable']],
+['AP · accounts payable','Money & documents','Money we owe suppliers. AP documents are the supplier invoices and credit notes we receive.',['AP','accounts payable']],
+['ARI · ARC · API · APC','Money & documents','Prefixes of open-item IDs: AR invoice, AR credit note, AP (supplier) invoice, AP credit note.',['ARI','ARC','API','APC']],
+['Proforma','Money & documents','A quote that looks like an invoice but is not one. If a customer pays it, the money is an advance; the real invoice comes later.',['proforma','proformas']],
+['Payment terms','Money & documents','When an invoice must be paid, e.g. “60 days” or “2 % 10 days, net 30” (2 % off if paid within 10 days, otherwise full price within 30).',['payment terms','terms']],
+['Settle','Money & documents','To pay off an item, fully or partly. “This line settles 4 invoices” means the money on this line pays those 4 invoices.',['settle','settles','settled','settling']],
+['Cleared','Money & documents','An item is cleared when it is closed in the books, even if slightly less cash came in for an accepted reason (discount, bank charge, FX).',['cleared','clears','clearing']],
+['Gross · net','Money & documents','Gross is the amount before fees or deductions are taken off; net is what is left after.',['gross']],
+['Netted','Money & documents','Subtracted inside one payment. “Invoices minus a credit note” is one payment where the credit note is netted.',['netted','net of']],
+['Master data','Money & documents','The reference lists everything else points to: customers, suppliers, bank accounts, payment terms, currencies, FX rates.',['masters','master data']],
+['Debit','Money & documents','Money leaving an account (shown with a minus). Money arriving is a credit.',['debit','debits']],
+['Direct debit','How money moves','We pull money from a customer’s account with their prior permission (a mandate). Many are sent together as a batch, and the bank shows the whole batch as one line.',['direct debit','direct debits','direct-debit','dd']],
+['SEPA','How money moves','The euro-zone payment system for transfers and direct debits. BACS is the UK equivalent and ACH the US one.',['SEPA']],
+['BACS · ACH','How money moves','UK (BACS) and US (ACH) systems for bulk payments and direct debits, the counterparts of SEPA.',['BACS','ACH']],
+['Mandate','How money moves','A customer’s signed permission that lets us collect money from their account by direct debit.',['mandate','mandates']],
+['Batch','How money moves','Many payments or collections grouped in one file. The bank books only the total, as a single line, so the batch file is needed to see what is inside.',['batch','batches']],
+['Collection','How money moves','Money we gather from customers, especially by direct debit, card or cheque.',['collection','collections']],
+['Collection agency','How money moves','A firm paid to chase old unpaid invoices. It then pays us on the customer’s behalf.',['collection agency']],
+['Card acquirer','How money moves','The company that processes card payments for a shop. It pays out the day’s card sales in one settlement, minus its fee.',['acquirer','card acquirer']],
+['Card settlement','How money moves','The single payout from the card acquirer covering many card orders. It settles the orders at their gross amount.',['card settlement','card settlements','settlement']],
+['Chargeback','How money moves','A card payment reversed by the card holder’s bank, e.g. after a complaint. The order becomes unpaid again.',['chargeback','chargebacks']],
+['Cheque deposit · lockbox','How money moves','Paper cheques paid into the bank together. A lockbox is a US bank service that receives and deposits cheques for a company.',['cheque deposit','cheque deposits','lockbox','cheque','cheques']],
+['Payment run','How money moves','Our own file of outgoing supplier payments. Each row says which supplier invoice a transfer pays.',['payment run','payment runs']],
+['Confirming','How money moves','A bank service that pays suppliers on a fixed date on behalf of a customer, as financing. Bank texts read “CONFIRMING … ORD.” followed by the customer’s name.',['confirming','confirming bank']],
+['Factoring','How money moves','A supplier sells its unpaid invoices to a finance company (the factor), so we must pay the factor instead of the supplier.',['factor','factored','factoring']],
+['Remittance advice','How money moves','A note from a customer listing which invoices a payment covers and any deductions. It can arrive days after the money.',['remittance advice','remittance advices','remittance','remittances','advice','advices']],
+['Instalment','How money moves','One of several planned partial payments of a single invoice (“3 vencimientos”). Every instalment except the last is PARTIAL.',['instalment','instalments','instalment plan']],
+['Retention','How money moves','Part of an invoice (5–10 %) the customer keeps back as a guarantee until the work is accepted, then pays about 12 months later (the release).',['retention','retentions','guarantee retention']],
+['Advance','How money moves','Money paid before the invoice exists, against a proforma. The final invoice later says how much of the advance to deduct.',['advance','advances']],
+['Rebate · rappel','How money moves','A volume discount given after the fact, as a credit note. Rappel is the Spanish term.',['rebate','rappel']],
+['Re-presented','How money moves','A returned direct debit that is sent to the customer’s bank again.',['re-presented','re-presentation']],
+['Cash pool','How money moves','Automatic transfers that move each group account’s balance to one central “header” account every day, so the group manages its cash in one place.',['cash pool','cash-pool','sweep','sweeps','zero-balancing','header']],
+['Holding · in-house bank','How money moves','The parent company (here ES00) that owns the others and runs the group’s cash: the cash-pool header, and payments for some subsidiaries (a payment factory).',['holding','in-house bank','payment factory']],
+['Intercompany','How money moves','Money moving between two companies of the same group, e.g. a loan from the parent to a subsidiary.',['intercompany']],
+['Own-account transfer','How money moves','Money moved between two accounts of the same company. Not income, not a payment.',['own-account transfer','internal transfer']],
+['FX · foreign exchange','How money moves','Converting one currency into another. An FX deal is a currency trade with a bank. Banks convert at their own rate, slightly worse than the reference rate.',['FX','foreign exchange','FX deal']],
+['ECB reference rate','How money moves','The official daily euro exchange rates published by the European Central Bank; given in masters/fx_rates.csv.',['ECB']],
+['Leasing','How money moves','Paying regular rent for equipment or vehicles instead of buying them.',['leasing']],
+['Payroll · social security','How money moves','Salary payments to employees, and the employer’s contributions to the state social-insurance system.',['payroll','social security']],
+['Exception','Exceptions','Our label for why the cash differs from the paperwork. One of 10 fixed codes, such as SHORT_DISCOUNT or PARTIAL.',['exception','exceptions']],
+['Early-payment discount','Exceptions','A reward for paying fast: with terms “2 % 10 days”, the customer may take 2 % off if it pays within 10 days. Taken late, it is not accepted.',['early-payment discount','discount','discounts']],
+['Withholding tax','Exceptions','In some countries (Mexico, Brazil, Morocco) the customer keeps back 1.25–10 % as tax and pays it to the tax office for us. The invoice still counts as fully paid.',['withholding','withheld','withholding tax']],
+['Intermediary bank charges','Exceptions','On an international transfer, a bank in the middle takes a small fee from the amount, so a little less arrives (up to 60 EUR and 2 %).',['intermediary bank','bank charges']],
+['Short-pay','Exceptions','Paying less than the invoice amount, for any reason.',['short-pay','short-pays','shortfall']],
+['Partial payment','Exceptions','Only part of an item is paid; the rest stays open for a later payment.',['partial','partials','partial payment']],
+['Dispute · deduction','Exceptions','The customer pays less and states why (damaged goods, price difference, late delivery…). The disputed part stays open.',['dispute','disputed','disputes','deduction','deductions']],
+['Overpayment','Exceptions','The customer pays more than an invoice’s open amount. The invoice is cleared and the extra stays on the customer’s account.',['overpayment','overpayments']],
+['Duplicate payment','Exceptions','An item that was already paid is paid a second time. The later payment gets the exception.',['duplicate','duplicates','duplicate payment']],
+['Returned','Exceptions','A direct debit, cheque, card payment or transfer that bounces back (no funds, closed account…). The item becomes unpaid again. Bankers call these R-transactions.',['returned','returns','r-transaction']],
+['Unidentified','Exceptions','Money received that matches no open item. It is labelled UNIDENTIFIED instead of being forced onto a wrong invoice.',['unidentified']],
+['IBAN','Formats & identifiers','The international bank account number, e.g. ES60 9436 …. It often identifies who paid.',['IBAN']],
+['End-to-end ID','Formats & identifiers','A reference the payer attaches to a payment that travels unchanged to the receiver. Links our transfers to payment-run rows.',['end_to_end_id','end-to-end id']],
+['Norma 43','Formats & identifiers','The Spanish banks’ fixed-width statement format (80-character records, text cut in 38-character fields). Also written N43.',['norma 43','n43']],
+['MT940','Formats & identifiers','The older SWIFT text format for bank statements, used internationally.',['mt940']],
+['camt.053','Formats & identifiers','The modern ISO 20022 XML bank statement. It has separate fields for payer name, IBAN and references.',['camt.053','camt']],
+['Booking date · value date','Formats & identifiers','Booking date: the day the bank records the movement. Value date: the day it counts for interest. Discounts are judged on the booking date.',['booking date','booked','value date']],
+['Reference','Formats & identifiers','The text a payer adds to say what a payment is for, usually invoice numbers. Often truncated, mistyped or missing.',['reference','references']],
+['Legal entity','Group structure','A separately registered company. The group has 17 (ES01, US01…), each with its own books, banks and currency.',['entity','entities','legal entity','legal entities']],
+['Subsidiary','Group structure','A company owned by the parent company of the group.',['subsidiary','subsidiaries']],
+['Golden','Scoring & dataset','The official correct answers. Only TRAIN has them; LIVE and FINAL answers stay hidden on the server.',['golden','golden answer']],
+['Segment','Scoring & dataset','A label in the TRAIN golden naming the kind of case (e.g. ar_dd_batch). It is not given in LIVE or FINAL.',['segment','segments']],
+['Pair','Scoring & dataset','One bank line plus one item it settles, with the amount. The unit of the 50-point allocation score.',['pair','pairs']],
+['F1','Scoring & dataset','A 0–1 score that balances precision (how many of our answers are right) and recall (how many of the right answers we found).',['F1','allocation F1']],
+['Macro-F1','Scoring & dataset','F1 computed for each exception code on its own, then averaged, so a rare code weighs as much as a common one.',['macro-F1']],
+['Transaction accuracy','Scoring & dataset','Share of bank lines answered completely right: every item, every amount and the exception.',['transaction accuracy']],
+['Tolerance','Scoring & dataset','How far off an amount may be and still count as right: 0.5 % of the golden amount (at least 1 cent).',['tolerance']],
+['Drift','Scoring & dataset','Changes over time in how the data looks (new formats, layouts, companies) that can break rules learned on older data.',['drift']],
+];
+const GL_MAP = new Map(); // alias(lower) -> [entryIndex, exactAliasIfCaseSensitive]
+GLOSS.forEach((g, i) => g[3].forEach(a => GL_MAP.set(a.toLowerCase(), [i, /^[A-Z0-9]+$/.test(a) ? a : null])));
+const GL_RE = new RegExp('(?<![\\w\\-.])(' + [...GL_MAP.keys()].sort((a, b) => b.length - a.length).map(a => a.replace(/[.*+?^${}()|[\]\\\-]/g, '\\$&')).join('|') + ')(?![\\w\\-])', 'gi');
+const GL_SKIP = 'script,style,code,.csv,.n43,.line,.kv,#tip,#glossary,.gloss,nav,input,button,.eyebrow,.th,.colh,.tag,.pill,.sum,.mono,.amt,.doc,.t1,.big';
+const glTip = i => `<b>${GLOSS[i][0]}</b><br>${GLOSS[i][2]}`;
+function glossify(root){
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode: n => (!n.nodeValue.trim() || !n.parentElement || n.parentElement.closest(GL_SKIP)) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+  const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(node => {
+    const txt = node.nodeValue; GL_RE.lastIndex = 0; let m, last = 0; const frag = []; 
+    while ((m = GL_RE.exec(txt))) {
+      const hit = GL_MAP.get(m[1].toLowerCase()); if (!hit || (hit[1] && hit[1] !== m[1])) continue;
+      frag.push(txt.slice(last, m.index), [m[1], hit[0]]); last = m.index + m[1].length;
+    }
+    if (!frag.length) return;
+    frag.push(txt.slice(last));
+    const svg = node.parentElement instanceof SVGElement;
+    const df = document.createDocumentFragment();
+    frag.forEach(p => {
+      if (typeof p === 'string') { if (p) df.appendChild(document.createTextNode(p)); return; }
+      const el = svg ? document.createElementNS('http://www.w3.org/2000/svg', 'tspan') : document.createElement('span');
+      el.setAttribute('class', 'gloss'); el.setAttribute('data-tip', glTip(p[1])); el.setAttribute('data-g', p[1]); el.textContent = p[0];
+      df.appendChild(el);
+    });
+    node.parentNode.replaceChild(df, node);
+  });
+}
 
 /* ---------- header stats ---------- */
 const P = D.phases;
@@ -688,7 +825,7 @@ $('#stats').innerHTML = stats.map(([v, l]) => `<div class="stat"><b data-count="
     <div class="pt">${r.pt >= .1 ? r.pt.toFixed(1) : r.pt.toFixed(2)}</div>`;
   const head = `<div class="th">Case type</div><div class="th">% of lines</div><div class="th">% of pairs</div><div class="th" style="justify-content:flex-end">≈ pts</div>`;
   let all = false; const N = 16;
-  const draw = () => { $('#segs').innerHTML = head + segs.slice(0, all ? segs.length : N).map(row).join(''); $('#segmore').textContent = all ? `Show top ${N} only` : `Show all ${segs.length} segments`; };
+  const draw = () => { $('#segs').innerHTML = head + segs.slice(0, all ? segs.length : N).map(row).join(''); glossify($('#segs')); $('#segmore').textContent = all ? `Show top ${N} only` : `Show all ${segs.length} segments`; };
   draw();
   $('#segmore').addEventListener('click', () => { all = !all; draw(); });
 })();
@@ -781,6 +918,21 @@ function drawWires(){
   });
   svg.innerHTML = s;
 }
+
+/* ---------- glossary list + underline every term ---------- */
+(function(){
+  const groups = ['Money & documents','How money moves','Exceptions','Formats & identifiers','Group structure','Scoring & dataset'];
+  const slug = s => 'g-' + s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  $('#glist').innerHTML = groups.map(gr => `<div class="ggroup" data-group="${gr}"><h3>${gr}</h3><dl style="margin:0">` +
+    GLOSS.map((g, i) => [g, i]).filter(([g]) => g[1] === gr).sort((a, b) => a[0][0].localeCompare(b[0][0]))
+      .map(([g, i]) => `<div class="gitem" id="${slug(g[0])}" data-q="${esc((g[0] + ' ' + g[2] + ' ' + g[3].join(' ')).toLowerCase())}"><dt>${g[0]}</dt><dd>${g[2]}</dd></div>`).join('') + `</dl></div>`).join('');
+  $('#glossary-q').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase(); let any = false;
+    document.querySelectorAll('.ggroup').forEach(gr => { let n = 0; gr.querySelectorAll('.gitem').forEach(it => { const ok = !q || it.dataset.q.includes(q); it.hidden = !ok; if (ok) n++; }); gr.hidden = !n; if (n) any = true; });
+    $('#gempty').hidden = any;
+  });
+  glossify(document.querySelector('.wrap'));
+})();
 
 /* ---------- motion & counting ---------- */
 (function(){
