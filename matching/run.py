@@ -32,6 +32,7 @@ ORDER = [
     "short_payments",    # one invoice short by bank charges / withholding, or a plausible overpayment (#22)
     "ap_refunds",        # supplier refunds of their credit notes (APC), rejected outgoing transfers (#19)
     "duplicates",        # payments of items already settled -> DUPLICATE_PAYMENT (#25)
+    "cn_bundles",        # leftovers: cited invoices (+ their own credit notes), unique completion or the cited part only
 ]
 
 
