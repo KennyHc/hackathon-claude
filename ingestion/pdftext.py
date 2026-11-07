@@ -72,10 +72,23 @@ def extract(folder: str, sub: str = "pdfs", workers: int = 10, out: str | None =
     return out
 
 
+def _cached_count(p: str) -> int:
+    with gzip.open(p, "rt", encoding="utf-8") as fh:
+        return sum(1 for _ in fh)
+
+
 def ensure(folder: str) -> None:
-    """Build the caches of a data folder that has PDFs but no cache yet."""
+    """Build the caches of a data folder that has PDFs but no cache yet, or a cache whose file count doesn't match the
+    folder (a stale cache from a rehearsal or an earlier download)."""
     for sub in SUBS:
-        if os.path.isdir(os.path.join(lib.DATA, folder, sub)) and not os.path.exists(path(folder, sub)):
+        root = os.path.join(lib.DATA, folder, sub)
+        if not os.path.isdir(root):
+            continue
+        p = path(folder, sub)
+        if not os.path.exists(p):
+            extract(folder, sub)
+        elif (n := len(_pdfs(root))) != (c := _cached_count(p)):
+            print(f"[pdftext] {folder}/{sub}: cache has {c:,} files, folder has {n:,} -> rebuilding")
             extract(folder, sub)
 
 

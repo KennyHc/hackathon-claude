@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA = os.path.join(ROOT, "data")
+DATA = os.environ.get("RECON_DATA") or os.path.join(ROOT, "data")   # RECON_DATA: dress-rehearsal data root
 CACHE = os.path.join(ROOT, "ingestion", "out", "_cache")
 
 PHASES = {
