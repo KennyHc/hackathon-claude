@@ -200,6 +200,21 @@ class RefMatcher:
                 and self.ccy[k] == line["currency"]]
         if not pool or len(pool) > 150:
             return None
+        cn_t = "ARC" if inv_t == "ARI" else "APC"
+        pcn = [k for k in self.by_party.get(p, []) if k not in cand and valid(k) and self.itype[k] == cn_t
+               and self.ccy[k] == line["currency"]]
+        opts = [[]] + ([[k] for k in pcn] if len(pcn) <= 6 else [])
+        found = []
+        for extra in opts:
+            r2 = rem + sum(self.open[k] for k in extra)
+            sol = self._fill_search(pool, r2)
+            if sol is not None:
+                found.append(extra + sol)
+        if len(found) != 1:
+            return None
+        return cand + found[0]
+
+    def _fill_search(self, pool, rem):
         cents = {}
         for k in pool:
             cents.setdefault(int(round(self.open[k] * 100)), []).append(k)
@@ -226,7 +241,8 @@ class RefMatcher:
         uniq = {tuple(sorted(x)) for x in sols}
         if len(uniq) != 1:
             return None
-        return cand + list(uniq.pop())
+        return list(uniq.pop())
+
 
     @staticmethod
     def variants(n):
@@ -391,7 +407,8 @@ class RefMatcher:
                     ns.append(self.inst_n[i])
                 for nn in ns:
                     if abs(c - round(t / nn, 2)) <= 0.02 * nn or (m and abs(c - t / nn) <= max(0.05, 0.001 * c)):
-                        return [(i, c, "PARTIAL")], "instalment"
+                        last = bool(m) and int(m.group(1)) == int(m.group(2))
+                        return [(i, c, "" if last else "PARTIAL")], "instalment_last" if last else "instalment"
                 # retention (PDF pct, else 5/10 % exact)
                 rs = [self.ret_pct[i]] if i in self.ret_pct else [0.05, 0.10]
                 for r in rs:
@@ -402,6 +419,8 @@ class RefMatcher:
                     return [(i, c, "PARTIAL")], "advance"
                 # single cited item, less cash, keyword or strong single reference
                 if single_slot and 0 < c < o[i] and self.itype[i] == "ARI":
+                    if "SETTLEMENT" in text or "SALDO" in text or "LIQUIDACI" in text:
+                        return [(i, c, "")], "settlement"
                     return [(i, c, "PARTIAL")], "partial_single"
             # n_to_m: all full but one partial
             if len(inv) >= 2 and self.itype[inv[0]] == "ARI":
@@ -585,7 +604,8 @@ class RefMatcher:
 
 CONF = {"full": 0.97, "fx_orig": 0.95, "fx_ref": 0.85, "discount": 0.93, "withholding": 0.9, "instalment": 0.85,
         "retention": 0.8, "advance": 0.8, "partial_single": 0.7, "partial_one": 0.6, "late_discount": 0.75,
-        "retention_release": 0.8}
+        "retention_release": 0.8, "instalment_last": 0.85, "settlement": 0.7, "fill": 0.9,
+        "fuzzy": 0.85, "party_amt": 0.7}
 
 
 def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.DataFrame, **ctx) -> pd.DataFrame:
