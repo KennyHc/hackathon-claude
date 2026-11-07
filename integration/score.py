@@ -92,7 +92,7 @@ def exception_table(sub: pd.DataFrame, gold: pd.DataFrame) -> pd.DataFrame:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--phase", default="sample", choices=["sample", "val"])
+    ap.add_argument("--phase", default="sample", choices=["sample", "val", "hold"])
     ap.add_argument("--file", default="")
     ap.add_argument("--top", type=int, default=25)
     ap.add_argument("--dump", default="", help="segment name: write its wrong lines to a CSV")

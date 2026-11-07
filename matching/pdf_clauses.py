@@ -237,7 +237,7 @@ def load_texts(folder: str, files: set[str] | None = None) -> dict[str, str]:
 
 
 def build(phase: str, items: pd.DataFrame | None = None, verbose: bool = True) -> pd.DataFrame:
-    folders = lib.PHASES[phase][3] if phase not in ("sample", "val") else ["train"]
+    folders = lib.PHASES[phase][3] if not lib.PHASES[phase][4] else ["train"]
     rows, miss = [], {}
     for folder in folders:
         ip = os.path.join(lib.DATA, folder, "pdfs", "index.csv")

@@ -24,6 +24,8 @@ PHASES = {
     #        bank/side-file folder, window start, window end, item folders (metadata), labelled
     "sample": ("train", "2025-06-01", "2025-06-30", ["train"], True),
     "val": ("train", "2025-01-01", "2025-06-30", ["train"], True),
+    # untouched holdout: no rule or threshold was tuned on this window; learned pieces cut at 2024-01-01
+    "hold": ("train", "2024-01-01", "2024-06-30", ["train"], True),
     "live": ("live", None, None, ["train", "live"], False),
     "final": ("final", None, None, ["train", "live", "final"], False),
 }
@@ -143,6 +145,8 @@ def load(phase: str):
         # items that later disappear WITHOUT a bank payment (cancelled / netted) — LIVE's open_items_at_start has those
         # too, so they must stay as distractors. Older items (issued before TRAIN, unknown history): backward replay
         # from LIVE's official open list. Only labels booked BEFORE `start` are used for the forward part.
+        # Known residual (measured for val): the backward part uses window labels for pre-TRAIN items; 5,092 such
+        # items are open at 2025-01-01 and only 26 of them are included solely because they get paid in the window.
         fwd = open_at(items, golden, dates, start)
         bwd = open_at_backward(items, golden, dates, start)
         in_train = items.set_index("item_id").issue_date >= "2021-07-01"

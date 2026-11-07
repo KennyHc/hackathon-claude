@@ -37,7 +37,7 @@ from ingestion import lib  # noqa: E402
 from ingestion.text import LEGAL, norm_name  # noqa: E402
 
 CACHE_DIR = os.path.join(ROOT, "matching", "out", "_cache")
-CUTOFF = {"sample": "2025-06-01", "val": "2025-01-01"}       # learn aliases only from TRAIN lines booked before this
+CUTOFF = {"sample": "2025-06-01", "val": "2025-01-01", "hold": "2024-01-01"}       # learn aliases only from TRAIN lines booked before this
 ALIAS_VERSION = 4
 
 IBAN_RE = re.compile(r"\b([A-Z]{2}\d{2}[A-Z0-9]{11,30})\b")

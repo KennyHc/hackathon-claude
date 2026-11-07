@@ -31,7 +31,7 @@ if ROOT not in sys.path:
 from ingestion import lib  # noqa: E402
 from ingestion.text import norm_name, strip_accents  # noqa: E402
 
-CUTOFF = {"sample": "2025-06-01", "val": "2025-01-01", "live": "9999-12-31", "final": "9999-12-31"}
+CUTOFF = {"sample": "2025-06-01", "val": "2025-01-01", "hold": "2024-01-01", "live": "9999-12-31", "final": "9999-12-31"}
 ITEM = "ITEM"
 MODEL_VERSION = 1
 N_ITEM_TRAIN = 300_000          # ITEM lines subsampled for training (re-weighted to their true frequency)
