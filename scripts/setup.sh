@@ -10,13 +10,7 @@ rm -f .claude/me
 ME="$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import owners; print(owners.whoami())')"
 echo "✓ You are @$ME"
 
-echo "✓ Your folders:"
-python3 - "$ME" <<'PY'
-import sys; sys.path.insert(0, "scripts"); import owners
-me = sys.argv[1]
-mine = [p for p, o in owners.load() if me in o and p != "*"]
-print("\n".join("   " + p for p in mine) or "   (none yet: ask the admin to add you to .github/CODEOWNERS)")
-PY
+echo "✓ No folder ownership: every folder is open (coordinate on the board, see CLAUDE.md)"
 
 missing=0
 for d in masters sample train train_lite live; do
