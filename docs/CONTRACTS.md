@@ -1,0 +1,82 @@
+# Contracts between pieces (DRAFT v0, owned by integration)
+
+Only the integration owner edits this file. Want a change? `scripts/board.sh need @<integration-owner> "..."`.
+Bump the version and post an INFO on the board on every change.
+
+**General**
+- Phases: `sample`, `train`, `train_lite`, `live`, `final`. Each piece: `python <piece>/run.py --phase <p>` writes
+  `<piece>/out/<p>/` (gitignored; others regenerate it locally by running your `run.py`).
+- Format: Parquet (pyarrow). Dates as `date`, amounts `float64` rounded to 2 decimals, ids as strings.
+- Column names reuse `docs/DATA_DICTIONARY.md` names wherever the data already has them.
+- Missing value = null (not empty string). Lists are Parquet list columns.
+- **Mock first:** if an upstream file isn't ready, build a quick version of it with these exact columns.
+
+---
+
+## A. ingestion → `ingestion/out/<phase>/`
+
+### `bank_lines.parquet` (one row per bank line, all columns of `bank_transactions.csv.gz` plus:)
+| column | type | meaning |
+|---|---|---|
+| `direction` | str | `in` (amount > 0) / `out` |
+| `amount_abs` | float | \|amount\| |
+| `amount_eur` | float | amount converted with `fx_rates.csv` at booking_date (last available rate) |
+| `party_name_raw` | str | best payer/beneficiary name found (counterparty_name or extracted from text) |
+| `party_name_norm` | str | normalised: upper, no accents/punctuation/legal suffixes (SA, SL, GMBH…) |
+| `doc_refs` | list[str] | document-number-like tokens found in text/ref1/ref2/remittance_info/end_to_end_id, normalised (no prefix, no leading zeros) |
+| `batch_ref` | str | id linking the line to a batch file row group (DD batch_id, settlement_id, deposit_id, run_id), when determinable |
+
+### `open_items.parquet` (one row per item: AR/AP invoices, credit notes, open_items_at_start)
+`item_id, item_type (ARI|ARC|API|APC), side (AR|AP), entity, party_id, party_name, party_name_norm, document_number,
+document_number_norm, issue_date, due_date, currency, total_amount, open_amount, payment_terms, payment_method, po_number,
+related_document`
+
+### `batch_lines.parquet` (detail of DD / card / cheque / payment-run files, one row per receipt/order/cheque/document)
+`source (dd|card|cheque|payment_run), batch_id, account_id, batch_date, currency, batch_total, line_ref (end_to_end_id |
+order_number | cheque_number | document_number), party_name, party_iban, amount, gross, fee, document_number,
+document_type, remittance_info, re_presentation (bool), run_type`
+
+### `remittance_lines.parquet` (one row per document line in a remittance advice)
+`ra_file, entity, payer_name, received_date, format, payment_ref, doc_ref_raw, doc_ref_norm, amount_paid, deduction,
+deduction_reason, line_total`
+
+### `doc_clauses.parquet` (facts from PDFs that are in no CSV; one row per clause)
+`pdf_file, document_type, document_number, entity, party_id, clause_type (INSTALMENTS | RETENTION | ADVANCE_DEDUCT |
+REPLACES | SERVICE_MONTH | RAPPEL_OFFSET | RAPPEL_PAYOUT | CN_REFUND | CN_OFFSET | FACTORING | NEW_IBAN), n_instalments,
+pct, amount, ref_document, service_month (YYYY-MM), iban, raw_text`
+
+### `party_aliases.parquet` (name variants → party)
+`name_norm, party_id, side, entity, source (master | trade_name | renamed | observed_train)`
+
+---
+
+## B. matching → `matching/out/<phase>/allocations.parquet`
+
+One row per (bank line, item). Only lines B believes settle items.
+
+| column | type | meaning |
+|---|---|---|
+| `bank_txn_id` | str | |
+| `item_id` | str | |
+| `amount` | float | cleared amount in **item currency**, positive (POLICIES §2) |
+| `exception` | str/null | B's best guess (esp. RETURNED, DUPLICATE_PAYMENT, PARTIAL, SHORT_DISPUTE) |
+| `confidence` | float | 0–1, for the line as a whole (same value on every row of a line) |
+| `method` | str | which rule/model produced it (`batch_dd`, `remittance`, `ref_exact`, `name_amount`, …), for debugging |
+
+## C. classification
+
+### `classification/out/<phase>/line_labels.parquet` (one row per bank line of the phase)
+`bank_txn_id, p_items (prob. the line settles items), category (null if it settles items), exception (UNIDENTIFIED |
+null), confidence, method`
+
+### `classification/exceptions.py` (importable)
+```python
+def assign_exceptions(allocations, bank_lines, open_items, **ctx) -> "pd.Series[str|None]":
+    """Exception per allocation row per POLICIES §3; index aligned with `allocations`."""
+```
+
+## D. integration → `integration/out/<phase>/submission.csv.gz`
+
+Exactly `docs/FORMAT.md`. Merge rule v0: a line gets B's item rows if B has it and `p_items ≥ 0.5` (or C has no
+category); else C's single category row. Exceptions: `assign_exceptions()` output where not null, else B's. Every bank
+line of the phase appears. Validated by `integration/validate.py` before any upload.

@@ -1,0 +1,29 @@
+name: folder-guard
+
+# Backstop for the folder rules: fails (and posts on the team board) when a push
+# or PR touches files outside the pusher's own folder, adds anything under data/,
+# or adds a file over 5 MB. Ownership = .github/CODEOWNERS as it was BEFORE the push.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check every changed file is inside the pusher's folder
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login || github.actor }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/owners.py ci

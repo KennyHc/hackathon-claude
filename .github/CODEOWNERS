@@ -1,0 +1,14 @@
+# Who may write where. Single source of truth, read by:
+#   - GitHub (review requests)
+#   - the Claude Code hook  .claude/hooks/folder_guard.py  (blocks agent edits outside your folder)
+#   - CI                    .github/workflows/folder-guard.yml (flags pushes outside your folder)
+# The last matching line wins. Only the repo admin edits this file.
+
+# Repo admin: root files, .github/, .claude/, scripts/, docs/ (except CONTRACTS.md)
+*                     @ZhengJinFa168
+
+/ingestion/           @OWNER_A
+/matching/            @OWNER_B
+/classification/      @OWNER_C
+/integration/         @OWNER_D
+/docs/CONTRACTS.md    @OWNER_D

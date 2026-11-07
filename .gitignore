@@ -1,0 +1,48 @@
+# ── Datasets: NEVER commit ──────────────────────────────────────────
+# Everyone keeps their own copy in data/ (train/, train_lite/, live/, final/, sample/, masters/)
+/data/
+
+# Belt-and-braces: data-like files anywhere in the repo
+*.csv
+*.csv.gz
+*.gz
+*.zip
+*.parquet
+*.feather
+*.arrow
+*.pkl
+*.pickle
+*.joblib
+*.npy
+*.npz
+*.pdf
+*.xlsx
+*.xls
+*.n43
+*.sta
+*.xml
+*.db
+*.sqlite
+*.duckdb
+# Need to commit a small hand-made table? Use: git add -f path/to/file.csv
+
+# ── Generated outputs (regenerate with <piece>/run.py) ──────────────
+**/out/
+**/submissions/
+**/cache/
+**/models/
+
+# ── Python / notebooks / editors ────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.ipynb_checkpoints/
+.DS_Store
+.idea/
+.vscode/
+
+# ── Per-person local files ──────────────────────────────────────────
+.claude/settings.local.json
+.claude/me
