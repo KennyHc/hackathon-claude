@@ -1,0 +1,26 @@
+### Senior Review of [PLAN_R2.md](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/PLAN_R2.md)
+
+**1. History-free name matching (`PARTY_ANYWHERE`) — high false-positive risk:**
+- **Partially redundant:** [`learn_aliases`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/party.py#L176-L193) already indexes [`master_keys`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/party.py#L106-L121) (`name`, `trade_name`, `iban`) for all boilerplate in [`_PREFIX_RE`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/party.py#L33-L41) and `counterparty_name`.
+- **Generic 2-word / 12-char collisions:** Many customers share domain prefixes (`POOL SUPPLY`, `SPA SERVICE`, `PISCINAS`, `INSTALACIONES`, `RESORT`, `AQUATICS`). Scanning every word position of `text` with `>= min(len(name), 12)` pulls 5–20 candidates per line; across their union of open items (+ discounts/WHT/subsets), birthday-paradox amount collisions are frequent.
+- **Short/person names & lookalikes:** `unidentified` (`CHLOE MURPHY`) and `unidentified_lookalike` (`R.M.E.`, 1,364 val lines whose amounts *intentionally* match open invoices) will match short master names (`len < 12`) or common person names and pass "strong" single-item fits.
+- **Fix:** Only scan mid-text when [`Resolver.resolve`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/party.py#L220-L236) is empty; require `>= 16` chars across `>= 2` non-generic words, exclude our own IBANs (`bank_accounts.csv`), and require a **unique** strong fit across `<= 2` candidate parties.
+
+**2. Keeping `UNIDENTIFIED` precision ([`integration/run.py`](file:///Users/luigizheng/Desktop/Close_the_tabs/integration/run.py#L141-L170) & `unid.py`):**
+- In [`integration/run.py`](file:///Users/luigizheng/Desktop/Close_the_tabs/integration/run.py#L152-L167), unseen entities (`ZA01`) force `c_says_items = False`, turning **every missed real receipt into a false-positive `UNIDENTIFIED`** (hurting the 2-pt exception macro-F1).
+- **Bug in `has_ref_like`:** Any 4-digit run (`\d{4,}`: years `2025`/`2026`, dates, subcodes) will match *some* open item's 4-digit tail in a large entity, routing true `UNIDENTIFIED` receipts to `CUSTOMER_ADVANCE` and tanking recall.
+- **Fix:** Require an explicit doc prefix (`INV|FV|FA|NF|KWI|RE`+digits) or `>= 5–6` non-date digits matching an *open* item tail, and require high-purity `payer_known`. Coordinate with K4 now since [`integration/run.py`](file:///Users/luigizheng/Desktop/Close_the_tabs/integration/run.py#L140-L170) is outside `matching/party/`.
+
+**3. Runtime alias harvesting (`PARTY_HARVEST`) pitfalls:**
+- **Resurrecting noisy keys:** [`learn_aliases`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/party.py#L200) drops train keys with `nparty > MAX_PARTIES` (8), so promiscuous prefixes (`PW:PAGO FACTURA`, factoring banks, agencies) appear **"unknown"** in [`Resolver.p`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/party.py#L209). Calling [`Resolver.add`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/party.py#L214-L218) on "unknown" keys gives them `purity = 1.0`, unlocking weak fits ([`sure = pur0 >= 0.9`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/matcher.py#L261))!
+- **Feedback cascade:** Harvesting K3's own claims (FIFO/window/CN-subset are 87–92% precise) + a 2nd pass poisons the resolver and cascades ledger errors across both parties.
+- **Fix:** Harvest **only** before the pass from single-party `batch`/`refs` claims, **only** `I:` (IBAN) and full `C:` (`counterparty_name`), and **never** keys seen with `nparty > 1` in train; cut own-claim harvesting and the 2nd pass.
+
+**4. Is `--loeo PL01` honest? No:**
+- [`_PREFIX_RE`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/party.py#L38) hardcodes `PRZELEW PRZYCH.` and [`_MONTHS`](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/matcher.py#L37-L53) hardcodes Polish months, so `master_keys` already works at position 0 on `PL01` (unlike `ZA01`'s unseen bank format).
+- `batch`/`refs` and `classification` (`c.p_items`) were trained **with `PL01` in train**, and [`integration/run.py`](file:///Users/luigizheng/Desktop/Close_the_tabs/integration/run.py#L153) treats `PL01` as a known train entity. To make LOEO honest, strip `PRZELEW` from `_PREFIX_RE` and force `new_ent = True` (masking `c.p_items`/`c.category`) on `PL01`.
+
+**5. What to cut given ~2 hours (before 16:30 dry run):**
+- **Cut `ar_1toN_credit_note`, `ar_fx`, `ar_advance_deduction` (Item 5):** K2 `refs` territory ([PLAN_LUIGI.md](file:///Users/luigizheng/Desktop/Close_the_tabs/docs/PLAN_LUIGI.md#L19)); `ar_advance_deduction` requires PDF proforma clauses, and uncited cross-currency `ar_fx` subset-sum is a false-positive trap.
+- **Cut own-claim harvesting, 2nd pass (Item 2), and 2-word `PARTY_ANYWHERE` (Item 1):** Keep only pre-pass `batch`/`refs` IBAN/`counterparty_name` harvesting + mid-text IBAN/long-name fallback when `resolve()` is empty.
+- **Keep:** Honest LOEO + strict `unid_evidence` (for `ZA01`), `WINDOW` A/B (note [`matcher.py` L343](file:///Users/luigizheng/Desktop/Close_the_tabs/matching/party/matcher.py#L343) `argsort(due)[-WINDOW:]` keeps items *furthest in the future* instead of nearest booking date), and `ar_discount_late` / `ar_duplicate_payment` fixes.

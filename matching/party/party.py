@@ -22,7 +22,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 from integration.lib.masters import read_master  # noqa: E402
 
-DATA = os.path.join(ROOT, "data")
+DATA = os.environ.get("BANKREC_DATA", os.path.join(ROOT, "data"))
 CACHE = os.path.join(ROOT, "matching", "party", "out")
 PLENS = (40, 32, 26, 22, 20, 18, 16, 14, 12, 10)
 NWORDS = (6, 5, 4, 3, 2)
@@ -53,7 +53,7 @@ def norm(s: str) -> str:
     return "".join(c for c in s if not unicodedata.combining(c))
 
 
-def name_strings(text: str, cp_name: str) -> list[tuple[str, str]]:
+def name_strings(text: str, cp_name: str, strip: bool = True) -> list[tuple[str, str]]:
     """[(tag, string)] candidate strings that start with a party name. tag: 'r' bank text, 'c' counterparty."""
     t = norm(text)
     out = []
@@ -61,11 +61,11 @@ def name_strings(text: str, cp_name: str) -> list[tuple[str, str]]:
         m = rx.search(t)
         if m:
             out.append((tag, m.group(1).strip()))
-    m = _SPEI_RE.match(t)
+    m = _SPEI_RE.match(t) if strip else None
     if m:
         out.append(("s", m.group(1).strip()))
     else:
-        r = _PREFIX_RE.sub("", t, count=1).strip()
+        r = _PREFIX_RE.sub("", t, count=1).strip() if strip else t.strip()
         if r:
             out.append(("r", r))
     if cp_name:
@@ -73,12 +73,15 @@ def name_strings(text: str, cp_name: str) -> list[tuple[str, str]]:
     return out
 
 
-def keys_of(text: str, cp_name: str, cp_acct: str) -> list[tuple[str, int]]:
+NO_PREFIX: set = set()  # entities whose bank boilerplate we pretend not to know (LOEO test)
+
+
+def keys_of(text: str, cp_name: str, cp_acct: str, strip: bool = True) -> list[tuple[str, int]]:
     """Alias keys of a bank line, each with a specificity rank (higher = more specific)."""
     keys = []
     if cp_acct:
         keys.append(("I:" + cp_acct.replace(" ", ""), 100))
-    for tag, s in name_strings(text, cp_name):
+    for tag, s in name_strings(text, cp_name, strip):
         if tag == "s":  # SPEI: name at the END of the concept → prefixes from every word position
             w = s.split()
             for i in range(min(len(w), 7)):
@@ -144,10 +147,26 @@ def group_map(phase: str) -> dict:
     return g
 
 
-def learn_aliases(phase: str, start: str, cutoff: str, log=print) -> pd.DataFrame:
-    """key → best party / group with counts and purity. Train lines with start ≤ booking_date < cutoff."""
+def _stamp(phase: str) -> str:
+    """Short hash of the mtimes/sizes of everything the alias table depends on (train data + masters)."""
+    import hashlib
+    from integration.lib.masters import masters_path
+    fs = [os.path.join(DATA, "train", f) for f in ("bank_transactions.csv.gz", "golden_allocations.csv.gz",
+                                                    "ar_invoices.csv.gz", "ap_invoices.csv.gz", "credit_notes.csv.gz")]
+    fs += [masters_path(n, phase) for n in ("customers.csv", "suppliers.csv")]
+    fs += [os.path.join(DATA, phase, "masters_final", n) for n in ("customers.csv", "suppliers.csv")]
+    h = hashlib.md5()
+    for f in fs:
+        if os.path.exists(f):
+            st = os.stat(f)
+            h.update(f"{f}:{st.st_mtime_ns}:{st.st_size}".encode())
+    return h.hexdigest()[:10]
+
+
+def learn_aliases(phase: str, start: str, cutoff: str, log=print, loeo: str = "") -> pd.DataFrame:
+    """key → parties with counts and purity. Train lines with start ≤ booking_date < cutoff (minus entity `loeo`)."""
     os.makedirs(CACHE, exist_ok=True)
-    cf = os.path.join(CACHE, f"aliases3_{phase}_{start}_{cutoff}.parquet")
+    cf = os.path.join(CACHE, f"aliases4_{phase}_{start}_{cutoff}_{loeo or 'all'}_{_stamp(phase)}.parquet")
     if os.path.exists(cf):
         return pd.read_parquet(cf)
     t0 = time.time()
@@ -155,6 +174,8 @@ def learn_aliases(phase: str, start: str, cutoff: str, log=print) -> pd.DataFram
                     usecols=["bank_txn_id", "booking_date", "entity", "amount", "text", "counterparty_name",
                              "counterparty_account"])
     b = b[(b.booking_date >= start) & (b.booking_date < cutoff)]
+    if loeo:
+        b = b[b.entity != loeo]
     g = pd.read_csv(os.path.join(DATA, "train", "golden_allocations.csv.gz"), dtype=str, keep_default_na=False,
                     usecols=["bank_txn_id", "item_id"])
     g = g[(g.item_id != "") & g.bank_txn_id.isin(b.bank_txn_id)]
@@ -211,16 +232,17 @@ class Resolver:
             self.p.setdefault(k, []).append((pid, int(n), float(pur)))
         self.members = group_members
 
-    def add(self, key: str, party_id: str, group_id: str = ""):
-        """Extra alias (e.g. invoice party_name of the phase's items)."""
+    def add(self, key: str, party_id: str, group_id: str = "", purity: float | None = None):
+        """Extra alias (e.g. invoice party_name of the phase's items; harvested keys pass purity=0 so they never
+        unlock the weak fits, which need purity ≥ 0.9)."""
         v = self.p.setdefault(key, [])
         if all(x[0] != party_id for x in v) and len(v) < MAX_PARTIES:
-            v.append((party_id, 1, 1.0 / (len(v) + 1)))
+            v.append((party_id, 1, 1.0 / (len(v) + 1) if purity is None else purity))
 
     def resolve(self, entity: str, text: str, cp_name: str, cp_acct: str, cap: int = 6):
         """→ candidate parties [(party_id, rank, purity, key)], most specific key first (empty if none)."""
         hits = []
-        for k, rank in keys_of(text, cp_name, cp_acct):
+        for k, rank in keys_of(text, cp_name, cp_acct, strip=entity not in NO_PREFIX):
             v = self.p.get(entity + "|" + k)
             if v:
                 hits.append((rank, k, v))
@@ -242,3 +264,52 @@ def group_members(phase: str) -> dict:
     for cid, gid in gm.items():
         mem[gid].append(cid)
     return dict(mem)
+
+
+# ---------------------------------------------------------------- history-free: master names anywhere in the text
+_IBAN_RE = re.compile(r"\b([A-Z]{2}\d{2}[A-Z0-9]{11,30})\b")
+MIN_OVERLAP = 14
+
+
+class Anywhere:
+    """Entity-scoped index of party names (masters + phase invoices) by their first two words. A party is a candidate
+    when the text, from some word position, shares ≥ min(len(name), MIN_OVERLAP) leading chars with its name."""
+
+    def __init__(self, names):  # iterable of (scope_entity, party_id, name)
+        self.ix = defaultdict(list)
+        seen = set()
+        for ent, pid, nm in names:
+            s = norm(nm).strip()
+            w = s.split()
+            if len(w) < 2 or len(s) < 8 or (ent, pid, s) in seen:
+                continue
+            seen.add((ent, pid, s))
+            self.ix[(ent, w[0] + " " + w[1])].append((pid, s))
+
+    def find(self, entity: str, *texts, cap: int = 6):
+        """[(party_id, overlap)] best first."""
+        best = {}
+        for t in texts:
+            t = norm(t).replace(" | ", "").replace("/", " ").replace("+", " ")  # /ORDP/NAME, SVWZ+NAME
+            if not t:
+                continue
+            words = [(m.start(), m.group()) for m in re.finditer(r"\S+", t)]
+            for i in range(len(words) - 1):
+                v = self.ix.get((entity, words[i][1] + " " + words[i + 1][1]))
+                if not v:
+                    continue
+                rest = t[words[i][0]:]
+                for pid, nm in v:
+                    need = min(len(nm), MIN_OVERLAP)
+                    n = 0
+                    for a, b in zip(rest, nm):
+                        if a != b:
+                            break
+                        n += 1
+                    if n >= need and n > best.get(pid, 0):
+                        best[pid] = n
+        return sorted(best.items(), key=lambda x: -x[1])[:cap]
+
+
+def ibans_in(text: str):
+    return _IBAN_RE.findall(norm(text).replace(" | ", ""))

@@ -35,6 +35,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--phase", required=True)
     ap.add_argument("--no-claimed", action="store_true", help="ignore earlier stages' outputs")
+    ap.add_argument("--anywhere", action="store_true", help="history-free: master names anywhere in the text")
+    ap.add_argument("--harvest", action="store_true", help="aliases from claimed lines of the phase + 2nd pass")
+    ap.add_argument("--loeo", default="", help="leave this entity out of alias history (ZA01-like test)")
+    ap.add_argument("--out", default="", help="output parquet (default matching/out/<phase>/alloc_party.parquet)")
     a = ap.parse_args()
     lines = pd.read_csv(txns_path(a.phase), dtype=str, keep_default_na=False)
     log(f"{len(lines):,} bank lines")
@@ -44,7 +48,9 @@ def main():
     cl = []
     if not a.no_claimed:
         for st in ("batch", "refs"):
-            f = os.path.join(outd, f"alloc_{st}.parquet")
+            f = os.path.join(outd, f"cascade_{st}.parquet")  # what the cascade kept (preferred)
+            if not os.path.exists(f):
+                f = os.path.join(outd, f"alloc_{st}.parquet")
             if os.path.exists(f):
                 df = pd.read_parquet(f)
                 log(f"claimed by {st}: {df.bank_txn_id.nunique():,} lines")
@@ -55,9 +61,13 @@ def main():
     free = lines[~lines.bank_txn_id.isin(set(claimed.bank_txn_id))]
     lab = os.path.join(ROOT, "classification", "out", a.phase, "line_labels.parquet")
     labels = pd.read_parquet(lab) if os.path.exists(lab) else None
-    res = matcher.match(a.phase, free, items, claimed, line_labels=labels, masters_dir=masters_dir(a.phase), log=log)
+    pp = os.path.join(outd, "pdf_clauses.parquet")
+    pdf = pd.read_parquet(pp) if os.path.exists(pp) else None
+    res = matcher.match(a.phase, free, items, claimed, line_labels=labels, pdf_clauses=pdf, masters_dir=masters_dir(a.phase), log=log,
+                          party_anywhere=a.anywhere or None, party_harvest=a.harvest or None, loeo=a.loeo)
     os.makedirs(outd, exist_ok=True)
-    f = os.path.join(outd, "alloc_party.parquet")
+    f = a.out or os.path.join(outd, "alloc_party.parquet")
+    os.makedirs(os.path.dirname(os.path.abspath(f)), exist_ok=True)
     res.to_parquet(f, index=False)
     log(f"wrote {len(res):,} rows / {res.bank_txn_id.nunique():,} lines → {os.path.relpath(f, ROOT)}")
 

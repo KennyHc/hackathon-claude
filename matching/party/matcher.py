@@ -27,9 +27,19 @@ WHT_COUNTRIES = {"MX", "BR", "MA"}
 WHT_RATES = (0.0125, 0.015, 0.10)
 MAX_SUBSET = 26          # candidates for meet-in-the-middle
 WINDOW = 30
+ADVANCE = os.environ.get("PARTY_ADVANCE", "1") == "1"  # round 2 (val +0.05): PDF advance deduction → PARTIAL
+LOW_TRUST = ("party_subset_cn", "party_window_cn", "party_discount_late")  # not for history-free / 2nd pass
+DUP_ANY = os.environ.get("PARTY_DUP_ANY", "1") == "1"  # round 2: duplicates without a 'sure' payer
+FX_ORIG = os.environ.get("PARTY_FX_ORIG", "1") == "1"  # round 2: match on orig_amount/orig_currency
+VARIANT_WINDOW = os.environ.get("PARTY_VARIANT_WINDOW", "1") == "1"  # round 2: window for discount/wht
+WINDOW_CN = os.environ.get("PARTY_WINDOW_CN", "1") == "1"  # round 2 (val +0.06)
+WINDOW_MODE = os.environ.get("PARTY_WINDOW_MODE", "nearest")  # A/B on val: nearest 91.38 vs latest 91.28
 UNCITED_PARTIAL = False  # 55 % exact on val
-GROUP_FALLBACK = False
-DUP_WITH_OPEN = True   # measured 0 % exact on val (parents go through refs)
+GROUP_FALLBACK = False   # measured 0 % exact on val (parents go through refs)
+DUP_WITH_OPEN = True
+ANYWHERE = True          # round 2: master names anywhere in the text (history-free payers)
+OWN_HARVEST = True
+HARVEST = True           # round 2: aliases from this phase's claimed lines + second pass
 FACTORY = P.FACTORY
 
 _MONTHS = {}
@@ -102,6 +112,24 @@ def _subset_mitm(vals: np.ndarray, target: int, tol: int):
     return out
 
 
+def _variant_subset(IT, cp, v, target, d, tol=2):
+    """Subset of the payer's positive items (values v) summing to target ± tol: all of them (≤ MAX_SUBSET, FIFO prefix
+    first) or, behind VARIANT_WINDOW, the recent window as in the exact search."""
+    sel = _best_subset(v[:200], target, tol)
+    if sel is not None or not VARIANT_WINDOW or len(cp) <= 2:
+        return sel
+    bd = np.datetime64(d)
+    age = (bd - IT.issue_dt[cp]).astype(np.int64)
+    due = (IT.due_dt[cp] - bd).astype(np.int64)
+    w = np.nonzero((age <= 400) & (due <= 16) & (due >= -300))[0]
+    if len(w) > WINDOW:
+        w = np.sort(w[np.argsort(due[w], kind="stable")[-WINDOW:]])
+    if not (2 < len(w) < len(cp) or len(cp) > MAX_SUBSET):
+        return None
+    s2 = _best_subset(v[w], target, tol, prefix=False)
+    return None if s2 is None else [int(w[i]) for i in s2]
+
+
 def _best_subset(vals: np.ndarray, target: int, tol: int, prefix: bool = True):
     """Unique subset or the FIFO-preferred one. vals sorted oldest first. Returns list of positions or None."""
     n = len(vals)
@@ -135,6 +163,8 @@ def _best_subset(vals: np.ndarray, target: int, tol: int, prefix: bool = True):
 
 
 class _Items:
+    adv: dict = {}
+
     def __init__(self, items: pd.DataFrame, phase: str):
         it = items.reset_index(drop=True)
         self.id = it.item_id.values
@@ -196,11 +226,25 @@ def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.Data
     log = ctx.get("log", print)
     t0 = time.time()
     start, cutoff = _cutoffs(phase)
-    aliases = P.learn_aliases(phase, start, cutoff, log=log)
+    loeo = ctx.get("loeo") or os.environ.get("PARTY_LOEO", "")
+    aliases = P.learn_aliases(phase, start, cutoff, log=log, loeo=loeo)
+    P.NO_PREFIX.clear()
+    if loeo:
+        P.NO_PREFIX.add(loeo)
     gm = P.group_map(phase)
     members = P.group_members(phase)
     R = P.Resolver(aliases, members)
     IT = _Items(items, phase)
+    IT.adv = {}
+    pdf = ctx.get("pdf_clauses")
+    if ADVANCE and pdf is not None and len(pdf) and "advance_amount" in pdf:
+        a = pdf[pdf.advance_amount.notna() & pdf.document_type.isin(["invoice"])]
+        key = {(p_, d_): k for k, (p_, d_) in enumerate(zip(IT.party, items.reset_index(drop=True).document_number))}
+        for p_, d_, adv in zip(a.party_id, a.document_number, a.advance_amount):
+            k = key.get((p_, d_))
+            if k is not None:
+                IT.adv[k] = int(round(float(adv) * 100))
+        log(f"party: {len(IT.adv):,} invoices with an advance to deduct (PDF)")
     # invoice party names of the phase's items (pre-rename names, new parties)
     ent_of = dict(zip(items.party_id, items.entity))
     if "party_name" in items:
@@ -228,9 +272,30 @@ def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.Data
     cl_exc = cl.exception.fillna("").values if len(cl) else np.array([])
     ci = 0
 
+    # ---- round 2: history-free names (masters anywhere in text) + runtime harvest (flags)
+    anywhere = _flag(ctx, "anywhere", ANYWHERE)
+    harvest = _flag(ctx, "harvest", HARVEST)
+    A = None
+    if anywhere:
+        cu = read_master("customers.csv", phase)
+        su = read_master("suppliers.csv", phase)
+        names = [(e, pid, nm) for pid, nm, e in zip(cu.customer_id, cu.name, cu.entity)]
+        names += [(e, pid, nm) for pid, nm, e in zip(cu.customer_id, cu.trade_name, cu.entity) if nm]
+        for pid, nm, e in zip(su.supplier_id, su.name, su.entity):
+            for e2 in P._scopes(e, True):
+                names.append((e2, pid, nm))
+        if "party_name" in items:
+            names += [(e2, pid, nm) for pid, nm, e in zip(pn.party_id, pn.party_name, pn.entity)
+                      for e2 in P._scopes(e, pid.startswith("S"))]
+        A = P.Anywhere(names)
+    if harvest and len(cl):
+        nh = _harvest(R, cl, items, phase, ctx)
+        log(f"party: harvested {nh:,} alias keys from {cl.bank_txn_id.nunique():,} claimed lines")
+
     out = []
-    dbg = []
+    dbg = {}
     stats = defaultdict(int)
+    failed = []
     for r in L.itertuples(index=False):
         d = r.booking_date
         while ci < len(cl_dates) and cl_dates[ci] <= d:
@@ -238,40 +303,16 @@ def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.Data
             if k is not None:
                 IT.apply(k, int(cl_amt[ci]), cl_exc[ci], cl_dates[ci])
             ci += 1
-        amt = int(r.amt_c)
-        if amt == 0:
+        if int(r.amt_c) == 0:
             continue
-        cands = R.resolve(r.entity, r.text, r.counterparty_name, r.counterparty_account)
-        if not cands:
-            stats["no_party"] += 1
-            dbg.append((r.bank_txn_id, "", "", "", "no_party"))
-            continue
-        p0, rank0, pur0, key = cands[0]
-        rows, pid = None, p0
-        for p, rank, pur, k in cands:  # strong fits on each candidate payer
-            rows = _fit(IT, [p], r, amt, d, weak=False)
-            if rows:
-                pid, key = p, k
-                break
-        gid = gm.get(p0, p0)
-        if not rows and GROUP_FALLBACK and len(members.get(gid, [])) > 1:  # parent / group pays for its members
-            rows = _fit(IT, members[gid], r, amt, d, weak=False)
-            if rows:
-                rows = [(k, c_, e, m + "_group") for k, c_, e, m in rows]
-        sure = pur0 >= 0.9 and (len(cands) == 1 or cands[1][1] < rank0)
-        if not rows:
-            rows = _weak_cited(IT, [c_[0] for c_ in cands], r, amt)
-        if not rows and sure:
-            rows = _fit(IT, [p0], r, amt, d, weak=True)
-        if not rows:
-            stats["no_fit"] += 1
-            dbg.append((r.bank_txn_id, p0, gid, key, "no_fit"))
-            continue
-        dbg.append((r.bank_txn_id, IT.party[rows[0][0]], gid, key, rows[0][3]))
-        stats["claimed"] += 1
-        for k, cents, exc, meth in rows:
-            out.append((r.bank_txn_id, IT.id[k], cents / 100.0, exc, 0.9, meth))
-            IT.apply(k, cents, exc, d)
+        if not _one(r, R, A, IT, gm, members, out, dbg, stats, harvest):
+            failed.append(r)
+    if harvest and failed:  # second pass with the aliases harvested from this phase's own claims
+        n0 = stats["claimed"]
+        for r in failed:
+            _one(r, R, A, IT, gm, members, out, dbg, stats, harvest, second=True)
+        log(f"party: second pass claimed {stats['claimed'] - n0:,} of {len(failed):,} lines")
+    dbg = [(t,) + v for t, v in dbg.items()]
     log(f"party: {dict(stats)} ({time.time() - t0:.0f}s)")
     try:
         os.makedirs(P.CACHE, exist_ok=True)
@@ -280,6 +321,113 @@ def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.Data
     except Exception as e:  # noqa: BLE001
         log(f"party: debug dump failed: {e}")
     return pd.DataFrame(out, columns=OUT_COLS)
+
+
+def _flag(ctx, name, default):
+    v = ctx.get("party_" + name)
+    if v is None:
+        v = os.environ.get("PARTY_" + name.upper())
+        if v is not None:
+            v = v not in ("", "0", "false", "False")
+    return default if v is None else bool(v)
+
+
+STRONG_HARVEST = ("party_single", "party_subset", "party_window", "party_discount", "party_wht", "party_month",
+                  "party_fifo", "party_subset_cn")
+
+
+def _harvest(R, cl, items, phase, ctx):
+    """Alias keys of lines claimed earlier in this phase (by any stage) → the single party of their items."""
+    pid = dict(zip(items.item_id, items.party_id))
+    c = cl[["bank_txn_id", "item_id"]].copy()
+    c["party_id"] = c.item_id.map(pid)
+    lp = c.dropna().groupby("bank_txn_id").party_id.agg(["nunique", "first"])
+    lp = lp[lp["nunique"] == 1]["first"]
+    if not len(lp):
+        return 0
+    f = os.path.join(ctx.get("data_dir") or P.DATA, phase, "bank_transactions.csv.gz")
+    b = pd.read_csv(f, dtype=str, keep_default_na=False, usecols=["bank_txn_id", "entity", "text",
+                                                                   "counterparty_name", "counterparty_account"])
+    b = b[b.bank_txn_id.isin(lp.index)]
+    n = 0
+    for t, e, txt, cpn, cpa in zip(b.bank_txn_id, b.entity, b.text, b.counterparty_name, b.counterparty_account):
+        p = lp[t]
+        for k, _ in P.keys_of(txt, cpn, cpa):
+            R.add(e + "|" + k, p, purity=0.0)
+            n += 1
+    return n
+
+
+def _one(r, R, A, IT, gm, members, out, dbg, stats, harvest, second=False):
+    """Try one line; appends rows to out and applies them. True when claimed."""
+    amt = int(r.amt_c)
+    d = r.booking_date
+    cands = R.resolve(r.entity, r.text, r.counterparty_name, r.counterparty_account)
+    extra = []
+    if A is not None:
+        seen = {c_[0] for c_ in cands}
+        for ib in P.ibans_in(r.text + " " + r.remittance_info):
+            for p_, n_, pur_ in R.p.get(r.entity + "|I:" + ib, []):
+                if p_ not in seen:
+                    seen.add(p_)
+                    extra.append((p_, 95, pur_, "I*:" + ib))
+        for p_, ov in A.find(r.entity, r.text, r.counterparty_name, r.remittance_info):
+            if p_ not in seen:
+                seen.add(p_)
+                extra.append((p_, ov, 0.0, "A:" + p_))
+    if not cands and not extra:
+        if not second:
+            stats["no_party"] += 1
+            dbg[r.bank_txn_id] = ("", "", "", "no_party")
+        return False
+    rows = None
+    p0, rank0, pur0, key = (cands or extra)[0]
+    for p, rank, pur, k in cands:  # strong fits on each candidate payer
+        rows = _fit(IT, [p], r, amt, d, weak=False)
+        if rows:
+            key = k
+            break
+    if not rows and extra:  # history-free candidates: accepted only when exactly one of them fits
+        fits = [(k, f_) for p, rank, pur, k in extra[:4] for f_ in [_fit(IT, [p], r, amt, d, weak=False)] if f_]
+        fits = [f_ for f_ in fits if not f_[1][0][3].startswith(LOW_TRUST)]
+        if len(fits) == 1:
+            key = fits[0][0]
+            rows = [(k_, c_, e_, m_ + "_any") for k_, c_, e_, m_ in fits[0][1]]
+    gid = gm.get(p0, p0)
+    if not rows and GROUP_FALLBACK and len(members.get(gid, [])) > 1:  # parent / group pays for its members
+        rows = _fit(IT, members[gid], r, amt, d, weak=False)
+        if rows:
+            rows = [(k, c_, e, m + "_group") for k, c_, e, m in rows]
+    if not rows and cands:
+        sure = pur0 >= 0.9 and (len(cands) == 1 or cands[1][1] < rank0)
+        rows = _weak_cited(IT, [c_[0] for c_ in cands], r, amt)
+        if not rows and sure:
+            rows = _fit(IT, [p0], r, amt, d, weak=True)
+        if not rows and DUP_ANY:  # duplicate of a recently settled item: exactly one candidate payer has one
+            ds = [x for x in (_duplicate(IT, [c_[0]], r, abs(amt), d, amt > 0) for c_ in cands[:4]) if x]
+            if len(ds) == 1:
+                rows = [(k_, c_, e_, m_ + "_any") for k_, c_, e_, m_ in ds[0]]
+    if not rows:
+        if not second:
+            stats["no_fit"] += 1
+            dbg[r.bank_txn_id] = (p0, gid, key, "no_fit")
+        return False
+    if second:
+        if rows[0][3].startswith(LOW_TRUST + ("party_subset",)):  # measured 0–69 % exact in the 2nd pass
+            return False
+        rows = [(k_, c_, e_, m_ + "_2nd") for k_, c_, e_, m_ in rows]
+    dbg[r.bank_txn_id] = (IT.party[rows[0][0]], gid, key, rows[0][3])
+    stats["claimed"] += 1
+    for k, cents, exc, meth in rows:
+        out.append((r.bank_txn_id, IT.id[k], cents / 100.0, exc, 0.9, meth))
+        IT.apply(k, cents, exc, d)
+    if harvest and OWN_HARVEST and rows[0][3].startswith(STRONG_HARVEST):
+        ps = {IT.party[k] for k, *_ in rows}
+        if len(ps) == 1:
+            p = ps.pop()
+            for k, _ in P.keys_of(r.text, r.counterparty_name, r.counterparty_account):
+                R.add(r.entity + "|" + k, p, purity=0.0)
+    return True
 
 
 def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
@@ -295,7 +443,14 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
         return None
     c = np.concatenate(cand) if len(cand) > 1 else cand[0]
     side = IT.ar[c] if receipt else ~IT.ar[c]
-    m = side & (IT.open[c] > 0) & (IT.ccy[c] == r.currency) & (IT.issue[c] <= d)
+    ccy = r.currency
+    if FX_ORIG and r.orig_currency and r.orig_currency != r.currency and r.orig_amount:
+        try:  # the bank shows the instructed amount in the invoice currency: match on that
+            target = int(round(abs(float(r.orig_amount)) * 100))
+            ccy = r.orig_currency
+        except ValueError:
+            pass
+    m = side & (IT.open[c] > 0) & (IT.ccy[c] == ccy) & (IT.issue[c] <= d)
     c = c[m]
     if len(c) == 0:
         return _duplicate(IT, parties, r, target, d, receipt) if weak else None
@@ -340,7 +495,10 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
         due = (IT.due_dt[cp] - bd).astype(np.int64)
         w = np.nonzero((age <= 400) & (due <= 16) & (due >= -300))[0]
         if len(w) > WINDOW:  # keep the WINDOW latest by due date
-            w = np.sort(w[np.argsort(due[w], kind="stable")[-WINDOW:]])
+            if WINDOW_MODE == "nearest":  # nearest to the booking date
+                w = np.sort(w[np.argsort(np.abs(due[w]), kind="stable")[:WINDOW]])
+            else:  # latest due
+                w = np.sort(w[np.argsort(due[w], kind="stable")[-WINDOW:]])
         if 2 < len(w) < len(cp) or len(cp) > MAX_SUBSET:
             sel = _best_subset(vals[pos][w], target, 0, prefix=False)
             if sel is not None:
@@ -349,6 +507,27 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
         sel = _best_subset(vals, target, 0)
         if sel is not None:
             return [(int(c[i]), int(IT.open[c[i]]), "", "party_subset_cn") for i in sel]
+    if WINDOW_CN and (~pos).any() and len(c) > MAX_SUBSET and len(cp):  # recent window + recent credit notes
+        cn = c[~pos]
+        cn = cn[(bd - IT.issue_dt[cn]).astype(np.int64) <= 400][-4:]
+        age = (bd - IT.issue_dt[cp]).astype(np.int64)
+        due = (IT.due_dt[cp] - bd).astype(np.int64)
+        w = np.nonzero((age <= 400) & (due <= 16) & (due >= -300))[0]
+        k = WINDOW - len(cn)
+        if len(w) > k:
+            w = np.sort(w[np.argsort(due[w], kind="stable")[-k:]])
+        if len(cn) and len(w):
+            idx = np.concatenate([cp[w], cn])
+            v2 = IT.open[idx] * IT.sign[idx]
+            sel = _best_subset(v2, target, 0, prefix=False)
+            if sel is not None and any(IT.sign[idx[i]] < 0 for i in sel):
+                return [(int(idx[i]), int(IT.open[idx[i]]), "", "party_window_cn") for i in sel]
+    # 2b. invoice whose PDF says an advance must be deducted: cash = open − advance → PARTIAL (amount = cash)
+    if IT.adv:
+        for i, k in enumerate(c):
+            a_ = IT.adv.get(int(k))
+            if a_ and IT.open[k] == IT.total[k] and abs(int(IT.open[k]) - a_ - target) <= 1:
+                return [(int(k), target, "PARTIAL", "party_advance")]
     # 3. early-payment discount within terms (+3 days grace): cash = Σ total·(1−pct) on eligible items
     bd = np.datetime64(d)
     dp = IT.disc_pct[c]
@@ -358,7 +537,7 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
         if within.any():
             dv = vals.copy()
             dv[within] = IT.total[c][within] - np.round(IT.total[c][within] * dp[within]).astype(np.int64)
-            sel = _best_subset(dv[pos][:200], target, 2) if pos.any() else None
+            sel = _variant_subset(IT, cp, dv[pos], target, d) if pos.any() else None
             if sel is not None:
                 return [(int(cp[i]), int(IT.open[cp[i]]), "SHORT_DISCOUNT" if within[pos][i] else "",
                          "party_discount") for i in sel]
@@ -366,7 +545,7 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
         if late.any():
             dv = vals.copy()
             dv[late] = IT.total[c][late] - np.round(IT.total[c][late] * dp[late]).astype(np.int64)
-            sel = _best_subset(dv[pos][:200], target, 2) if pos.any() else None
+            sel = _variant_subset(IT, cp, dv[pos], target, d) if pos.any() else None
             if sel is not None:
                 lp = late[pos]
                 return [(int(cp[i]), int(dv[pos][i]) if lp[i] else int(IT.open[cp[i]]),
@@ -377,7 +556,7 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
         for rate in WHT_RATES:
             dv = vals.copy()
             dv[full] = IT.total[c][full] - np.round(IT.total[c][full] * rate).astype(np.int64)
-            sel = _best_subset(dv[pos][:200], target, 2) if pos.any() else None
+            sel = _variant_subset(IT, cp, dv[pos], target, d) if pos.any() else None
             if sel is not None:
                 fp = full[pos]
                 return [(int(cp[i]), int(IT.open[cp[i]]), "SHORT_WITHHOLDING" if fp[i] else "", "party_wht")
