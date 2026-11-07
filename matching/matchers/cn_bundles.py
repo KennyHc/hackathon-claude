@@ -29,12 +29,16 @@ from ingestion.text import norm_name
 NAME = "cn_bundles"
 
 SEARCH_MAX = int(os.environ.get("CNB_SEARCH_MAX", "26"))          # max units in the exhaustive completion search
-SPURIOUS_MAX = float(os.environ.get("CNB_SPURIOUS", "0.3"))        # max expected coincidental completions
+SPURIOUS_MAX = float(os.environ.get("CNB_SPURIOUS", "0.05"))       # max expected coincidental completions (= subset_sum.SPURIOUS_ALT)
 PARTIAL_CLAIM = os.environ.get("CNB_PARTIAL", "1") == "1"          # claim the fixed units alone as a fallback
 SEARCH = os.environ.get("CNB_SEARCH", "1") == "1"
 MAX_CANDS = int(os.environ.get("CNB_MAX_CANDS", "8"))   # a cited fragment with more candidates is ignored
 MIN_DIGITS = int(os.environ.get("CNB_MIN_DIGITS", "6"))  # a cut / suffix fragment needs this many significant digits
 WINDOW = os.environ.get("CNB_WINDOW", "1") == "1"         # pool too big: retry with units issued in the cited range
+RESOLVER = os.environ.get("CNB_RESOLVER", "1") == "1"     # also payers from PartyResolver (IBAN / name / aliases)
+INV_ANCHOR = os.environ.get("CNB_INV_ANCHOR", "0") == "1"  # >= 1 cited invoice; credit notes only by their full number
+STAGES = os.environ.get("CNB_STAGES", "1") == "1"         # completion pools by due date around booking (as subset_sum)
+DUE_STAGES = ((-90, 0), (-9999, 0), (-9999, 20))
 
 
 class Bundles:
@@ -50,6 +54,12 @@ class Bundles:
         self.used: set[int] = set()
         self.stats = defaultdict(int)
         self.debug = []   # (bank_txn_id, item k, kind, letters_ok, digits)
+        due = dict(zip(ctx.items.item_id, ctx.items.due_date.fillna("").astype(str)))
+        self.due = [due.get(i) or ix.issue[k] for k, i in enumerate(ix.iid)]
+        self.pr = None
+        if RESOLVER:
+            from matching.parties import PartyResolver
+            self.pr = PartyResolver.get(ctx)
 
     def units(self, P):
         """-> {invoice or lone credit note k: [k + its credit notes]}, {item k: unit key}"""
@@ -91,6 +101,8 @@ class Bundles:
                 continue    # short fragments ("REF 12691") hit other years / series
             us = list(dict.fromkeys(of[k] for k in cands))
             lt = re.sub(r"[^A-Z]", "", ix.alnum[cands[0]])
+            if INV_ANCHOR and len(cands) == 1 and ix.sign[cands[0]] < 0 and kind != "X":
+                continue    # a credit note pinned only by a fragment
             if kind == "S" and t.letters and not lt.startswith(t.letters) and len(cands) == 1:
                 continue    # same digits under another document prefix (PF proforma vs CRN credit note): not ours
             if len(us) == 1:
@@ -99,6 +111,8 @@ class Bundles:
             elif len(us) <= MAX_CANDS:
                 constraints.append(set(us))
         if not fixed:
+            return None
+        if INV_ANCHOR and not any(ix.sign[u] > 0 for u in fixed):
             return None
         cur = {ix.cur[m] for u in fixed for m in units[u]}
         if len(cur) != 1:
@@ -117,7 +131,12 @@ class Bundles:
             rest = [u for u in units if u not in fixed and ix.cur[u] == cur]
             vals = {u: self.uval(units[u]) for u in rest}
             rest = [u for u in rest if vals[u] != 0 and vals[u] <= resid]
-            if len(rest) > SEARCH_MAX and WINDOW:
+            if STAGES:
+                r = self.staged(line, rest, vals, resid, fixed, open_c)
+                if r:
+                    return "search", fixed | r, units, why
+                rest = []
+            elif len(rest) > SEARCH_MAX and WINDOW:
                 lo = min(ix.issue[u] for u in fixed)
                 hi = max(ix.issue[u] for u in fixed)
                 rest = [u for u in rest if lo <= ix.issue[u] <= hi]
@@ -129,10 +148,36 @@ class Bundles:
                     S = {rest[i] for i in sols[0]}
                     if all(c & (S | fixed) for c in open_c):
                         return "search", fixed | S, units, why
-            else:
+            elif not STAGES:
                 self.stats["search_toobig" if rest else "search_empty"] += 1
         if PARTIAL_CLAIM and fv <= cents + 1:
             return "partial", fixed, units, why
+        return None
+
+    def staged(self, line, rest, vals, resid, fixed, open_c):
+        """completion over the payer's units due in widening windows around the booking date (subset_sum.DUE_STAGES):
+        the first stage with any exact completion decides; it must be the only one and pass the coincidence guard."""
+        from datetime import date, timedelta
+        ix = self.sv.ix
+        bd = date.fromisoformat(line.booking_date)
+        lone = [u for u in rest if ix.sign[u] < 0][-6:]
+        prev = None
+        for lo, hi in DUE_STAGES:
+            a, b = str(bd + timedelta(days=lo)), str(bd + timedelta(days=hi))
+            inv = [u for u in rest if ix.sign[u] > 0 and a <= self.due[u] <= b][-SEARCH_MAX:]
+            cand = inv + lone
+            if not inv or len(cand) == prev or sum(vals[u] for u in inv) < resid:
+                continue
+            prev = len(cand)
+            cnt, sols, dens = mitm([vals[u] for u in cand], resid, max_sols=1)
+            self.stats[f"stage_cnt{min(cnt, 2)}"] += 1
+            if cnt == 1 and dens <= SPURIOUS_MAX:
+                S = {cand[i] for i in sols[0]}
+                if all(c & (S | fixed) for c in open_c):
+                    return S
+                return None
+            if cnt >= 1:
+                return None
         return None
 
     def solve(self, line):
@@ -147,7 +192,10 @@ class Bundles:
         for p in sv.name_parties(line.entity, "AR", words):
             votes[p] += 0.5
         res = []
-        for party, _ in votes.most_common(6):
+        if self.pr is not None:
+            for p, (st, _) in self.pr.resolve(line).items():
+                votes[p] += 0.5 * st
+        for party, _ in sorted(votes.items(), key=lambda x: (-x[1], x[0]))[:6]:   # ties: stable, not hash order
             r = self.solve_party(line, party, toks)
             if r:
                 res.append(r)
