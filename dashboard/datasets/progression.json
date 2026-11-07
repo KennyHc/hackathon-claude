@@ -1,0 +1,79 @@
+[
+ {
+  "step": 1,
+  "label": "Organisers' starter",
+  "score": 11.28,
+  "phase": "sample",
+  "note": "Starter script as shipped"
+ },
+ {
+  "step": 2,
+  "label": "Our baseline",
+  "score": 12.72,
+  "phase": "val",
+  "note": "Starter logic on our ingestion"
+ },
+ {
+  "step": 3,
+  "label": "First full pipeline",
+  "score": 90.04,
+  "phase": "val",
+  "note": "8 matcher agents, categories, exception rules"
+ },
+ {
+  "step": 4,
+  "label": "UNIDENTIFIED threshold",
+  "score": 90.81,
+  "phase": "val",
+  "note": "Flag only when p_items < 0.9; bad fallback removed"
+ },
+ {
+  "step": 5,
+  "label": "Second-wave matchers",
+  "score": 96.4,
+  "phase": "val",
+  "note": "Duplicates, refunds, refs, subset-sum, rounding"
+ },
+ {
+  "step": 6,
+  "label": "Start-state leak fixed",
+  "score": 96.36,
+  "phase": "val",
+  "note": "Honest re-measurement"
+ },
+ {
+  "step": 7,
+  "label": "UNIDENTIFIED threshold 0.97",
+  "score": 96.41,
+  "phase": "val",
+  "note": "Flat plateau 0.8\u20130.99; best in both windows"
+ },
+ {
+  "step": 8,
+  "label": "Untouched holdout",
+  "score": 96.5,
+  "phase": "hold",
+  "note": "Jan\u2013Jun 2024, never tuned on"
+ },
+ {
+  "step": 9,
+  "label": "LIVE v1 (leaderboard)",
+  "score": 93.73,
+  "phase": "live",
+  "note": "Older file, uploaded 12:38"
+ },
+ {
+  "step": 10,
+  "label": "LIVE v2 (leaderboard)",
+  "score": 95.58,
+  "phase": "live",
+  "note": "Second-wave matchers, uploaded 13:14"
+ },
+ {
+  "step": 11,
+  "label": "LIVE v3 (leaderboard)",
+  "score": 95.62,
+  "phase": "live",
+  "note": "Threshold 0.97, uploaded 14:18"
+ }
+]

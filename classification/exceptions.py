@@ -1,422 +1,744 @@
-"""Exception classification engine implementing POLICIES §3 rules.
+"""Exception rules library (POLICIES §2–§3).
 
-Contract (docs/CONTRACTS.md §C):
-    def assign_exceptions(allocations, bank_lines, open_items, **ctx) -> pd.Series
+Public API
+----------
+    explain(items, cash, line, masters) -> list[(item_id, amount_in_item_ccy, exception)] | None
+        Is `cash` (|bank amount|, bank currency) explained by exactly these `items` under POLICIES? If yes, one tuple
+        per item (same order as `items`), else None. `items` = DataFrame rows of ctx.items (or list of dicts) whose
+        `open_amount` must be the open amount JUST BEFORE this line. Handles: full payment, credit notes netted,
+        credit-note-only refunds, SHORT_DISCOUNT (within terms: booking <= issue + discount days + 3) and the late
+        discount (PARTIAL, amount = cash), SHORT_WITHHOLDING (MX/BR/MA customers, 1.25/1.5/10 % of total),
+        card orders settled net of the acquirer fee (empty), SHORT_BANK_CHARGES (non-SEPA payer, <= 60 EUR and
+        <= 2 %), OVERPAYMENT (single invoice, plausible excess), PARTIAL (1-3 invoices at a round fraction, else one invoice absorbs
+        the shortfall), FX_DIFFERENCE (bank ccy != item ccy; exact via orig_amount, else within 3 % of the ECB rate).
+        Not detected: SHORT_DISPUTE / DUPLICATE_PAYMENT / RETURNED (need remittance advices / history).
+
+    match_short_payment(payer_open_items, cash, line, masters) -> (item_id, amount, exception) | None
+        For a payer matcher: the unique open invoice explained by SHORT_BANK_CHARGES / OVERPAYMENT / SHORT_WITHHOLDING.
+    overpayment_plausible(open, cash) -> bool   (excess = round amount 1..200 or exactly 1 % / 10 %)
+
+    explain_codes(items, amounts, cash, line, masters) -> list[str] | None
+        Same rules when the amounts per item are already known (remittance advice, payment run).
+
+    to_ccy(amount, from_ccy, to_ccy, date, fx_rates) -> float      (fx_rates = units per EUR, last available rate)
+    running_open(allocations, bank_lines, open_items) -> pd.Series (open amount of each row's item before its line)
+
+    assign_exceptions(allocations, bank_lines, open_items, **ctx) -> pd.Series aligned with allocations.index
+        Exception per matcher row (None = keep the matcher's exception). Never changes items or amounts.
 """
 from __future__ import annotations
 
-import datetime
+import bisect
 import os
 import sys
-from pathlib import Path
-from typing import Any, Optional
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from fractions import Fraction
+
 import numpy as np
 import pandas as pd
 
-ROOT = str(Path(__file__).resolve().parent.parent)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from integration.lib import fx, ledger  # noqa: E402
-
-Ledger = ledger.Ledger
-MASTERS = os.path.join(ROOT, "data", "masters")
-
-# Cache master tables in memory
-_CACHED_MASTERS_DIR: Optional[str] = None
-_CACHED_PAYMENT_TERMS: Optional[dict[str, tuple[float, int]]] = None
-_CACHED_CUSTOMERS: Optional[dict[str, tuple[str, str]]] = None  # cid -> (country, payment_terms)
-_CACHED_SUPPLIERS: Optional[dict[str, tuple[str, str]]] = None  # sid -> (country, payment_terms)
-
-EURO_SEPA_COUNTRIES = {"ES", "FR", "DE", "IT", "PT", "NL", "BE", "AT", "LU", "IE", "FI"}
 WITHHOLDING_COUNTRIES = {"MX", "BR", "MA"}
 WITHHOLDING_RATES = (0.0125, 0.015, 0.10)
-MATCHING_PASSTHROUGH = {"RETURNED", "DUPLICATE_PAYMENT", "SHORT_DISPUTE", "UNIDENTIFIED"}
+DISCOUNT_GRACE_DAYS = 3
+BANK_CHARGES_MAX_EUR = 60.0
+BANK_CHARGES_MAX_PCT = 0.02
+FX_TOL = 0.03                       # POLICIES: FX difference always well within 3 %
+# euro-area SEPA countries: a transfer from one of these is not "cross-border from outside SEPA"
+SEPA_EURO = {"ES", "PT", "FR", "IT", "DE", "NL", "LU", "BE", "AT", "IE", "MT", "FI", "GR", "SK", "SI", "EE", "LV",
+             "LT", "CY", "HR", "MC", "SM", "AD", "VA"}
+CREDIT_TYPES = {"ARC", "APC"}
+FULL_CLEAR_CODES = {"", "SHORT_DISCOUNT", "SHORT_WITHHOLDING", "SHORT_BANK_CHARGES", "FX_DIFFERENCE", "OVERPAYMENT"}
+PARTIAL_FRACTIONS = tuple(Fraction(x) for x in ("1/2", "3/10", "7/10", "1/4", "2/5", "3/5", "1/3", "2/3", "1/6", "1/5",
+                                                  "3/4", "4/5", "9/10", "19/20"))
+CARD_FEE_MAX = 0.03                 # card acquirer fee (net settlement) tolerated on card orders
+ROUND_FRACTIONS = (0.5, 0.3, 0.7, 0.25, 0.75, 1 / 3, 2 / 3, 0.4, 0.6, 0.2, 0.8, 0.1, 0.9, 0.05, 0.95, 0.15, 0.85)
 
 
-def _load_masters(masters_dir: str):
-    global _CACHED_MASTERS_DIR, _CACHED_PAYMENT_TERMS, _CACHED_CUSTOMERS, _CACHED_SUPPLIERS
-    if _CACHED_MASTERS_DIR == masters_dir and _CACHED_PAYMENT_TERMS is not None:
-        return
-
-    _CACHED_MASTERS_DIR = masters_dir
-
-    # Payment terms
-    pt_path = os.path.join(masters_dir, "payment_terms.csv")
-    pt_map: dict[str, tuple[float, int]] = {}
-    if os.path.exists(pt_path):
-        df_pt = pd.read_csv(pt_path, dtype=str, keep_default_na=False)
-        for _, r in df_pt.iterrows():
-            code = r["code"]
-            pct_s = r["early_payment_discount_pct"]
-            days_s = r["discount_days"]
-            if pct_s and days_s:
-                try:
-                    pt_map[code] = (float(pct_s), int(days_s))
-                except ValueError:
-                    pass
-    _CACHED_PAYMENT_TERMS = pt_map
-
-    # Customers
-    cust_path = os.path.join(masters_dir, "customers.csv")
-    cust_map: dict[str, tuple[str, str]] = {}
-    if os.path.exists(cust_path):
-        df_c = pd.read_csv(cust_path, dtype=str, keep_default_na=False)
-        for _, r in df_c.iterrows():
-            cust_map[r["customer_id"]] = (r["country"], r["payment_terms"])
-    _CACHED_CUSTOMERS = cust_map
-
-    # Suppliers
-    supp_path = os.path.join(masters_dir, "suppliers.csv")
-    supp_map: dict[str, tuple[str, str]] = {}
-    if os.path.exists(supp_path):
-        df_s = pd.read_csv(supp_path, dtype=str, keep_default_na=False)
-        for _, r in df_s.iterrows():
-            supp_map[r["supplier_id"]] = (r["country"], r["payment_terms"])
-    _CACHED_SUPPLIERS = supp_map
+# ------------------------------------------------------------------------------------------------------------- FX
+_FX_CACHE: dict[int, tuple[list[str], dict[str, np.ndarray]]] = {}
 
 
-def _tol(amount: float) -> float:
-    return max(0.01, 0.005 * abs(amount))
+def _fx_table(fx_rates: pd.DataFrame):
+    key = id(fx_rates)
+    t = _FX_CACHE.get(key)
+    if t is None:
+        f = fx_rates[["date", "currency", "units_per_eur"]].copy()
+        f["units_per_eur"] = pd.to_numeric(f.units_per_eur, errors="coerce")
+        p = f.pivot_table(index="date", columns="currency", values="units_per_eur", aggfunc="last").sort_index().ffill()
+        t = (list(p.index.astype(str)), {c: p[c].to_numpy(dtype=float) for c in p.columns})
+        _FX_CACHE[key] = t
+    return t
 
 
-def assign_exceptions(
-    allocations: pd.DataFrame,
-    bank_lines: pd.DataFrame,
-    open_items: pd.DataFrame,
-    **ctx: Any
-) -> pd.Series:
-    """Exception per allocation row per POLICIES §3; index aligned with `allocations`.
+def rate(ccy: str, date: str, fx_rates: pd.DataFrame) -> float:
+    """Units of `ccy` per EUR on `date` (last available rate on or before it)."""
+    if ccy == "EUR" or not ccy:
+        return 1.0
+    dates, cols = _fx_table(fx_rates)
+    col = cols.get(ccy)
+    if col is None:
+        return float("nan")
+    i = max(bisect.bisect_right(dates, str(date)[:10]) - 1, 0)
+    return float(col[i])
 
-    Precedence:
-      1. keep matching's RETURNED / DUPLICATE_PAYMENT / SHORT_DISPUTE / UNIDENTIFIED guesses as given;
-      2. compute open_before/open_after via Ledger(open_items).apply(allocations, bank_lines);
-         DUPLICATE_PAYMENT if open_before <= 0.01 and settled earlier or known paid;
-      3. compare line cash with items;
-      4. FX_DIFFERENCE if line currency != item currency and fully cleared (invoices only);
-      5. PARTIAL if open_after > tolerance;
-         SHORT_DISCOUNT within terms and cash ≈ total - pct*total;
-         SHORT_WITHHOLDING if payer MX/BR/MA and shortfall ≈ 1.25%, 1.5% or 10%;
-         SHORT_BANK_CHARGES if non-SEPA, shortfall <= 60 EUR eq & <= 2%;
-         OVERPAYMENT if single invoice and cash > open amount.
-    """
-    if allocations is None or len(allocations) == 0:
-        return pd.Series([], dtype=object, index=allocations.index if allocations is not None else None)
 
-    masters_dir = ctx.get("masters_dir", MASTERS)
-    _load_masters(masters_dir)
-    assert _CACHED_PAYMENT_TERMS is not None
-    assert _CACHED_CUSTOMERS is not None
-    assert _CACHED_SUPPLIERS is not None
+def to_ccy(amount: float, from_ccy: str, to_ccy_: str, date: str, fx_rates: pd.DataFrame) -> float:
+    if from_ccy == to_ccy_:
+        return float(amount)
+    return float(amount) / rate(from_ccy, date, fx_rates) * rate(to_ccy_, date, fx_rates)
 
-    n = len(allocations)
-    results: list[Optional[str]] = [None] * n
 
-    # Step 1: Matching's pass-through guesses
-    has_matching_exc = "exception" in allocations.columns
-    if has_matching_exc:
-        for i, val in enumerate(allocations["exception"]):
-            if val in MATCHING_PASSTHROUGH:
-                results[i] = val
+# ------------------------------------------------------------------------------------------------------------- masters
+_TERMS_CACHE: dict[int, dict[str, tuple[float, int]]] = {}
+_COUNTRY_CACHE: dict[int, dict[str, str]] = {}
+_ENTITY_CACHE: dict[int, dict[str, str]] = {}
 
-    # Step 2: Ledger open_before / open_after computation
-    open_items = open_items.copy()
-    for c in ledger.ITEM_COLS:  # tolerate partial item tables (tests, matching mocks)
-        if c not in open_items.columns:
-            open_items[c] = open_items["item_id"].str[:3] if c == "item_type" else ""
-    ledger_instance = Ledger(open_items)
-    ledger_res = ledger_instance.apply(allocations, bank_lines)
-    open_befores = ledger_res["open_before"].values
-    open_afters = ledger_res["open_after"].values
-    # already settled earlier in this run: the item is known and its balance is already ~0 (items closed before the
-    # phase are not in open_items at all, so they are never flagged here; matching passes those as DUPLICATE_PAYMENT)
-    known = ledger_res["known"].values.astype(bool)
-    settled_earlier = known & (np.nan_to_num(open_befores, nan=1.0) <= 0.01)
-    is_known_paid = settled_earlier
 
-    item_ids = allocations["item_id"].tolist()
-    alloc_amts = allocations["amount"].tolist()
+def _terms(masters) -> dict[str, tuple[float, int]]:
+    pt = masters["payment_terms"]
+    t = _TERMS_CACHE.get(id(pt))
+    if t is None:
+        t = {}
+        for code, pct, dd in zip(pt.code, pt.early_payment_discount_pct, pt.discount_days):
+            pct, dd = pd.to_numeric(pct, errors="coerce"), pd.to_numeric(dd, errors="coerce")
+            if pd.notna(pct) and pd.notna(dd) and float(pct) > 0:
+                t[str(code)] = (float(pct) / 100.0, int(dd))
+        _TERMS_CACHE[id(pt)] = t
+    return t
 
-    for i in range(n):
-        if results[i] is not None:
+
+def _party_country(masters) -> dict[str, str]:
+    c = masters["customers"]
+    t = _COUNTRY_CACHE.get(id(c))
+    if t is None:
+        t = dict(zip(c.customer_id, c.country))
+        s = masters.get("suppliers")
+        if s is not None:
+            for k, v in zip(s.supplier_id, s.country):
+                t.setdefault(k, v)
+        _COUNTRY_CACHE[id(c)] = t
+    return t
+
+
+def _entity_country(masters) -> dict[str, str]:
+    e = masters["entities"]
+    t = _ENTITY_CACHE.get(id(e))
+    if t is None:
+        t = dict(zip(e.entity, e.country))
+        t.setdefault("ZA01", "ZA")
+        _ENTITY_CACHE[id(e)] = t
+    return t
+
+
+# ------------------------------------------------------------------------------------------------------------- helpers
+def _f(x, default=0.0) -> float:
+    try:
+        v = float(x)
+        return default if np.isnan(v) else v
+    except (TypeError, ValueError):
+        return default
+
+
+def _get(line, key, default=""):
+    try:
+        v = line.get(key, default)
+    except AttributeError:
+        return default
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return default
+    return v
+
+
+def _days_between(d0: str, d1: str) -> int:
+    return (pd.Timestamp(str(d1)[:10]) - pd.Timestamp(str(d0)[:10])).days
+
+
+def _cents(x: float) -> int:
+    return int(round(x * 100))
+
+
+_CENT = Decimal("0.01")
+
+
+def _dec(x) -> Decimal:
+    """Exact decimal of an amount / rate (via its shortest repr: 0.0125 -> Decimal('0.0125'))."""
+    return x if isinstance(x, Decimal) else Decimal(repr(float(x)))
+
+
+def deduction(total: float, rate) -> float:
+    """Deduction (discount, withholding) = rate x total rounded HALF-UP to the cent, from the cent-exact total
+    (the golden's rounding; Python round() is banker's on floats)."""
+    return float((_dec(round(total, 2)) * _dec(rate)).quantize(_CENT, rounding=ROUND_HALF_UP))
+
+
+def part_of(base: float, frac) -> float:
+    """Partial payment = frac x base TRUNCATED to the cent (the golden's rounding of partial payments)."""
+    f = frac if isinstance(frac, Fraction) else Fraction(repr(float(frac)))
+    q = Fraction(_cents(base)) * f                      # in cents, exact
+    return float((Decimal(q.numerator) / Decimal(q.denominator)).quantize(Decimal(1), rounding=ROUND_DOWN)) / 100
+
+
+def _roundness(frac: float) -> float:
+    return min(abs(frac - f) for f in ROUND_FRACTIONS)
+
+
+def is_cross_border_non_sepa(party_id: str, entity: str, masters, line=None) -> bool:
+    """Payer outside the euro SEPA area paying an entity of another country (or the bank text shows SHA charges)."""
+    if line is not None:
+        txt = str(_get(line, "text", "")).upper()
+        if "/CHGS/" in txt or "GASTOS SHA" in txt:
+            return True
+    pc = _party_country(masters).get(party_id, "")
+    ec = _entity_country(masters).get(entity, "")
+    if not pc or not ec or pc == ec:
+        return False
+    return pc not in SEPA_EURO
+
+
+def _days_late(issue_date: str, booking: str, dd: int) -> int:
+    """Days past the discount deadline (issue + discount days + grace); <= 0 means within terms."""
+    return _days_between(issue_date, booking) - dd - DISCOUNT_GRACE_DAYS
+
+
+def _alt_options(it: dict, booking: str, masters) -> list[tuple[float, str, bool]]:
+    """Deductions an AR invoice may carry besides being paid at its open amount:
+    (cash_for_item, exception, fully_cleared). Discount -> SHORT_DISCOUNT (within terms) or PARTIAL (late, the
+    discount stays open); withholding at 1.25 / 1.5 / 10 % for MX/BR/MA customers."""
+    out = []
+    if it["item_type"] != "ARI":
+        return out
+    total, open_ = it["total"], it["open"]
+    if abs(total - open_) > 0.005:          # discounts / withholding are on the total of an untouched invoice
+        return out
+    t = _terms(masters).get(it["payment_terms"])
+    if t:
+        pct, dd = t
+        in_time = bool(booking) and _days_late(it["issue_date"], booking, dd) <= 0
+        cc = round(total - deduction(total, pct), 2)
+        out.append((cc, "SHORT_DISCOUNT" if in_time else "PARTIAL", in_time))
+    if _party_country(masters).get(it["party_id"], "") in WITHHOLDING_COUNTRIES:
+        for r in WITHHOLDING_RATES:
+            out.append((round(total - deduction(total, r), 2), "SHORT_WITHHOLDING", True))
+    return out
+
+
+def _dp(alts: list[list[tuple[int, str]]], need: int, tol: int, kinds=None, max_states=60_000, budget=2_000_000):
+    """Smallest set of (item, alternative) whose (negative) deltas sum to need (± tol). Only alternatives whose kind is
+    in `kinds` (None = all). -> {item: alt} or None (also None when the search exceeds its work budget)."""
+    if abs(need) <= tol:
+        return {}
+    floor = need - tol
+    states: dict[int, tuple] = {0: ()}
+    work = 0
+    for i, a in enumerate(alts):
+        opts = [(j, d) for j, (d, k) in enumerate(a) if (kinds is None or k in kinds) and d < 0]
+        if not opts:
             continue
-        iid = item_ids[i]
-        if not iid:
-            continue
-        # DUPLICATE_PAYMENT rule: open_before <= 0.01 and (settled earlier or known paid)
-        if open_befores[i] <= 0.01 and (settled_earlier[i] or is_known_paid[i]):
-            if iid.startswith(("ARI", "API")):
-                try:
-                    amt_val = float(alloc_amts[i]) if alloc_amts[i] != "" else 0.0
-                except ValueError:
-                    amt_val = 0.0
-                if amt_val > 0.01:
-                    results[i] = "DUPLICATE_PAYMENT"
-
-    # Pre-build lookup for bank lines
-    bl_map: dict[str, dict[str, Any]] = {}
-    if bank_lines is not None and len(bank_lines) > 0:
-        for r in bank_lines.itertuples(index=False):
-            t_id = getattr(r, "bank_txn_id", "")
-            if t_id:
-                bl_map[t_id] = {
-                    "booking_date": getattr(r, "booking_date", ""),
-                    "amount": float(getattr(r, "amount", 0.0) or 0.0),
-                    "currency": getattr(r, "currency", ""),
-                    "orig_amount": getattr(r, "orig_amount", ""),
-                    "orig_currency": getattr(r, "orig_currency", ""),
-                    "text": getattr(r, "text", "")
-                }
-
-    # Pre-build lookup for open items
-    item_map: dict[str, dict[str, Any]] = {}
-    if open_items is not None and len(open_items) > 0:
-        has_pt = "payment_terms" in open_items.columns
-        for r in open_items.itertuples(index=False):
-            iid = getattr(r, "item_id", "")
-            if iid:
-                party_id = getattr(r, "party_id", "")
-                pt_term = getattr(r, "payment_terms", "") if has_pt else ""
-                tot_amt_str = getattr(r, "total_amount", "0.0")
-                try:
-                    tot_amt = float(tot_amt_str) if tot_amt_str != "" else 0.0
-                except ValueError:
-                    tot_amt = 0.0
-                item_map[iid] = {
-                    "currency": getattr(r, "currency", ""),
-                    "total_amount": tot_amt,
-                    "issue_date": getattr(r, "issue_date", ""),
-                    "party_id": party_id,
-                    "payment_terms": pt_term,
-                    "item_type": getattr(r, "item_type", iid[:3])
-                }
-
-    # Group allocations by bank_txn_id
-    txn_alloc_indices: dict[str, list[int]] = {}
-    bank_txn_ids = allocations["bank_txn_id"].tolist()
-    for idx, t_id in enumerate(bank_txn_ids):
-        if t_id not in txn_alloc_indices:
-            txn_alloc_indices[t_id] = []
-        txn_alloc_indices[t_id].append(idx)
-
-    # Process per bank line
-    for t_id, indices in txn_alloc_indices.items():
-        bl_info = bl_map.get(t_id)
-        if not bl_info:
-            continue
-
-        b_date = bl_info["booking_date"]
-        b_amt = bl_info["amount"]
-        b_curr = bl_info["currency"]
-        cash = abs(b_amt)
-
-        # Retrieve items for this line
-        line_items: list[dict[str, Any]] = []
-        for idx in indices:
-            iid = item_ids[idx]
-            amt_s = alloc_amts[idx]
-            try:
-                amt = float(amt_s) if amt_s != "" else 0.0
-            except ValueError:
-                amt = 0.0
-
-            it_info = item_map.get(iid, {})
-            i_curr = it_info.get("currency", "") or b_curr
-            tot_amt = it_info.get("total_amount", amt)
-            issue_date = it_info.get("issue_date", "")
-            party_id = it_info.get("party_id", "")
-            p_terms = it_info.get("payment_terms", "")
-            if pd.isna(p_terms) or str(p_terms) == "nan":
-                p_terms = ""
-
-            # Look up payment terms and country if not present
-            country = ""
-            if iid.startswith(("ARI", "ARC")):
-                cust_meta = _CACHED_CUSTOMERS.get(party_id)
-                if cust_meta:
-                    country = cust_meta[0]
-                    if not p_terms:
-                        p_terms = cust_meta[1]
-            elif iid.startswith(("API", "APC")):
-                supp_meta = _CACHED_SUPPLIERS.get(party_id)
-                if supp_meta:
-                    country = supp_meta[0]
-                    if not p_terms:
-                        p_terms = supp_meta[1]
-
-            itype = it_info.get("item_type", iid[:3])
-
-            line_items.append({
-                "idx": idx,
-                "item_id": iid,
-                "amount": amt,
-                "total_amount": tot_amt,
-                "currency": i_curr,
-                "issue_date": issue_date,
-                "party_id": party_id,
-                "payment_terms": p_terms,
-                "country": country,
-                "item_type": itype,
-                "open_before": open_befores[idx],
-                "open_after": open_afters[idx]
-            })
-
-        # Step 4 & 5: Check each item
-        # Rule 4: FX_DIFFERENCE per item where line currency != item currency
-        for it in line_items:
-            idx = it["idx"]
-            if results[idx] is not None:
-                continue
-            if not it["item_id"]:
-                continue
-
-            tol = _tol(it["open_before"])
-            if it["currency"] != b_curr:
-                # FX row
-                if it["open_after"] > tol:
-                    results[idx] = "PARTIAL"
-                else:
-                    # Item fully cleared
-                    if it["item_type"] in ("ARI", "API"):
-                        results[idx] = "FX_DIFFERENCE"
-                    else:
-                        results[idx] = None
-            else:
-                # Non-FX row: if open_after > tolerance, it is PARTIAL
-                if it["open_after"] > tol:
-                    results[idx] = "PARTIAL"
-
-        # Now examine remaining fully cleared items against line cash
-        # Single invoice overpayment: cash > alloc amount + 0.01
-        if len(line_items) == 1 and line_items[0]["item_id"]:
-            it = line_items[0]
-            idx = it["idx"]
-            if results[idx] is None and it["item_type"] in ("ARI", "API") and it["currency"] == b_curr:
-                if cash > it["amount"] + 0.01:
-                    results[idx] = "OVERPAYMENT"
+        work += len(states) * len(opts)
+        if work > budget:
+            return None
+        new = dict(states)
+        for s, path in states.items():
+            for j, d in opts:
+                ns = s + d
+                if ns < floor:
                     continue
+                old = new.get(ns)
+                if old is None or len(old) > len(path) + 1:
+                    new[ns] = path + ((i, j),)
+        if len(new) > max_states:
+            return None
+        states = new
+    for dv in sorted(range(-tol, tol + 1), key=abs):
+        p = states.get(need + dv)
+        if p:
+            return dict(p)
+    return None
 
-        # Remaining undecided items (must be non-FX invoices or credit notes)
-        rem_invoices = [
-            it for it in line_items
-            if it["item_id"] and results[it["idx"]] is None and it["item_type"] in ("ARI", "API")
-        ]
-        credit_notes = [
-            it for it in line_items
-            if it["item_id"] and it["item_type"] in ("ARC", "APC")
-        ]
-        handled_invoices = [
-            it for it in line_items
-            if it["item_id"] and results[it["idx"]] is not None and it["item_type"] in ("ARI", "API")
-        ]
 
-        if not rem_invoices:
-            # Credit notes stay empty
-            for cn in credit_notes:
-                if results[cn["idx"]] is None:
-                    results[cn["idx"]] = None
-            continue
+def _subset_match(alts: list[list[tuple[int, str]]], need: int, tol: int):
+    """Pick deductions (alternatives) so that their deltas sum to `need` cents (± tol). -> {item: alt} or None.
+      1. every eligible item takes the same kind/variant (all discounted, all withheld at 1.5 %, ...)
+      2. every invoice within its discount window takes the discount; smallest subset of the rest (late discount
+         first, then withholding, then any)
+      3. smallest subset with late discounts only / withholding only / anything."""
+    if abs(need) <= tol:
+        return {}
+    variants: dict[tuple[str, int], dict[int, tuple[int, int]]] = {}
+    for i, a in enumerate(alts):
+        seen: dict[str, int] = {}
+        for j, (d, k) in enumerate(a):
+            v = seen.get(k, 0)
+            seen[k] = v + 1
+            variants.setdefault((k, v), {})[i] = (j, d)
+    for best in variants.values():
+        # per-item rounding: the payer may compute the deduction on the sum -> allow ~0.5 cent per item
+        if abs(sum(d for _, d in best.values()) - need) <= max(tol, (len(best) + 1) // 2):
+            return {i: j for i, (j, _) in best.items()}
+    forced: dict[int, int] = {}
+    for i, a in enumerate(alts):
+        for j, (d, k) in enumerate(a):
+            if k == "SHORT_DISCOUNT":
+                forced[i] = j
+                break
+    passes = ({"PARTIAL"}, {"SHORT_WITHHOLDING"}, None)
+    if forced:
+        rest = [[] if i in forced else a for i, a in enumerate(alts)]
+        need2 = need - sum(alts[i][j][0] for i, j in forced.items())
+        if abs(need2) <= tol:
+            return forced
+        for kinds in passes:
+            got = _dp(rest, need2, tol, kinds)
+            if got is not None:
+                return {**forced, **got}
+    for kinds in passes:
+        got = _dp(alts, need, tol, kinds)
+        if got is not None:
+            return got
+    return None
 
-        # Cash allocated to remaining items:
-        # cash_rem = cash - cash_applied_to_handled_invoices + credit_notes_netted
-        cn_cash = sum(cn["amount"] for cn in credit_notes)
-        handled_cash = sum(hi["amount"] for hi in handled_invoices)
-        cash_rem = cash - handled_cash + cn_cash
-        gross_rem = sum(it["amount"] for it in rem_invoices)
-        diff_rem = gross_rem - cash_rem
-        rem_tol = _tol(gross_rem)
 
-        # Check 1: SHORT_WITHHOLDING
-        # Payer country in MX/BR/MA and shortfall ≈ 1.25%, 1.5% or 10%
-        withholding_matched = False
-        first_country = rem_invoices[0]["country"] if rem_invoices else ""
-        if first_country in WITHHOLDING_COUNTRIES:
-            for rate in WITHHOLDING_RATES:
-                exp_wh = sum(round(rate * it["total_amount"], 2) for it in rem_invoices)
-                if abs(diff_rem - exp_wh) <= max(0.05, 0.005 * exp_wh) or abs(diff_rem - round(rate * gross_rem, 2)) <= max(0.05, 0.005 * diff_rem):
-                    withholding_matched = True
-                    for it in rem_invoices:
-                        results[it["idx"]] = "SHORT_WITHHOLDING"
-                    for cn in credit_notes:
-                        if results[cn["idx"]] is None:
-                            results[cn["idx"]] = None
-                    break
+def _fraction_alts(rows, inv_idx) -> list[list[tuple[int, int, float]]]:
+    """Per invoice: candidate partial payments f × (open | total) truncated to the cent
+    -> (delta_cents, amount)."""
+    out = [[] for _ in rows]
+    for i in inv_idx:
+        op, tot = rows[i]["open"], rows[i]["total"]
+        seen = set()
+        for f in PARTIAL_FRACTIONS:
+            for base in (op, tot):
+                amt = part_of(base, f)
+                if 0.005 < amt < op - 0.005 and amt not in seen:
+                    seen.add(amt)
+                    out[i].append((_cents(amt) - _cents(op), amt))
+    return out
 
-        if withholding_matched:
-            continue
 
-        # Check 2: SHORT_DISCOUNT
-        # payment_terms has early discount, booking_date <= issue_date + discount_days + 3
-        discount_matched = False
-        exp_discount = 0.0
-        eligible_indices: list[int] = []
-
-        for it in rem_invoices:
-            terms = it["payment_terms"]
-            pt_info = _CACHED_PAYMENT_TERMS.get(terms)
-            if not pt_info:
+def _small_subset(fr, need: int, tol: int, kmax: int = 3):
+    """Up to kmax distinct items each paying a fraction so that deltas sum to need (± tol). -> {item: amount}|None"""
+    flat = [(i, d, amt) for i, lst in enumerate(fr) for d, amt in lst]
+    if not flat:
+        return None
+    for i, d, amt in flat:                                 # k = 1
+        if abs(d - need) <= tol:
+            return {i: amt}
+    if kmax < 2 or len(flat) > 4000:
+        return None
+    by_d: dict[int, list[tuple[int, float]]] = {}
+    for i, d, amt in flat:
+        by_d.setdefault(d, []).append((i, amt))
+    for i, d, amt in flat:                                 # k = 2
+        for dv in range(-tol, tol + 1):
+            for i2, amt2 in by_d.get(need - d + dv, ()):
+                if i2 != i:
+                    return {i: amt, i2: amt2}
+    if kmax < 3 or len(flat) > 600:
+        return None
+    for x in range(len(flat)):                             # k = 3
+        i, d, amt = flat[x]
+        for y in range(x + 1, len(flat)):
+            i2, d2, amt2 = flat[y]
+            if i2 == i:
                 continue
-            pct, d_days = pt_info
-            iss_date_str = it["issue_date"]
-            if not (iss_date_str and b_date):
-                continue
+            for dv in range(-tol, tol + 1):
+                for i3, amt3 in by_d.get(need - d - d2 + dv, ()):
+                    if i3 != i and i3 != i2:
+                        return {i: amt, i2: amt2, i3: amt3}
+    return None
 
-            try:
-                iss_dt = datetime.date.fromisoformat(iss_date_str)
-                b_dt = datetime.date.fromisoformat(b_date)
-                deadline = iss_dt + datetime.timedelta(days=d_days + 3)
-                if b_dt <= deadline:
-                    disc_amt = round(it["total_amount"] * pct / 100.0, 2)
-                    exp_discount += disc_amt
-                    eligible_indices.append(it["idx"])
-            except ValueError:
-                pass
 
-        if eligible_indices and (abs(diff_rem - exp_discount) <= max(0.05, 0.005 * exp_discount)):
-            discount_matched = True
-            for it in rem_invoices:
-                if it["idx"] in eligible_indices:
-                    results[it["idx"]] = "SHORT_DISCOUNT"
-                else:
-                    results[it["idx"]] = None
-            for cn in credit_notes:
-                if results[cn["idx"]] is None:
-                    results[cn["idx"]] = None
+def _pick_partial(rows, inv_idx, R) -> int | None:
+    """Item that absorbs a shortfall R (<0): its applied amount open+R must stay in (0, open)."""
+    cands = []
+    for i in inv_idx:
+        op = rows[i]["open"]
+        a = op + R
+        if 0.005 < a < op - 0.005:
+            cands.append((_roundness(a / op), -op, i))
+    if not cands:
+        return None
+    cands.sort()
+    return cands[0][2]
 
-        if discount_matched:
+
+def _snap(amount: float, open_: float, total: float) -> float:
+    """FX-converted partial amount: snap to a round fraction of the open / total amount when within 2 %."""
+    best = amount
+    err = 0.02
+    for f in PARTIAL_FRACTIONS:
+        for base in (open_, total):
+            c = part_of(base, f)
+            if c > 0 and abs(c / amount - 1) < err:
+                best, err = c, abs(c / amount - 1)
+    return best
+
+
+OVERPAY_ROUND_CENTS = {100, 200, 500, 1000, 2000, 5000, 10000, 20000}
+OVERPAY_PCTS = (0.01, 0.10)
+
+
+def overpayment_plausible(open_: float, cash: float) -> bool:
+    """Overpayments in the data are the invoice + a round amount (1, 2, 5 ... 200) or + exactly 1 % / 10 %. Any other
+    excess on one invoice is almost always a wrong item set (the line pays more documents): val 0 / 55 such matcher
+    OVERPAYMENT rows were right, vs 310 / 314 for the patterns."""
+    exc = _cents(cash) - _cents(open_)
+    if exc <= 0:
+        return False
+    if exc in OVERPAY_ROUND_CENTS and exc <= 0.35 * _cents(open_):
+        return True
+    return any(abs(_cents(cash) - _cents(round(open_ * (1 + p), 2))) <= 1 for p in OVERPAY_PCTS)
+
+
+SHORT_PAYMENT_CODES = ("SHORT_BANK_CHARGES", "OVERPAYMENT", "SHORT_WITHHOLDING")
+
+
+def match_short_payment(cands, cash: float, line, masters, codes=SHORT_PAYMENT_CODES):
+    """One open AR invoice of the (resolved) payer explains a receipt that matches no document exactly:
+    SHORT_BANK_CHARGES / OVERPAYMENT (plausible excess) / SHORT_WITHHOLDING. `cands` = the payer's open items (DataFrame
+    rows of ctx.items or list of dicts, open_amount = open now). -> (item_id, amount, exception) when exactly one
+    invoice qualifies, else None. Val simulation on the receipts left unclaimed by the full pipeline (real payer
+    resolver): 117 lines claimed at 96.6 % (SBC 113/117), OVERPAYMENT 81/85, SHORT_WITHHOLDING 18/18."""
+    recs = cands if isinstance(cands, list) else cands.to_dict("records")
+    bccy = str(_get(line, "currency", ""))
+    hits = []
+    for r in recs:
+        if str(r.get("item_type", "")) != "ARI" or str(r.get("currency", "")) != bccy:
             continue
-
-        # Check 3: SHORT_BANK_CHARGES
-        # Non-SEPA payer, single invoice, shortfall <= 60 EUR eq & <= 2% of the item
-        payer_party = rem_invoices[0]["party_id"] if rem_invoices else ""
-        is_non_sepa = first_country not in EURO_SEPA_COUNTRIES and bool(first_country)
-        is_card = "CARD SETTLEMENT" in bl_info["text"] or payer_party.startswith("CWEB")
-
-        if is_non_sepa and not is_card and len(rem_invoices) == 1 and diff_rem > 0.01:
-            it = rem_invoices[0]
-            diff_eur = fx.convert(diff_rem, b_curr, "EUR", b_date)
-            pct_short = diff_rem / it["total_amount"] if it["total_amount"] else 1.0
-            if diff_eur <= 60.01 and pct_short <= 0.0201:
-                results[it["idx"]] = "SHORT_BANK_CHARGES"
-                for cn in credit_notes:
-                    if results[cn["idx"]] is None:
-                        results[cn["idx"]] = None
-                continue
-
-        if abs(diff_rem) <= rem_tol:
-            # Paid in full as documented
-            for it in rem_invoices:
-                results[it["idx"]] = None
-            for cn in credit_notes:
-                if results[cn["idx"]] is None:
-                    results[cn["idx"]] = None
+        if _f(r.get("open_amount"), 0.0) <= 0.005:
             continue
+        ex = explain([r], cash, line, masters)
+        if ex and ex[0][2] in codes:
+            hits.append(ex[0])
+            if len(hits) > 1:
+                return None
+    return hits[0] if hits else None
 
-        # Fallback for remaining items
-        for it in rem_invoices:
-            results[it["idx"]] = None
-        for cn in credit_notes:
-            if results[cn["idx"]] is None:
-                results[cn["idx"]] = None
 
-    return pd.Series(results, index=allocations.index, dtype=object)
+# ------------------------------------------------------------------------------------------------------------- explain
+def explain(items: pd.DataFrame, cash: float, line, masters: dict) -> list[tuple[str, float, str]] | None:
+    """[(item_id, amount_in_item_ccy, exception)] in the order of `items` if `cash` (|bank amount|, bank ccy) is
+    explained by exactly these items under POLICIES, else None. `items` needs item_id, item_type, total_amount,
+    open_amount (= open just before this line), currency, issue_date, payment_terms, party_id, entity
+    (+ payment_method, optional: card orders are cleared gross)."""
+    if items is None or len(items) == 0:
+        return None
+    rows = []
+    recs = items if isinstance(items, list) else items.to_dict("records")
+    for r in recs:
+        total = _f(r.get("total_amount"))
+        op = _f(r.get("open_amount"), total)
+        rows.append({"item_id": r["item_id"], "item_type": str(r.get("item_type", "")), "total": total,
+                     "open": round(op, 2), "ccy": str(r.get("currency", "")), "issue_date": str(r.get("issue_date", "")),
+                     "payment_terms": str(r.get("payment_terms", "") or ""), "party_id": str(r.get("party_id", "")),
+                     "entity": str(r.get("entity", "")), "pm": str(r.get("payment_method", "") or "")})
+    ccys = {r["ccy"] for r in rows}
+    if len(ccys) != 1:
+        return None
+    iccy = ccys.pop()
+    bccy = str(_get(line, "currency", iccy)) or iccy
+    booking = str(_get(line, "booking_date", ""))[:10]
+    cash = abs(_f(cash))
+    cross = bccy != iccy
+    oa = _f(_get(line, "orig_amount", np.nan), np.nan)
+    oc = str(_get(line, "orig_currency", ""))
+    fx = masters.get("fx_rates") if isinstance(masters, dict) else None
+    exact = True
+    if cross:
+        if oc == iccy and not np.isnan(oa) and oa != 0:
+            cash_i = abs(oa)
+        else:
+            if fx is None:
+                return None
+            cash_i = to_ccy(cash, bccy, iccy, booking, fx)
+            if not np.isfinite(cash_i):
+                return None
+            exact = False
+    else:
+        cash_i = cash
+
+    sign = [(-1 if r["item_type"] in CREDIT_TYPES else 1) for r in rows]
+    inv_idx = [i for i, r in enumerate(rows) if r["item_type"] not in CREDIT_TYPES]
+    inv_set = set(inv_idx)
+    S = sum(s * r["open"] for s, r in zip(sign, rows))
+    if not inv_idx:
+        # only credit notes: a refund of them (supplier refunds its APC / we pay out an ARC) at their full amount
+        tot = sum(r["open"] for r in rows)
+        if not cross and abs(tot - cash) <= 0.01 * len(rows):
+            return [(r["item_id"], r["open"], "") for r in rows]
+        return None
+    if S <= 0:
+        return None
+    amounts = [r["open"] for r in rows]
+    codes = [""] * len(rows)
+
+    def finish():
+        out = []
+        for i, r in enumerate(rows):
+            code = codes[i]
+            if cross and i in inv_set and code in FULL_CLEAR_CODES:
+                code = "FX_DIFFERENCE"
+            out.append((r["item_id"], round(amounts[i], 2), code))
+        return out
+
+    if not exact:
+        # the bank converted at its own rate: a full clearing is within the FX tolerance of the documents
+        if abs(cash_i / S - 1) <= FX_TOL:
+            return finish()
+        R = cash_i - S
+        if R < 0:
+            j = _pick_partial(rows, inv_idx, R)
+            if j is not None:
+                amounts[j] = _snap(rows[j]["open"] + R, rows[j]["open"], rows[j]["total"])
+                codes[j] = "PARTIAL"
+                return finish()
+        return None
+
+    # exact cash in item currency ------------------------------------------------------------------------------
+    tol = 1
+    base = [s * _cents(r["open"]) for s, r in zip(sign, rows)]
+    target = _cents(cash_i)
+    need = target - sum(base)
+    if abs(need) <= tol:
+        return finish()
+    if need > 0:
+        if len(rows) == 1 and rows[0]["item_type"] == "ARI" and overpayment_plausible(rows[0]["open"], cash_i):
+            codes[0] = "OVERPAYMENT"
+            return finish()
+        return None
+    # shortfall: deductions (discount / withholding) that clear the invoices
+    alts_full, alts_c = [], []
+    for i, r in enumerate(rows):
+        opts = _alt_options(r, booking, masters) if sign[i] > 0 else []
+        alts_full.append(opts)
+        alts_c.append([(_cents(c) - base[i], exc) for c, exc, _ in opts])
+    if any(alts_c):
+        ch = _subset_match(alts_c, need, tol)
+        if ch is not None:
+            for i, j in ch.items():
+                c, exc, full = alts_full[i][j]
+                codes[i] = exc
+                amounts[i] = rows[i]["open"] if full else c
+            return finish()
+    short = -need / 100.0
+    # card acquirer settlements clear the card orders at gross (the fee is contractual, not an exception)
+    if all(r["pm"] == "card" for r in rows) and short <= CARD_FEE_MAX * S:
+        return finish()
+    # intermediary bank fee on a cross-border transfer from outside SEPA
+    if all(r["item_type"] in ("ARI", "ARC") for r in rows):
+        j = max(inv_idx, key=lambda i: rows[i]["open"])
+        r = rows[j]
+        short_eur = short if iccy == "EUR" else (to_ccy(short, iccy, "EUR", booking, fx) if fx is not None else np.nan)
+        if (short <= BANK_CHARGES_MAX_PCT * r["open"] + 0.005 and np.isfinite(short_eur)
+                and short_eur <= BANK_CHARGES_MAX_EUR + 0.005
+                and is_cross_border_non_sepa(r["party_id"], r["entity"], masters, line)):
+            codes[j] = "SHORT_BANK_CHARGES"
+            return finish()
+    # not cleared in full: one or a few invoices paid at a round fraction, else one invoice absorbs the shortfall
+    got = _small_subset(_fraction_alts(rows, inv_idx), need, tol, kmax=3 if len(inv_idx) <= 40 else 2)
+    if got:
+        for i, amt in got.items():
+            amounts[i] = amt
+            codes[i] = "PARTIAL"
+        return finish()
+    j = _pick_partial(rows, inv_idx, -short)
+    if j is None:
+        return None
+    amounts[j] = round(rows[j]["open"] - short, 2)
+    codes[j] = "PARTIAL"
+    return finish()
+
+
+# ------------------------------------------------------------------------------------------------------------- assign
+_MASTERS_CACHE: dict[str, dict] = {}
+
+
+def _load_masters(bank_lines: pd.DataFrame) -> dict:
+    from ingestion import lib
+    folder = None
+    if "statement_file" in bank_lines.columns and len(bank_lines):
+        f = str(bank_lines.statement_file.iloc[0])
+        folder = f.split("/")[0] if "/" in f else None
+    key = folder or ""
+    if key not in _MASTERS_CACHE:
+        _MASTERS_CACHE[key] = lib.masters(folder)
+    return _MASTERS_CACHE[key]
+
+
+def explain_codes(items: list[dict], amounts: list[float], cash: float, line, masters) -> list[str] | None:
+    """Exceptions for rows whose amounts are already known (e.g. from a remittance advice / payment run).
+    Rows applied for less than their open amount -> PARTIAL; the cash shortfall against the applied amounts must be
+    explained by deductions on the fully applied invoices (in-time discount / withholding), else None."""
+    if not items:
+        return None
+    ccys = {str(r.get("currency", "")) for r in items}
+    if len(ccys) != 1:
+        return None
+    iccy = ccys.pop()
+    bccy = str(_get(line, "currency", iccy)) or iccy
+    cross = bccy != iccy
+    booking = str(_get(line, "booking_date", ""))[:10]
+    if cross:
+        oa = _f(_get(line, "orig_amount", np.nan), np.nan)
+        if str(_get(line, "orig_currency", "")) != iccy or np.isnan(oa) or oa == 0:
+            return None
+        cash = abs(oa)
+    codes, alts = [], []
+    applied = 0
+    for r, a in zip(items, amounts):
+        op = round(_f(r.get("open_amount"), _f(r.get("total_amount"))), 2)
+        credit = str(r.get("item_type", "")) in CREDIT_TYPES
+        applied += (-1 if credit else 1) * _cents(a)
+        if credit:
+            codes.append("")
+            alts.append([])
+            continue
+        if a < op - max(0.01, 0.005 * op):
+            codes.append("PARTIAL")
+            alts.append([])
+            continue
+        codes.append("")
+        row = {"item_type": str(r.get("item_type", "")), "total": _f(r.get("total_amount")), "open": op,
+               "issue_date": str(r.get("issue_date", "")), "payment_terms": str(r.get("payment_terms", "") or ""),
+               "party_id": str(r.get("party_id", ""))}
+        alts.append([(_cents(c) - _cents(op), e) for c, e, full in _alt_options(row, booking, masters) if full])
+    need = _cents(cash) - applied
+    if abs(need) > 1:
+        if need > 0:
+            return None
+        ch = _subset_match(alts, need, 1)
+        if ch is None:
+            return None
+        for i, j in ch.items():
+            codes[i] = alts[i][j][1]
+    if cross:
+        codes = ["FX_DIFFERENCE" if (c in FULL_CLEAR_CODES and str(r.get("item_type", "")) not in CREDIT_TYPES) else c
+                 for c, r in zip(codes, items)]
+    return codes
+
+
+def running_open(allocations: pd.DataFrame, bank_lines: pd.DataFrame, open_items: pd.DataFrame) -> pd.Series:
+    """Open amount of each allocation row's item just BEFORE its bank line: open at the phase start minus what earlier
+    lines (booking date, then bank_txn_id order) allocated to it (RETURNED re-opens). Aligned with allocations.index."""
+    order = pd.Series(np.arange(len(bank_lines)), index=bank_lines.bank_txn_id.values)
+    order = order[~order.index.duplicated()]
+    al = allocations[["bank_txn_id", "item_id", "amount", "exception"]].copy()
+    al["_ord"] = al.bank_txn_id.map(order).fillna(-1).to_numpy()
+    al["_amt"] = pd.to_numeric(al.amount, errors="coerce").fillna(0.0)
+    al["_d"] = np.where(al.exception.fillna("") == "RETURNED", al._amt, -al._amt)
+    al = al.sort_values("_ord", kind="stable")
+    # rows of the same line do not affect each other: cumulate per (item, line) blocks
+    blk = al.groupby(["item_id", "_ord"], sort=False)._d.sum().reset_index().sort_values(["item_id", "_ord"])
+    blk["_before"] = blk.groupby("item_id")._d.cumsum() - blk._d
+    al = al.merge(blk[["item_id", "_ord", "_before"]], on=["item_id", "_ord"], how="left").set_axis(al.index)
+    op0 = open_items.drop_duplicates("item_id").set_index("item_id").open_amount.astype(float)
+    return (al.item_id.map(op0) + al._before).round(2).reindex(allocations.index)
+
+
+def assign_exceptions(allocations: pd.DataFrame, bank_lines: pd.DataFrame, open_items: pd.DataFrame, **ctx) -> pd.Series:
+    """Exception per matcher row, aligned with allocations.index (None = keep the matcher's exception).
+
+    Per bank line: rebuild each item's open amount just before the line (replaying earlier allocations), run `explain`
+    on (items, cash) and take its codes for rows whose matcher amount agrees with the rule's amount. Rows the rules
+    cannot explain get the row-level rules: a cross-currency invoice row cleared in full -> FX_DIFFERENCE (credit
+    notes stay empty); an invoice row applied for less than its open amount -> PARTIAL; applied in full -> empty.
+    Matcher-only codes (SHORT_DISPUTE, DUPLICATE_PAYMENT, RETURNED, UNIDENTIFIED) are always kept. Items and
+    amounts are never changed."""
+    res = pd.Series([None] * len(allocations), index=allocations.index, dtype=object)
+    if not len(allocations):
+        return res
+    masters = ctx.get("masters") or _load_masters(bank_lines)
+    bcols = [c for c in ("bank_txn_id", "amount", "currency", "booking_date", "orig_amount", "orig_currency", "text")
+             if c in bank_lines.columns]
+    bank = {r["bank_txn_id"]: r for r in bank_lines[bcols].drop_duplicates("bank_txn_id").to_dict("records")}
+    icols = [c for c in ("item_id", "item_type", "total_amount", "currency", "issue_date", "payment_terms", "party_id",
+                         "entity", "payment_method") if c in open_items.columns]
+    items = {r["item_id"]: r for r in open_items[icols].drop_duplicates("item_id").to_dict("records")}
+    keep = {"SHORT_DISPUTE", "DUPLICATE_PAYMENT", "RETURNED", "UNIDENTIFIED"}
+    op_all = running_open(allocations, bank_lines, open_items).to_numpy()
+    txns = allocations.bank_txn_id.to_numpy()
+    iids = allocations.item_id.to_numpy()
+    excs = allocations.exception.fillna("").astype(str).to_numpy()
+    amts = pd.to_numeric(allocations.amount, errors="coerce").fillna(0.0).to_numpy()
+    out = [None] * len(allocations)
+    groups: dict[str, list[int]] = {}
+    for k, t in enumerate(txns):
+        groups.setdefault(t, []).append(k)
+    for txn, pos in groups.items():
+        line = bank.get(txn)
+        if line is None or any(iids[k] not in items for k in pos) or any(np.isnan(op_all[k]) for k in pos):
+            continue
+        its = []
+        for k in pos:
+            r = dict(items[iids[k]])
+            r["open_amount"] = max(float(op_all[k]), 0.0)
+            its.append(r)
+        ex = None
+        hard = [n for n, k in enumerate(pos) if excs[k] in keep]
+        if not any(excs[pos[n]] != "SHORT_DISPUTE" for n in hard):
+            # explain the rows the matcher left open; SHORT_DISPUTE rows consume their applied amount of the cash
+            sub = [n for n in range(len(pos)) if n not in set(hard)]
+            if sub and not any(its[n]["open_amount"] <= 0.005 for n in sub):
+                ln, cash = line, abs(_f(line["amount"]))
+                if hard:
+                    d = sum((-1 if its[n]["item_type"] in CREDIT_TYPES else 1) * amts[pos[n]] for n in hard)
+                    iccy = str(its[hard[0]]["currency"])
+                    ln = dict(line)
+                    if str(line.get("currency", "")) == iccy:
+                        cash = cash - d
+                    elif str(line.get("orig_currency", "")) == iccy and _f(line.get("orig_amount"), 0.0) != 0:
+                        ln["orig_amount"] = abs(_f(line.get("orig_amount"))) - d
+                    else:
+                        cash = cash - to_ccy(d, iccy, str(line.get("currency", "")), str(line.get("booking_date", "")),
+                                             masters["fx_rates"])
+                if cash > 0:
+                    try:
+                        got = explain([its[n] for n in sub], cash, ln, masters)
+                    except Exception:  # noqa: BLE001 - never break the merge
+                        got = None
+                    sub_amts = [amts[pos[n]] for n in sub]
+                    if got is not None and not all(abs(a - x[1]) <= max(0.01, 0.005 * abs(x[1]))
+                                                   for a, x in zip(sub_amts, got)):
+                        # the rules found another explanation than the matcher's amounts: trust the amounts
+                        try:
+                            cc = explain_codes([its[n] for n in sub], sub_amts, cash, ln, masters)
+                        except Exception:  # noqa: BLE001
+                            cc = None
+                        if cc is not None:
+                            got = [(its[n]["item_id"], a, c) for n, a, c in zip(sub, sub_amts, cc)]
+                    elif got is None:
+                        try:
+                            cc = explain_codes([its[n] for n in sub], sub_amts, cash, ln, masters)
+                        except Exception:  # noqa: BLE001
+                            cc = None
+                        if cc is not None:
+                            got = [(its[n]["item_id"], a, c) for n, a, c in zip(sub, sub_amts, cc)]
+                    if got is not None:
+                        ex = [None] * len(pos)
+                        for n, x in zip(sub, got):
+                            ex[n] = x
+        bccy = str(line.get("currency", ""))
+        for n, k in enumerate(pos):
+            e0, a0 = excs[k], amts[k]
+            if e0 in keep:
+                continue
+            if ex is not None and ex[n] is not None and abs(a0 - ex[n][1]) <= max(0.01, 0.005 * abs(ex[n][1])):
+                # a PARTIAL set by a matcher (instalment / retention / advance from the PDF) is never downgraded
+                if not (e0 == "PARTIAL" and ex[n][2] in FULL_CLEAR_CODES):
+                    out[k] = ex[n][2]
+                continue
+            r = its[n]
+            if r["item_type"] in CREDIT_TYPES:
+                out[k] = ""
+                continue
+            op = r["open_amount"]
+            cross = str(r["currency"]) != bccy
+            if abs(a0 - op) <= max(0.01, 0.005 * op):
+                if cross and e0 != "PARTIAL":
+                    out[k] = "FX_DIFFERENCE"
+            elif a0 < op and e0 in FULL_CLEAR_CODES:
+                out[k] = "PARTIAL"
+    return pd.Series(out, index=allocations.index, dtype=object)

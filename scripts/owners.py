@@ -33,7 +33,10 @@ def load(root=ROOT, rev=None):
         text = subprocess.run(["git", "-C", root, "show", f"{rev}:.github/CODEOWNERS"],
                               capture_output=True, text=True, check=True).stdout
     else:
-        with open(os.path.join(root, ".github", "CODEOWNERS"), encoding="utf-8") as fh:
+        path = os.path.join(root, ".github", "CODEOWNERS")
+        if not os.path.exists(path):   # ownership removed: nobody is restricted
+            return []
+        with open(path, encoding="utf-8") as fh:
             text = fh.read()
     return parse(text)
 

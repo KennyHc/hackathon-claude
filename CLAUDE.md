@@ -24,14 +24,12 @@ reconciliation** hackathon: for every bank line, say which open items it settles
 
 | Folder | Piece | Owner | Produces (see `docs/CONTRACTS.md`) |
 |---|---|---|---|
-| `ingestion/` | A. Parse remittance advices, PDFs, DD/card/cheque/payment-run files; normalise bank lines and items | Nikita | `ingestion/out/<phase>/*.parquet` |
-| `matching/` | B. Bank line → items + amounts (+ exception on item rows). **Shared by two owners**, who split it between themselves | @KennyHc + @Matikama0310 | `matching/out/<phase>/allocations.parquet` |
-| `classification/` | C. Lines that settle no item (category, UNIDENTIFIED) + the POLICIES §3 exception-rules library | @ZhengJinFa168 | `classification/out/<phase>/line_labels.parquet`, `classification/exceptions.py` |
-| `integration/` | D. Merge B + C, validate, score, **the one FINAL submission**; owns `docs/CONTRACTS.md` | @ZhengJinFa168 | `integration/out/<phase>/submission.csv.gz` |
-| `atlas/` | Visual data briefing | @KennyHc | `atlas/index.html` |
+| `ingestion/` | A. Parse remittance advices, PDFs, DD/card/cheque/payment-run files; normalise bank lines and items | see `.github/CODEOWNERS` | `ingestion/out/<phase>/*.parquet` |
+| `matching/` | B. Bank line → items + amounts (+ exception on item rows) | see `.github/CODEOWNERS` | `matching/out/<phase>/allocations.parquet` |
+| `classification/` | C. Lines that settle no item (category, UNIDENTIFIED) + the POLICIES §3 exception-rules library | see `.github/CODEOWNERS` | `classification/out/<phase>/line_labels.parquet`, `classification/exceptions.py` |
+| `integration/` | D. Merge B + C, validate, score, **the one FINAL submission**; owns `docs/CONTRACTS.md` | see `.github/CODEOWNERS` | `integration/out/<phase>/submission.csv.gz` |
 
-Two owners in `matching/`: agree on the split on the board (e.g. one sub-folder each) so your agents don't edit the
-same files. `.github/CODEOWNERS` is the source of truth. Your human's GitHub login is in `.claude/me` (`scripts/setup.sh` creates it).
+`.github/CODEOWNERS` is the source of truth. Your human's GitHub login is in `.claude/me` (`scripts/setup.sh` creates it).
 Check any path with `python3 scripts/owners.py who <path>`.
 
 ## Hard rules
@@ -39,11 +37,6 @@ Check any path with `python3 scripts/owners.py who <path>`.
 1. **Write only inside the folder(s) your human owns.** Read anything. A hook blocks Write/Edit elsewhere; do not get
    around it with shell commands (`sed -i`, `>`, `mv`, `cp`, `git checkout` on others' files). CI flags it anyway.
 2. **`data/` is read-only and never committed.** Derived files go to `<your-folder>/out/<phase>/` (gitignored).
-   One generated exception: **`data/val/`**, the LIVE-shaped validation phase (train 2025-01 → 06, 200k lines, with
-   `open_items_at_start` and a golden for scoring). Build it once with `.venv/bin/python integration/make_val.py`, then
-   run your piece with `--phase val` exactly like `--phase live`.
-2b. **No leakage:** when producing output for `val`, learn only from train data **before 2025-01-01** (bank lines,
-   golden, aliases). For `live`/`final`, retrain on **all** of train. Score with `integration/score.py --phase val`.
 3. **Don't edit** root files, `.github/`, `.claude/`, `scripts/`, `docs/` unless you own them (the admin does; the
    integration owner owns `docs/CONTRACTS.md`).
 4. **Need something from another piece** (a column, a fix, a format change)? Don't do it yourself. Post a NEED on the
@@ -88,13 +81,11 @@ Commit only files in your folder. Small, frequent commits. Never force-push. Nev
 
 ## Conventions
 
-- Every piece has an entry point: `.venv/bin/python <piece>/run.py --phase {sample,val,train,train_lite,live,final}` that reads
+- Every piece has an entry point: `python <piece>/run.py --phase {sample,train,train_lite,live,final}` that reads
   `data/<phase>/` (and other pieces' `out/`) and writes `<piece>/out/<phase>/`. Others regenerate your outputs locally by
   running it; outputs are not shared through git.
-- Develop on `sample` (one month, seconds), measure on `val` (the team's official local score), then run `live`.
-- Paths are relative to the repo root. **Run Python with `.venv/bin/python`** (Python 3.12, created by
-  `scripts/setup.sh` from `requirements.txt`: pandas 2.3, pyarrow, scikit-learn, openpyxl, pypdf…). Need another package?
-  Post a NEED to the admin; don't `pip install` into the shared requirements yourself.
+- Develop on `sample` (one month, seconds), check on `train_lite`, then `train` / `live`.
+- Paths are relative to the repo root. Python ≥ 3.10; pandas/polars + pyarrow for parquet.
 - Starter / reference scorer (always pass `--data data`):
-  `.venv/bin/python docs/starter/starter.py --data data --phase sample --out integration/out/sample/starter.csv.gz` ·
-  `.venv/bin/python docs/starter/score_train.py <sub.csv.gz> --data data [--sample]`.
+  `python docs/starter/starter.py --data data --phase sample --out integration/out/sample/starter.csv.gz` ·
+  `python docs/starter/score_train.py <sub.csv.gz> --data data [--sample]`.
