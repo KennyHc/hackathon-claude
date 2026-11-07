@@ -64,44 +64,58 @@
  },
  {
   "step": 10,
+  "label": "+ sd_noadv ranker",
+  "score": 96.79,
+  "phase": "val",
+  "note": "Learned ranker for bulk payments without an advice (holdout 96.91)"
+ },
+ {
+  "step": 11,
   "label": "Untouched holdout",
-  "score": 96.84,
+  "score": 96.91,
   "phase": "hold",
   "note": "Jan\u2013Jun 2024, never tuned on"
  },
  {
-  "step": 11,
+  "step": 12,
   "label": "LIVE v1 (leaderboard)",
   "score": 93.73,
   "phase": "live",
   "note": "Older file, uploaded 12:38"
  },
  {
-  "step": 12,
+  "step": 13,
   "label": "LIVE v2 (leaderboard)",
   "score": 95.58,
   "phase": "live",
   "note": "Second-wave matchers, uploaded 13:14"
  },
  {
-  "step": 13,
+  "step": 14,
   "label": "LIVE v3 (leaderboard)",
   "score": 95.62,
   "phase": "live",
   "note": "Threshold 0.97, uploaded 14:18"
  },
  {
-  "step": 14,
+  "step": 15,
   "label": "LIVE v4 (leaderboard)",
   "score": 96.05,
   "phase": "live",
   "note": "Remittance FX + exception fixes, uploaded 15:57"
  },
  {
-  "step": 15,
+  "step": 16,
   "label": "LIVE v5 (leaderboard)",
   "score": 96.34,
   "phase": "live",
   "note": "+ cn_bundles, uploaded 16:38"
+ },
+ {
+  "step": 17,
+  "label": "LIVE v6 (leaderboard)",
+  "score": 96.42,
+  "phase": "live",
+  "note": "+ sd_noadv ranker, uploaded 17:58"
  }
 ]
