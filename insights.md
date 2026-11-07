@@ -7,7 +7,8 @@ the text says so.
 
 **Where we stand (17:40):** LIVE **96.34** (v5), validation **96.73**, untouched holdout **96.84**. The FINAL version is tag
 `final-v5-robust`: v5 plus robustness guards, byte-identical on LIVE and validation and re-confirmed at 96.34 on the
-leaderboard. Sections 10–13 cover the afternoon round, teammates' cross-checks, what is left and the robustness round.
+leaderboard. Since then: the `sd_noadv` add-on took LIVE to **96.42** (tag `best-live-96.42`), and Jinfa reports
+**96.46** with a new classification model (§11.3). Sections 10–13 cover the afternoon round, teammates' cross-checks, what is left and the robustness round.
 
 **Words used throughout**
 - **Bank line**: one row of a bank statement (a payment in or out).
@@ -661,6 +662,17 @@ upload per version.
 | p(paid) model for short disputes, accepted at ≥ 65 % pair precision | Priorities list | Rejected: their date rules were 12–24 % precise, and it would give up our 0.998 precision on new data. |
 | `ref_partial`: cited invoices + unique completion | Nikita | Same idea as `cn_bundles`, already shipped; not merged, so the same lines aren't claimed twice. |
 | FINAL timing: PDF text extraction is paid once for a new folder | Matias | Agreed: plan on 20–30 minutes from 18:00. |
+
+### 11.3 Jinfa's classification model: LIVE 96.46 (reported 18:19)
+
+Jinfa (integration and classification owner) reports **96.46 on LIVE** after adding a classification model, 0.04 above
+our 96.42. We have not seen the code, the val or holdout scores, or the per-part LIVE breakdown yet.
+- **Different piece from ours.** It changes `classification/` (which line is a category, which settles items, what gets
+  UNIDENTIFIED); `sd_noadv` is a matching add-on (which invoices a bulk payment settles). They touch different lines, so
+  the gains may add up, but nobody has run them together.
+- **Before FINAL:** decide which file is the one shot. Jinfa's model on top of our `best-live-96.42` would need one val
+  + holdout run and, ideally, one LIVE upload before 19:30. Without that check, submit whichever single version has a
+  LIVE score.
 
 ---
 
