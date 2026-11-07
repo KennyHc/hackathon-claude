@@ -12,9 +12,15 @@ numbers in section 1 were measured end to end with the team's `integration/run.p
 | Starter + classifier (team pipeline v0) | 13.08 | 0.08 | | |
 | + batches + remittance | 41.91 | 0.574 (0.9996 / 0.402) | 0.167 | 0.411 |
 | + AP payment runs | 64.66 | 0.810 (0.9998 / 0.680) | 0.479 | 0.491 |
-| **+ AR references (current)** | **82.89** | **0.910 (0.9986 / 0.836)** | **0.886** | **0.539** |
+| + AR references | 82.89 | 0.910 (0.9986 / 0.836) | 0.886 | 0.539 |
+| + shortpay (FX, withholding/discount, over/under-payments) + duplicates (`8de49b7`) | 90.66 | 0.926 (0.9986 / 0.863) | 0.919 | 0.840 |
+| **+ pdf_cases (instalments, retentions, advances, replaced invoices) (current)** | **91.37** | **0.928 (0.9989 / 0.866)** | **0.932** | **0.852** |
 
-Points of the current run: alloc 45.51 · txn 26.59 · exc 10.79.
+Points of the current run: alloc 46.38 · txn 27.95 · exc 17.03. pdf_cases: ar_instalment 0.64 -> 0.93 line acc, ar_retention
+0.005 -> off the loss list, PARTIAL recall 0.66 -> 0.81. Still losing most: SHORT_BANK_CHARGES (1.0 pt, recall 0.33),
+OVERPAYMENT (0.73, recall 0.47), ar_ref_noise (0.68), UNIDENTIFIED (0.27), PARTIAL (0.25), ar_1toN_credit_note (0.22),
+ar_n_to_m (0.19). (Commit `cb19bc9` says "val 90.66" in its message; that number is `8de49b7`'s, the pdf_cases code it added
+measured 91.37.)
 **LIVE (official leaderboard): 82.53** for the same code (commit 686146c): alloc F1 90.6% (P 99.9%, R 82.8%), txn accuracy
 88.6%, exception macro-F1 53.4%, amount-weighted accuracy 90.1%. Val predicted 82.89: **val tracks LIVE within 0.4 points**,
 so the rules are not fitted to val. Weakest LIVE segments: ar_fx, ar_duplicate_payment, ar_overpayment, ar_short_bank_charges
