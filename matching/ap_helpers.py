@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import glob
+from collections import defaultdict
 import os
 import re
 import unicodedata
@@ -185,6 +186,23 @@ def resolve_items(ctx, runs: pd.DataFrame, items: pd.DataFrame) -> tuple[pd.Seri
                 continue
             amt = abs(runs.document_amount[idx])
             c2 = [t for t in cands if t.party_id in ps and t.open_amount >= amt - 0.01]
+            if len(c2) == 1:
+                out[idx] = c2[0].item_id
+    # remainder of a split payment: another run row of the same document resolved to a candidate whose open amount
+    # minus that earlier payment equals this one
+    if pending:
+        res = pd.Series(out)
+        paid_rows = defaultdict(list)
+        for i, iid in res[res != ""].items():
+            paid_rows[iid].append((i, abs(runs.document_amount[i])))
+        for idx, cands in pending.items():
+            if out.get(idx):
+                continue
+            amt = abs(runs.document_amount[idx])
+            ex = runs.execution_date[idx]
+            c2 = [t for t in cands if any(runs.execution_date[j] < ex
+                                          and abs(t.open_amount - a - amt) <= max(0.01, 0.005 * t.open_amount)
+                                          for j, a in paid_rows.get(t.item_id, ()))]
             if len(c2) == 1:
                 out[idx] = c2[0].item_id
     # paid to a factor / confirming bank (no supplier IBAN): the only open candidate that can absorb the amount

@@ -32,6 +32,7 @@ RE_N43_SEQ = re.compile(r"PAGO TRANSFERENCIAS \| \S+ \d{6} (\d{6})")
 RE_RETURN = r"^(?:DEVOLUCION TRANSFERENCIA|RETURN [A-Z]{2}\d{2}) "
 RE_NPROV = re.compile(r"(\d+) PROVEEDORES")
 LAST_HOW: dict[str, str] = {}   # bank_txn_id -> link kind (debugging)
+CLAIM_RETURNS = False          # ap_returned_transfer lines are claimed by another matcher
 MAX_LAG = 10                    # booking date - execution date, days (implicit matches)
 
 
@@ -159,8 +160,9 @@ def run(ctx: Ctx) -> pd.DataFrame:
         links[t.bank_txn_id] = (cands, "implicit", 0.9, False)
         used.add(cands[0])
 
-    # ---- pass 3: our transfers returned by the beneficiary bank (credit lines) -> RETURNED -----------------------
-    credits = ctx.unclaimed()
+    # ---- pass 3: our transfers returned by the beneficiary bank (credit lines): they re-open the items. The lines
+    # themselves belong to another matcher (CLAIM_RETURNS = False); we only use them to keep open amounts right. ----
+    credits = ctx.bank
     credits = credits[(credits.amount > 0) & credits.text.fillna("").str.contains(RE_RETURN)]
     for t in credits.itertuples(index=False):
         txt = " ".join(x for x in (t.text, t.remittance_info, t.end_to_end_id, t.ref1, t.ref2) if isinstance(x, str))
@@ -214,12 +216,16 @@ def run(ctx: Ctx) -> pd.DataFrame:
             rr.append((iid, amt, exc))
         if not rr or len({x[0] for x in rr}) != len(rr):
             continue
+        returned = how.startswith("returned")
         for iid, amt, exc in rr:
-            if exc == "RETURNED":
+            if returned:
                 open_amt[iid] = open_amt.get(iid, 0.0) + amt
             elif not dup:
                 open_amt[iid] = max(0.0, open_amt.get(iid, 0.0) - amt)
-            out.append((bt, iid, amt, exc, conf, NAME))
+            if CLAIM_RETURNS or not returned:
+                out.append((bt, iid, amt, exc, conf, NAME))
+        if returned and not CLAIM_RETURNS:
+            continue
         LAST_HOW[bt] = how
         linked_e2e.update(ks)
     out += _direct_debits(ctx, lines[~lines.bank_txn_id.isin(set(LAST_HOW))], open_amt)
