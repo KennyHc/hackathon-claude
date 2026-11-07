@@ -79,7 +79,7 @@
  {
   "exception":"UNIDENTIFIED",
   "golden_val":4585,
-  "precision_val":0.981,
+  "precision_val":0.982,
   "recall_val":0.961,
   "f1_val":0.971,
   "golden_hold":4499,

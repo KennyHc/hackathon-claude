@@ -4,12 +4,12 @@
   "lines":42462,
   "pairs":92722,
   "max_points":12.6733,
-  "accuracy_val":0.9623,
+  "accuracy_val":0.9624,
   "accuracy_hold":0.9646,
   "accuracy_live_v1":0.948,
   "accuracy_live":0.96,
-  "points_lost_val":1.2309,
-  "points_lost_hold":1.1703
+  "points_lost_val":1.2296,
+  "points_lost_hold":1.1684
  },
  {
   "segment":"ap_payment_multi",
@@ -112,12 +112,12 @@
   "lines":3184,
   "pairs":32775,
   "max_points":2.7058,
-  "accuracy_val":0.767,
-  "accuracy_hold":0.7797,
+  "accuracy_val":0.7673,
+  "accuracy_hold":0.78,
   "accuracy_live_v1":0.718,
   "accuracy_live":0.746,
-  "points_lost_val":1.1761,
-  "points_lost_hold":1.0766
+  "points_lost_val":1.1757,
+  "points_lost_hold":1.0747
  },
  {
   "segment":"ar_card_settlement",
