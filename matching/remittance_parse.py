@@ -130,7 +130,9 @@ def parse_csv(path: str) -> tuple[dict, list[dict]]:
     return head, rows
 
 
-ROW_RE = re.compile(r"^(?P<doc>[A-Z]{0,4}[\d][\w\-/]*)\s+(?P<date>\d{1,2}/\d{1,2}/\d{2,4})\s+(?P<gross>" + NUM +
+# doc may carry a separator after its prefix (KWI-26-...), dates may be ISO: both only ADD matches (identical rows on
+# TRAIN 471,007 and LIVE 74,169 PDF/TXT advice rows)
+ROW_RE = re.compile(r"^(?P<doc>[A-Z]{0,4}[-/]?[\d][\w\-/]*)\s+(?P<date>\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{2}-\d{2})\s+(?P<gross>" + NUM +
                     r")(?:(?:\s+|(?=-))(?P<ded>" + NUM + r")\s+(?P<reason>[A-Za-z][A-Za-z .'/&-]*?))?(?:\s+(?P<paid>" + NUM +
                     r"))?\s*$")
 
@@ -313,6 +315,22 @@ def parse_folder(folder: str, start: str | None = None, end: str | None = None) 
     df = pd.DataFrame(out, columns=COLS)
     for c in ("stated_total", "gross", "deduction", "paid"):
         df[c] = pd.to_numeric(df[c], errors="coerce")
+    if len(df):   # coverage per format: a new layout must not silently yield advices without lines
+        adv = df.groupby("file").agg(fmt=("format", "first"), n=("line_no", "max"), ref=("payment_ref", "first"),
+                                     tot=("stated_total", "first"), s=("paid", "sum"))
+        adv["rows"] = adv.n >= 0
+        adv["ok"] = adv.rows & (adv.tot.isna() | ((adv.tot - adv.s).abs() < 0.015))
+        for f, g in adv.groupby("fmt"):
+            msg = (f"[remittance_parse] {folder}/{f}: {len(g):,} advices, {g.rows.mean():.1%} with lines, "
+                   f"{g.ok.mean():.1%} total-consistent, {(g.ref != '').mean():.1%} with payment_ref")
+            if g.rows.mean() < 0.9 or g.ok.mean() < 0.8:
+                msg = "WARNING " + msg + "  <-- new layout? advices of this format are mostly unusable"
+            print(msg)
+        miss = set(idx.format) - {"csv", "txt", "xlsx", "pdf"}
+        if miss:
+            print(f"[remittance_parse] WARNING {folder}: unknown advice formats skipped: {sorted(miss)}")
+    elif len(idx):
+        print(f"[remittance_parse] WARNING {folder}: index lists {len(idx):,} advices but 0 parsed")
     return df
 
 

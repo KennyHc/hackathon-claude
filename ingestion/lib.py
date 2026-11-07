@@ -57,9 +57,40 @@ def masters(folder: str | None = None) -> dict[str, pd.DataFrame]:
         upd = os.path.join(DATA, folder, "masters_final")
         if os.path.isdir(upd):
             for f in sorted(os.listdir(upd)):
-                if f.endswith(".csv"):
-                    m[f[:-4]] = read_csv(os.path.join(upd, f))
+                if f.endswith((".csv", ".csv.gz")):
+                    k = f[: -len(".csv.gz")] if f.endswith(".gz") else f[:-4]
+                    m[k] = merge_master(k, m.get(k), read_csv(os.path.join(upd, f)))
+                elif not f.startswith("."):
+                    print(f"[masters] WARNING {folder}/masters_final/{f} ignored (not .csv / .csv.gz)")
     return m
+
+
+# key columns per master file: an updated file (masters_final) is merged by key onto the base snapshot instead of
+# replacing it, so a partial (delta) file cannot drop customers / FX history, and the names / IBANs a party had before
+# the update survive as `former_names` / `former_ibans` ("|"-joined; POLICIES §5.5 renamed customers, §5.11 new banks).
+MASTER_KEYS = {"customers": ["customer_id"], "suppliers": ["supplier_id"], "entities": ["entity"],
+               "bank_accounts": ["account_id"], "payment_terms": ["code"], "categories": ["category"],
+               "fx_rates": ["date", "currency"]}
+
+
+def merge_master(name: str, base: pd.DataFrame | None, new: pd.DataFrame) -> pd.DataFrame:
+    keys = MASTER_KEYS.get(name)
+    if base is None or base.empty or not keys or not all(k in base.columns and k in new.columns for k in keys):
+        return new
+    both = pd.concat([base, new], ignore_index=True).fillna("")      # new columns: "" on base rows
+    if name in ("customers", "suppliers"):
+        idc = keys[0]
+        last = both.drop_duplicates(idc, keep="last").set_index(idc)
+        for cols, out in ((("name", "trade_name"), "former_names"), (("iban",), "former_ibans")):
+            cols = [c for c in cols if c in both.columns]
+            if not cols:
+                continue
+            cur = {i: set(v) for i, v in zip(last.index, last[cols].values.tolist())}
+            vals = pd.concat([both[[idc, c]].rename(columns={c: "v"}) for c in cols])
+            allv = vals[vals.v != ""].groupby(idc).v.agg(lambda v: list(dict.fromkeys(v)))
+            fm = {i: "|".join(x for x in v if x not in cur.get(i, ())) for i, v in allv.items()}
+            both[out] = both[idc].map(fm).fillna("")
+    return both.drop_duplicates(keys, keep="last").reset_index(drop=True)
 
 
 def items_of(folder: str) -> pd.DataFrame:
