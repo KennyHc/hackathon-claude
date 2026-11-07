@@ -51,6 +51,12 @@ def merge(phase: str) -> tuple[pd.DataFrame, pd.Series]:
         keep = alloc.method.fillna("").str.match(r"^(pdf_cases|remittance|dd_batches|cards_cheques|payment_runs|refs:explain)") \
             | (alloc.exception.fillna("") != "")
         alloc["exception"] = rule.where(rule.notna() & ~keep, alloc.exception).fillna("")
+        try:   # P1c + P2 (integration/refine.py); FINAL safety net: skip on any error
+            from integration.refine import refine
+            alloc = refine(alloc, rule, bank, items)
+        except Exception:
+            import traceback
+            print(f"[integration] refine FAILED, skipped\n{traceback.format_exc()}")
     item_rows = pd.DataFrame({"bank_txn_id": alloc.bank_txn_id, "item_id": alloc.item_id,
                               "amount": alloc.amount.map(lambda x: f"{x:.2f}"), "category": "",
                               "exception": alloc.exception.fillna("")})

@@ -338,6 +338,11 @@ def _amount_fits(a: dict, t, fx: Fx):
         if amt < a["paid"]:
             return "short"
         return None
+    # the bank's own original amount, when it is in the advice's currency: exact and independent of the rates table
+    # (fx_rates.csv may stop months before the bank lines, e.g. FINAL 2026-H1 vs rates to 2025-12-31)
+    oc, oa = getattr(t, "orig_currency", None) or "", getattr(t, "orig_amount", None)
+    if oc == a["ccy"] and oa is not None and oa == oa and abs(abs(float(oa)) - a["paid"]) <= 0.011:
+        return "fx"
     conv = fx.conv(a["paid"], a["ccy"], t.currency, t.booking_date)
     if conv and abs(conv - amt) <= 0.03 * amt:
         return "fx"
@@ -364,6 +369,15 @@ DISPUTE_RATES = (0.03, 0.05, 0.10, 0.20, 0.30)
 
 
 def _rows_for(t, a: dict, idx, fx: Fx, terms, how: str) -> list[tuple]:
+    # XLSX advices carry no currency: their amounts are in the invoices' currency (e.g. CAD invoices paid into a USD
+    # account). If the advice's own items are in another currency than the bank line, read it in that currency.
+    if not a["ccy"]:
+        its, _ = resolve_advice(a["lines"], idx, a["payer"])
+        cc = Counter(it["currency"] for it in its if it)
+        if cc:
+            c = cc.most_common(1)[0][0]
+            if c != t.currency and _amount_fits(dict(a, ccy=c), t, fx) == "fx":
+                a = dict(a, ccy=c)
     fit = _amount_fits(a, t, fx)
     if fit is None:
         return []
@@ -411,7 +425,9 @@ def _rows_for(t, a: dict, idx, fx: Fx, terms, how: str) -> list[tuple]:
             out.append([it, paid, "PARTIAL"])
         elif kind == "disc":
             late = _late(it, terms, bd)
-            grace = GRACE_SILENT if (silent or not reason) else GRACE_DECLARED
+            # the 2025-09 Voucher layout lists every deduction but has no reason column: still a DECLARED deduction
+            declared = (not silent) and (bool(reason) or a.get("layout") == "xlsx_voucher")
+            grace = GRACE_DECLARED if declared else GRACE_SILENT
             ok = late is not None and late <= grace
             out.append([it, it["open_amount"], "SHORT_DISCOUNT"] if ok else [it, paid, "PARTIAL"])
         elif kind == "wht":

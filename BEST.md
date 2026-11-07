@@ -26,4 +26,4 @@ then prints the submit command (it never submits). Data: unzip FINAL into
 
 ## Rule for anything newer
 A change replaces this version only if it beats validation **and** the holdout **and** a LIVE upload (95.62), before
-the code freeze at 17:00. Then move the tag: `git tag -f best-live-<score> <commit>` and update this file.
+the code freeze at 17:45 (FINAL data lands at 18:00). Then move the tag: `git tag -f best-live-<score> <commit>` and update this file.

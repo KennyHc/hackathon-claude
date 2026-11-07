@@ -26,6 +26,24 @@ DATA=${RECON_DATA:-data}
 [ -f "$DATA/final/bank_transactions.csv.gz" ] || { echo "no $DATA/final/bank_transactions.csv.gz — extract the FINAL zip into $DATA/final/ first"; exit 1; }
 [ -d "$DATA/final/masters_final" ] && echo "masters_final: $(ls "$DATA/final/masters_final" | tr '\n' ' ')"
 
+say "masters check (rows vs base, FX rates end date)"
+$PY - "$DATA" <<'EOF'
+import os, sys, pandas as pd
+d = sys.argv[1]; base, fin = os.path.join(d, "masters"), os.path.join(d, "final", "masters_final")
+if os.path.isdir(fin):
+    for f in sorted(os.listdir(fin)):
+        if f.endswith(".csv") and os.path.exists(os.path.join(base, f)):
+            nb, nf = len(pd.read_csv(os.path.join(base, f))), len(pd.read_csv(os.path.join(fin, f)))
+            print(f"{f:28s} base {nb:7,}  final {nf:7,}" + ("   <-- FEWER ROWS: partial file? lib.masters replaces whole files" if nf < nb else ""))
+fx = next((p for p in (os.path.join(fin, "fx_rates.csv"), os.path.join(base, "fx_rates.csv")) if os.path.exists(p)), None)
+if fx:
+    r = pd.read_csv(fx); dc = next(c for c in r.columns if "date" in c.lower())
+    end = r.groupby(next((c for c in r.columns if c.lower() in ("currency", "ccy", "quote_currency")), r.columns[1]))[dc].max()
+    print(f"fx_rates ({fx}): last date per currency:\n{end.to_string()}")
+    if end.min() < "2026-06-01":
+        print(">>> FX rates stop before June 2026: rate-based FX checks use stale rates (remittance falls back to the bank's orig_amount)")
+EOF
+
 say "wipe cached final artefacts"
 rm -rf ingestion/out/final matching/out/final classification/out/final integration/out/final
 rm -f ingestion/out/_cache/final__* ingestion/out/_cache/pdftext_final*

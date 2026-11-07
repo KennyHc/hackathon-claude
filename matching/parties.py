@@ -53,6 +53,7 @@ NAME_PATTERNS = [
     r"EXPTE \d+ (.+?)(?: \d{3,}|$)",
     r"ACH CREDIT (.+?) CCD",
     r"DIRECT CREDIT (.+)$",
+    r"EFT CREDIT (.+)$",   # ZA01 (FINAL)
     r"/ORG/(.+?)(?: /RFB/|/|$)",
     r"/ORDP/(.+?)(?:/REMI/|/|$)",
     r"/NAME/(.+?)(?:/REMI/|/|$)",

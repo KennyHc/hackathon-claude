@@ -53,7 +53,7 @@ OVERPAY_MAX = 0.35  # excess cash on one invoice (val: p99 0.32)
 FULL_CLEAR = {"", "SHORT_DISCOUNT", "SHORT_WITHHOLDING", "SHORT_BANK_CHARGES", "OVERPAYMENT"}
 TRUNC_SPLIT = re.compile(r" \| |/[A-Z]{2,5}/| /REF\b|\\$")
 DOC_PREFIXES = {"FV", "FA", "FT", "RE", "RF", "INV", "NF", "VTN", "AB", "GS", "NC", "AV", "CRN", "CM", "FAC", "FRA", "ND",
-                "VCN", "FRAS", "FACT"}
+                "VCN", "FRAS", "FACT", "KWI"}   # KWI: ZA01 (FINAL)
 RUN_ID = re.compile(r"PR\d{12}")
 USE_SHARED = os.environ.get("REFS_SHARED") == "1"  # shared explain() only adds wrong lines on sample (fallback)
 STRICT_EXC = {"", "SHORT_DISCOUNT", "SHORT_WITHHOLDING", "FX_DIFFERENCE"}
