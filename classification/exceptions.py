@@ -9,9 +9,13 @@ Public API
         credit-note-only refunds, SHORT_DISCOUNT (within terms: booking <= issue + discount days + 3) and the late
         discount (PARTIAL, amount = cash), SHORT_WITHHOLDING (MX/BR/MA customers, 1.25/1.5/10 % of total),
         card orders settled net of the acquirer fee (empty), SHORT_BANK_CHARGES (non-SEPA payer, <= 60 EUR and
-        <= 2 %), OVERPAYMENT (single invoice), PARTIAL (1-3 invoices at a round fraction, else one invoice absorbs
+        <= 2 %), OVERPAYMENT (single invoice, plausible excess), PARTIAL (1-3 invoices at a round fraction, else one invoice absorbs
         the shortfall), FX_DIFFERENCE (bank ccy != item ccy; exact via orig_amount, else within 3 % of the ECB rate).
         Not detected: SHORT_DISPUTE / DUPLICATE_PAYMENT / RETURNED (need remittance advices / history).
+
+    match_short_payment(payer_open_items, cash, line, masters) -> (item_id, amount, exception) | None
+        For a payer matcher: the unique open invoice explained by SHORT_BANK_CHARGES / OVERPAYMENT / SHORT_WITHHOLDING.
+    overpayment_plausible(open, cash) -> bool   (excess = round amount 1..200 or exactly 1 % / 10 %)
 
     explain_codes(items, amounts, cash, line, masters) -> list[str] | None
         Same rules when the amounts per item are already known (remittance advice, payment run).
@@ -348,6 +352,47 @@ def _snap(amount: float, open_: float, total: float) -> float:
     return best
 
 
+OVERPAY_ROUND_CENTS = {100, 200, 500, 1000, 2000, 5000, 10000, 20000}
+OVERPAY_PCTS = (0.01, 0.10)
+
+
+def overpayment_plausible(open_: float, cash: float) -> bool:
+    """Overpayments in the data are the invoice + a round amount (1, 2, 5 ... 200) or + exactly 1 % / 10 %. Any other
+    excess on one invoice is almost always a wrong item set (the line pays more documents): val 0 / 55 such matcher
+    OVERPAYMENT rows were right, vs 310 / 314 for the patterns."""
+    exc = _cents(cash) - _cents(open_)
+    if exc <= 0:
+        return False
+    if exc in OVERPAY_ROUND_CENTS and exc <= 0.35 * _cents(open_):
+        return True
+    return any(abs(_cents(cash) - _cents(round(open_ * (1 + p), 2))) <= 1 for p in OVERPAY_PCTS)
+
+
+SHORT_PAYMENT_CODES = ("SHORT_BANK_CHARGES", "OVERPAYMENT", "SHORT_WITHHOLDING")
+
+
+def match_short_payment(cands, cash: float, line, masters, codes=SHORT_PAYMENT_CODES):
+    """One open AR invoice of the (resolved) payer explains a receipt that matches no document exactly:
+    SHORT_BANK_CHARGES / OVERPAYMENT (plausible excess) / SHORT_WITHHOLDING. `cands` = the payer's open items (DataFrame
+    rows of ctx.items or list of dicts, open_amount = open now). -> (item_id, amount, exception) when exactly one
+    invoice qualifies, else None. Val simulation on the receipts left unclaimed by the full pipeline (real payer
+    resolver): 117 lines claimed at 96.6 % (SBC 113/117), OVERPAYMENT 81/85, SHORT_WITHHOLDING 18/18."""
+    recs = cands if isinstance(cands, list) else cands.to_dict("records")
+    bccy = str(_get(line, "currency", ""))
+    hits = []
+    for r in recs:
+        if str(r.get("item_type", "")) != "ARI" or str(r.get("currency", "")) != bccy:
+            continue
+        if _f(r.get("open_amount"), 0.0) <= 0.005:
+            continue
+        ex = explain([r], cash, line, masters)
+        if ex and ex[0][2] in codes:
+            hits.append(ex[0])
+            if len(hits) > 1:
+                return None
+    return hits[0] if hits else None
+
+
 # ------------------------------------------------------------------------------------------------------------- explain
 def explain(items: pd.DataFrame, cash: float, line, masters: dict) -> list[tuple[str, float, str]] | None:
     """[(item_id, amount_in_item_ccy, exception)] in the order of `items` if `cash` (|bank amount|, bank ccy) is
@@ -435,7 +480,7 @@ def explain(items: pd.DataFrame, cash: float, line, masters: dict) -> list[tuple
     if abs(need) <= tol:
         return finish()
     if need > 0:
-        if len(rows) == 1 and rows[0]["item_type"] == "ARI":
+        if len(rows) == 1 and rows[0]["item_type"] == "ARI" and overpayment_plausible(rows[0]["open"], cash_i):
             codes[0] = "OVERPAYMENT"
             return finish()
         return None
