@@ -39,6 +39,11 @@ Check any path with `python3 scripts/owners.py who <path>`.
 1. **Write only inside the folder(s) your human owns.** Read anything. A hook blocks Write/Edit elsewhere; do not get
    around it with shell commands (`sed -i`, `>`, `mv`, `cp`, `git checkout` on others' files). CI flags it anyway.
 2. **`data/` is read-only and never committed.** Derived files go to `<your-folder>/out/<phase>/` (gitignored).
+   One generated exception: **`data/val/`**, the LIVE-shaped validation phase (train 2025-01 → 06, 200k lines, with
+   `open_items_at_start` and a golden for scoring). Build it once with `.venv/bin/python integration/make_val.py`, then
+   run your piece with `--phase val` exactly like `--phase live`.
+2b. **No leakage:** when producing output for `val`, learn only from train data **before 2025-01-01** (bank lines,
+   golden, aliases). For `live`/`final`, retrain on **all** of train. Score with `integration/score.py --phase val`.
 3. **Don't edit** root files, `.github/`, `.claude/`, `scripts/`, `docs/` unless you own them (the admin does; the
    integration owner owns `docs/CONTRACTS.md`).
 4. **Need something from another piece** (a column, a fix, a format change)? Don't do it yourself. Post a NEED on the
@@ -83,10 +88,10 @@ Commit only files in your folder. Small, frequent commits. Never force-push. Nev
 
 ## Conventions
 
-- Every piece has an entry point: `.venv/bin/python <piece>/run.py --phase {sample,train,train_lite,live,final}` that reads
+- Every piece has an entry point: `.venv/bin/python <piece>/run.py --phase {sample,val,train,train_lite,live,final}` that reads
   `data/<phase>/` (and other pieces' `out/`) and writes `<piece>/out/<phase>/`. Others regenerate your outputs locally by
   running it; outputs are not shared through git.
-- Develop on `sample` (one month, seconds), check on `train_lite`, then `train` / `live`.
+- Develop on `sample` (one month, seconds), measure on `val` (the team's official local score), then run `live`.
 - Paths are relative to the repo root. **Run Python with `.venv/bin/python`** (Python 3.12, created by
   `scripts/setup.sh` from `requirements.txt`: pandas 2.3, pyarrow, scikit-learn, openpyxl, pypdf…). Need another package?
   Post a NEED to the admin; don't `pip install` into the shared requirements yourself.
