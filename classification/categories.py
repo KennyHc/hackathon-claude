@@ -207,8 +207,9 @@ def _context(bank: pd.DataFrame, lk: Lookups) -> list[list[str]]:
                       "acc": bank.account_id.values, "ent": ent, "cur": bank.currency.values})
     opp = d.assign(amt=-d.amt).merge(d, on=["date", "amt"], suffixes=("", "_o"))
     opp = opp[opp.acc != opp.acc_o]
-    for i, same in opp.groupby("i").apply(lambda g: (g.ent == g.ent_o).any(), include_groups=False).items():
-        res[i].append("PAIR:OPP_SAME_ENT" if same else "PAIR:OPP_OTHER_ENT")
+    same_ent = (opp.ent == opp.ent_o).groupby(opp.i).any() if len(opp) else pd.Series(dtype=bool)   # empty-safe
+    for i, same in same_ent.items():
+        res[int(i)].append("PAIR:OPP_SAME_ENT" if same else "PAIR:OPP_OTHER_ENT")
     # FX legs: opposite-sign line in another currency, same entity, same day
     big = d[d.amt.abs() >= 10_000]
     fx = big.merge(big, on=["date", "ent"], suffixes=("", "_o"))

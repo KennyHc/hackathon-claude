@@ -7,7 +7,7 @@
 set -uo pipefail
 kind="${1:?val|flash}"; shift
 case "$kind" in
-  val)   exec lockf /tmp/bankrec_val.lock "$@" ;;
+  val)   exec "$@" ;;   # lock disabled 16:05 at the human's request: heavy runs start immediately
   flash) while :; do
            for i in 1 2; do
              lockf -t 0 "/tmp/bankrec_flash_$i.lock" "$@"; rc=$?
