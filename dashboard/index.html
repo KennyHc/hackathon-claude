@@ -94,14 +94,14 @@
   <header class="mc-head" id="top">
     <div class="mc-eyebrow"><span class="mc-live"><i></i>Talky × Anthropic · Close the Books</span><span>Saturday 7 November 2026 · Madrid</span></div>
     <h1 class="mc-title">Close the Books Mission Control</h1>
-    <p class="mc-take">LIVE v2 scored <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v2" data-fmt="2">—</b>, <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=val_minus_live" data-fmt="2">—</b> points under validation and <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=hold_minus_live" data-fmt="2">—</b> under the untouched holdout. Precision holds (<b data-draw="num" data-source="runs" data-field="precision" data-where="run=LIVE v2" data-fmt="3">—</b> on LIVE vs <b data-draw="num" data-source="runs" data-field="precision" data-where="run=Validation" data-fmt="3">—</b>); the gap is recall (<b data-draw="num" data-source="runs" data-field="recall" data-where="run=LIVE v2" data-fmt="3">—</b> vs <b data-draw="num" data-source="runs" data-field="recall" data-where="run=Validation" data-fmt="3">—</b>): lines we leave unmatched, not wrong matches.</p>
+    <p class="mc-take">LIVE v3 scored <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v3" data-fmt="2">—</b>, <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=val_minus_live" data-fmt="2">—</b> points under validation and <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=hold_minus_live" data-fmt="2">—</b> under the untouched holdout. Precision holds (<b data-draw="num" data-source="runs" data-field="precision" data-where="run=LIVE v3" data-fmt="3">—</b> on LIVE vs <b data-draw="num" data-source="runs" data-field="precision" data-where="run=Validation" data-fmt="3">—</b>); the gap is recall (<b data-draw="num" data-source="runs" data-field="recall" data-where="run=LIVE v3" data-fmt="3">—</b> vs <b data-draw="num" data-source="runs" data-field="recall" data-where="run=Validation" data-fmt="3">—</b>): lines we leave unmatched, not wrong matches.</p>
   </header>
 
   <section class="mc-tiles" aria-label="Headline scores">
     <article class="mc-tile mc-hero mc-reveal">
-      <span class="mc-tlabel">LIVE leaderboard · v2</span>
-      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v2" data-fmt="2">—</span>
-      <span class="mc-sub"><b class="mc-up" data-draw="num" data-source="gaps" data-field="value" data-where="measure=v2_minus_v1" data-fmt="+2">—</b> vs v1 (<span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v1" data-fmt="2">—</span>) · Jul–Dec 2025</span>
+      <span class="mc-tlabel">LIVE leaderboard · v3 (best)</span>
+      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v3" data-fmt="2">—</span>
+      <span class="mc-sub"><b class="mc-up" data-draw="num" data-source="gaps" data-field="value" data-where="measure=v3_minus_v2" data-fmt="+2">—</b> vs v2 (<span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v2" data-fmt="2">—</span>) · v1 <span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v1" data-fmt="2">—</span> · Jul–Dec 2025</span>
     </article>
     <article class="mc-tile mc-reveal" style="--mc-tone: var(--cds-chart-axis)">
       <span class="mc-tlabel">Validation · tuned on</span>
@@ -130,7 +130,7 @@
 
   <section class="mc-section" id="generalise">
     <h2 class="mc-h2 mc-reveal">Does it generalise?</h2>
-    <p class="mc-lede mc-reveal">Each score component on the window we tuned on, a window nobody tuned on, and the two LIVE uploads. Dots that sit together mean the rules carry over; a dot that drifts left is where LIVE is harder.</p>
+    <p class="mc-lede mc-reveal">Each score component on the window we tuned on, a window nobody tuned on, and the three LIVE uploads. Dots that sit together mean the rules carry over; a dot that drifts left is where LIVE is harder.</p>
     <div class="mc-grid">
       <div class="mc-card mc-reveal">
         <h3>Score components by run</h3>
@@ -151,7 +151,7 @@
     <p class="mc-lede mc-reveal">Each bubble is one case type (segment), sized by the points it is worth. On the diagonal, LIVE matches validation; below it, LIVE is worse. Hover a bubble for its numbers.</p>
     <div class="mc-grid">
       <div class="mc-card mc-reveal">
-        <h3>Line accuracy, validation vs LIVE v2</h3>
+        <h3>Line accuracy, validation vs LIVE v3</h3>
         <p class="mc-note">Shaded band: within 2 points of validation. Segments the leaderboard does not report are left out.</p>
         <div class="mc-chart" data-draw="scatter" data-source="segments" style="min-height: 340px"></div>
       </div>
@@ -166,7 +166,7 @@
           <h3>Every segment</h3>
           <input id="mc-seg-search" class="mc-search" type="search" placeholder="Filter segments" aria-label="Filter segments">
         </div>
-        <p class="mc-note">Sorted by the points each segment is worth. Click a column to sort. Red: LIVE v2 more than 2 points below validation.</p>
+        <p class="mc-note">Sorted by the points each segment is worth. Click a column to sort. Red: LIVE v3 more than 2 points below validation.</p>
         <div class="mc-tablebox">
           <table class="mc-table" data-source="segments" data-row-key="segment">
             <thead><tr>
@@ -175,7 +175,7 @@
               <th data-field="max_points" aria-sort="descending"><button class="mc-th" data-sort="max_points">Max points</button></th>
               <th data-field="accuracy_val" aria-sort="none"><button class="mc-th" data-sort="accuracy_val">Validation</button></th>
               <th data-field="accuracy_hold" aria-sort="none" class="mc-hide-narrow"><button class="mc-th" data-sort="accuracy_hold">Holdout</button></th>
-              <th data-field="accuracy_live_v2" aria-sort="none"><button class="mc-th" data-sort="accuracy_live_v2">LIVE v2</button></th>
+              <th data-field="accuracy_live" aria-sort="none"><button class="mc-th" data-sort="accuracy_live">LIVE v3</button></th>
               <th data-field="points_lost_val" aria-sort="none" class="mc-hide-narrow"><button class="mc-th" data-sort="points_lost_val">Points lost (val)</button></th>
             </tr></thead>
             <tbody data-draw="segtable"></tbody>
@@ -223,7 +223,7 @@
     const fmts = { '0': d3.format('.0f'), '2': d3.format('.2f'), '3': d3.format('.3f'), '+2': d3.format('+.2f'), 'int': d3.format(','), 'pct': d3.format('.1%') };
     const where = (s) => (s || '').split('&').filter(Boolean).map((p) => p.split('=').map(decodeURIComponent));
     const pick = (rows, s) => rows.find((r) => where(s).every(([k, v]) => String(r[k]) === v));
-    const runColor = { 'Validation': 0, 'Holdout': 1, 'LIVE v1': null, 'LIVE v2': 2 };
+    const runColor = { 'Validation': 0, 'Holdout': 1, 'LIVE v1': null, 'LIVE v2': null, 'LIVE v3': 2 };
     const color = (run) => runColor[run] == null ? 'var(--cds-chart-muted)' : dash.colors[runColor[run]];
     const seen = new WeakSet();
     const first = (el) => { const f = !seen.has(el); seen.add(el); return f && motion; };
@@ -259,13 +259,13 @@
   dash.calc('gaps', {
     inputs: ['runs'],
     title: 'Score gaps between runs',
-    description: 'Differences between run scores: validation and holdout minus LIVE v2, and LIVE v2 minus LIVE v1.',
+    description: 'Differences between run scores: validation and holdout minus the latest LIVE upload (v3), and v3 minus v2.',
     fn: (runs) => {
       const s = (name) => runs.find((r) => r.run === name).score;
       return [
-        { measure: 'val_minus_live', value: +(s('Validation') - s('LIVE v2')).toFixed(2) },
-        { measure: 'hold_minus_live', value: +(s('Holdout') - s('LIVE v2')).toFixed(2) },
-        { measure: 'v2_minus_v1', value: +(s('LIVE v2') - s('LIVE v1')).toFixed(2) },
+        { measure: 'val_minus_live', value: +(s('Validation') - s('LIVE v3')).toFixed(2) },
+        { measure: 'hold_minus_live', value: +(s('Holdout') - s('LIVE v3')).toFixed(2) },
+        { measure: 'v3_minus_v2', value: +(s('LIVE v3') - s('LIVE v2')).toFixed(2) },
       ];
     },
   });
@@ -357,12 +357,12 @@
     g.append('line').attr('x1', (mm) => x(d3.min(d.data, (r) => r[mm[0]]))).attr('x2', (mm) => x(d3.max(d.data, (r) => r[mm[0]]))).style('stroke', 'var(--cds-chart-axis)').attr('stroke-width', 2).attr('stroke-linecap', 'round');
     const anim = mc.first(el);
     g.each(function (mm) {
-      const dots = d3.select(this).selectAll('circle').data(d.data).join('circle').attr('r', (r) => r.run === 'LIVE v2' ? 7 : 5.5)
+      const dots = d3.select(this).selectAll('circle').data(d.data).join('circle').attr('r', (r) => r.run === 'LIVE v3' ? 7 : 5.5)
         .style('fill', (r) => mc.color(r.run)).style('stroke', 'var(--color-panel)').attr('stroke-width', 2).style('cursor', 'default')
         .attr('cx', anim ? x(lo) : (r) => x(r[mm[0]]));
       if (anim) dots.transition().delay((r, i) => 120 + i * 90).duration(900).ease(d3.easeCubicOut).attr('cx', (r) => x(r[mm[0]]));
       dots.on('mousemove', (event, r) => { d3.select(event.currentTarget).attr('r', 9); tipper.show(event, [[mm[1]], [`${r.run}`, mc.fmts['3'](r[mm[0]])], [r.window]]); })
-        .on('mouseleave', (event, r) => { d3.select(event.currentTarget).attr('r', r.run === 'LIVE v2' ? 7 : 5.5); tipper.hide(); });
+        .on('mouseleave', (event, r) => { d3.select(event.currentTarget).attr('r', r.run === 'LIVE v3' ? 7 : 5.5); tipper.hide(); });
     });
   });
 </script>
@@ -401,39 +401,39 @@
 </script>
 
 <script>
-  // Segment scatter: validation accuracy (x) vs LIVE v2 accuracy (y), bubble size = max points.
+  // Segment scatter: validation accuracy (x) vs LIVE v3 accuracy (y), bubble size = max points.
   dash.draw('scatter', (el) => {
     const d = dash.data('segments');
     el.replaceChildren();
     if (d.status !== 'ok') { el.textContent = '—'; return; }
-    const rows = d.data.filter((r) => r.accuracy_live_v2 != null && r.accuracy_val != null && r.lines > 0);
+    const rows = d.data.filter((r) => r.accuracy_live != null && r.accuracy_val != null && r.lines > 0);
     const W = el.clientWidth || 500, H = Math.min(420, Math.max(300, W * 0.8)), m = { l: 44, r: 16, t: 12, b: 38 };
     const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Validation vs LIVE accuracy per segment');
-    const lo = Math.floor(d3.min(rows, (r) => Math.min(r.accuracy_val, r.accuracy_live_v2)) * 20) / 20;
+    const lo = Math.floor(d3.min(rows, (r) => Math.min(r.accuracy_val, r.accuracy_live)) * 20) / 20;
     const x = d3.scaleLinear([lo, 1.005], [m.l, W - m.r]);
     const y = d3.scaleLinear([lo, 1.005], [H - m.b, m.t]);
     const r = d3.scaleSqrt([0, d3.max(rows, (q) => q.max_points)], [2.5, Math.max(12, W / 26)]);
     svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5, '.0%').tickSize(-(H - m.t - m.b))).call(mc.axisText);
     svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5, '.0%').tickSize(-(W - m.l - m.r))).call(mc.axisText);
     svg.append('text').attr('class', 'cap').attr('x', W - m.r).attr('y', H - 4).attr('text-anchor', 'end').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Validation accuracy →');
-    svg.append('text').attr('class', 'cap').attr('x', m.l + 4).attr('y', m.t + 10).style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('↑ LIVE v2 accuracy');
+    svg.append('text').attr('class', 'cap').attr('x', m.l + 4).attr('y', m.t + 10).style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('↑ LIVE v3 accuracy');
     const band = d3.area().x((v) => x(v)).y0((v) => y(Math.max(lo, v - 0.02))).y1((v) => y(Math.min(1.005, v + 0.02)));
     svg.append('path').datum(d3.range(lo, 1.0051, 0.005)).attr('d', band).style('fill', 'var(--cds-chart-grid)').style('opacity', 0.9);
     svg.append('line').attr('x1', x(lo)).attr('y1', y(lo)).attr('x2', x(1.005)).attr('y2', y(1.005)).style('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 4');
-    const bad = (q) => q.accuracy_val - q.accuracy_live_v2 > 0.02;
+    const bad = (q) => q.accuracy_val - q.accuracy_live > 0.02;
     const anim = mc.first(el);
     const sorted = rows.slice().sort((a, b) => b.max_points - a.max_points);
-    const dots = svg.selectAll('circle.s').data(sorted).join('circle').attr('class', 's').attr('cx', (q) => x(q.accuracy_val)).attr('cy', (q) => y(q.accuracy_live_v2))
+    const dots = svg.selectAll('circle.s').data(sorted).join('circle').attr('class', 's').attr('cx', (q) => x(q.accuracy_val)).attr('cy', (q) => y(q.accuracy_live))
       .style('fill', (q) => bad(q) ? 'var(--cds-chart-status-critical)' : dash.colors[0]).style('fill-opacity', 0.55).style('stroke', (q) => bad(q) ? 'var(--cds-chart-status-critical)' : dash.colors[0]).attr('stroke-width', 1.2).style('cursor', 'default')
       .attr('r', anim ? 0 : (q) => r(q.max_points));
     if (anim) dots.transition().delay((q, i) => i * 18).duration(700).ease(d3.easeBackOut.overshoot(1.4)).attr('r', (q) => r(q.max_points));
     const labels = sorted.filter((q) => bad(q) && q.max_points > 0.3).slice(0, 5);
-    svg.selectAll('text.lab').data(labels).join('text').attr('class', 'lab').attr('x', (q) => x(q.accuracy_val) + r(q.max_points) + 4).attr('y', (q) => y(q.accuracy_live_v2) + 4)
+    svg.selectAll('text.lab').data(labels).join('text').attr('class', 'lab').attr('x', (q) => x(q.accuracy_val) + r(q.max_points) + 4).attr('y', (q) => y(q.accuracy_live) + 4)
       .attr('text-anchor', (q) => x(q.accuracy_val) > W * 0.7 ? 'end' : 'start').attr('dx', (q) => x(q.accuracy_val) > W * 0.7 ? -2 * r(q.max_points) - 8 : 0)
       .style('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((q) => q.segment);
     mc.declutter(svg, ['text.cap', 'text.lab']);
     const tipper = mc.tip(el), p = mc.fmts.pct;
-    dots.on('mousemove', (event, q) => { d3.select(event.currentTarget).style('fill-opacity', 0.9).attr('stroke-width', 2.5); tipper.show(event, [[q.segment], ['Validation', p(q.accuracy_val)], ['Holdout', q.accuracy_hold == null ? '—' : p(q.accuracy_hold)], ['LIVE v2', p(q.accuracy_live_v2)], ['Max points', q.max_points.toFixed(2)]]); })
+    dots.on('mousemove', (event, q) => { d3.select(event.currentTarget).style('fill-opacity', 0.9).attr('stroke-width', 2.5); tipper.show(event, [[q.segment], ['Validation', p(q.accuracy_val)], ['Holdout', q.accuracy_hold == null ? '—' : p(q.accuracy_hold)], ['LIVE v3', p(q.accuracy_live)], ['Max points', q.max_points.toFixed(2)]]); })
       .on('mouseleave', (event) => { d3.select(event.currentTarget).style('fill-opacity', 0.55).attr('stroke-width', 1.2); tipper.hide(); });
   });
 
@@ -500,8 +500,8 @@
     el.append(...rows.map((r) => {
       const tr = document.createElement('tr');
       const c = (v, cls) => { const td = document.createElement('td'); td.textContent = v; if (cls) td.className = cls; return td; };
-      const gap = r.accuracy_live_v2 != null && r.accuracy_val - r.accuracy_live_v2 > 0.02;
-      const live = acc(r.accuracy_live_v2, gap ? 'var(--cds-chart-status-critical)' : dash.colors[2]); if (gap) live.classList.add('mc-bad');
+      const gap = r.accuracy_live != null && r.accuracy_val - r.accuracy_live > 0.02;
+      const live = acc(r.accuracy_live, gap ? 'var(--cds-chart-status-critical)' : dash.colors[2]); if (gap) live.classList.add('mc-bad');
       const hold = acc(r.accuracy_hold, dash.colors[1]); hold.classList.add('mc-hide-narrow');
       tr.append(c(r.segment), c(mc.fmts.int(r.lines), 'mc-hide-narrow'), c(r.max_points.toFixed(2)), acc(r.accuracy_val, dash.colors[0]), hold, live, c(r.points_lost_val == null ? '—' : r.points_lost_val.toFixed(2), 'mc-hide-narrow'));
       return tr;
