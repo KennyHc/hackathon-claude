@@ -41,7 +41,8 @@ def merge(phase: str) -> tuple[pd.DataFrame, pd.Series]:
     if len(alloc):
         rule = assign_exceptions(alloc, bank, items)
         # matchers that decide exceptions from evidence (PDF clauses, advices, batch files) keep their own label
-        keep = alloc.method.fillna("").str.match(r"^(pdf_cases|remittance|dd_batches|cards_cheques)")
+        keep = alloc.method.fillna("").str.match(r"^(pdf_cases|remittance|dd_batches|cards_cheques)") \
+            | (alloc.exception.fillna("") != "")
         alloc["exception"] = rule.where(rule.notna() & ~keep, alloc.exception).fillna("")
     item_rows = pd.DataFrame({"bank_txn_id": alloc.bank_txn_id, "item_id": alloc.item_id,
                               "amount": alloc.amount.map(lambda x: f"{x:.2f}"), "category": "",
