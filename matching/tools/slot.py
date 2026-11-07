@@ -78,6 +78,10 @@ def main():
     cmd = a.cmd[1:] if a.cmd and a.cmd[0] == "--" else a.cmd
     if not cmd:
         ap.error("no command")
+    if cmd[0] in ("python", "python3", "py"):
+        cmd[0] = sys.executable  # the venv interpreter running this script
+    elif os.path.exists(cmd[0]):
+        cmd[0] = os.path.abspath(cmd[0])  # Windows CreateProcess does not resolve relative paths with '/'
     d = _acquire(a.slots, a.label)
     t0 = time.time()
     try:
