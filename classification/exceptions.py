@@ -27,6 +27,7 @@ _CACHED_MASTERS_DIR: Optional[str] = None
 _CACHED_PAYMENT_TERMS: Optional[dict[str, tuple[float, int]]] = None
 _CACHED_CUSTOMERS: Optional[dict[str, tuple[str, str]]] = None  # cid -> (country, payment_terms)
 _CACHED_SUPPLIERS: Optional[dict[str, tuple[str, str]]] = None  # sid -> (country, payment_terms)
+_CACHED_ENTITY_COUNTRY: dict[str, str] = {}  # entity -> country (a domestic payer is never charged SHA/BEN fees)
 
 EURO_SEPA_COUNTRIES = {"ES", "FR", "DE", "IT", "PT", "NL", "BE", "AT", "LU", "IE", "FI"}
 WITHHOLDING_COUNTRIES = {"MX", "BR", "MA"}
@@ -35,7 +36,7 @@ MATCHING_PASSTHROUGH = {"RETURNED", "DUPLICATE_PAYMENT", "SHORT_DISPUTE", "UNIDE
 
 
 def _load_masters(masters_dir: str):
-    global _CACHED_MASTERS_DIR, _CACHED_PAYMENT_TERMS, _CACHED_CUSTOMERS, _CACHED_SUPPLIERS
+    global _CACHED_MASTERS_DIR, _CACHED_PAYMENT_TERMS, _CACHED_CUSTOMERS, _CACHED_SUPPLIERS, _CACHED_ENTITY_COUNTRY
     if _CACHED_MASTERS_DIR == masters_dir and _CACHED_PAYMENT_TERMS is not None:
         return
 
@@ -74,6 +75,29 @@ def _load_masters(masters_dir: str):
         for _, r in df_s.iterrows():
             supp_map[r["supplier_id"]] = (r["country"], r["payment_terms"])
     _CACHED_SUPPLIERS = supp_map
+
+    ent_path = os.path.join(masters_dir, "entities.csv")
+    _CACHED_ENTITY_COUNTRY = {}
+    if os.path.exists(ent_path):
+        df_e = pd.read_csv(ent_path, dtype=str, keep_default_na=False)
+        _CACHED_ENTITY_COUNTRY = dict(zip(df_e["entity"], df_e["country"]))
+
+
+import re as _re
+
+# "INSTALMENT 2/3", "PLAZO 4/4", "VENCIMIENTO 1 DE 3"… in the bank text: k < N → PARTIAL, k == N → cleared
+# (val: 1865/1865 k<N rows are PARTIAL, 0/735 k==N rows are)
+_INSTAL_RX = _re.compile(r"(?:INSTAL+MENTS?|PLAZO|VENCIMIENTO|VTO\.?|RATA|PARCELA|ECHEANCE|ÉCHÉANCE|TEILZAHLUNG|RATE|"
+                         r"CUOTA|PRESTA[CÇ][AÃ]O|TERMIN)\s*(?:NO\.?\s*)?(\d{1,2})\s*(?:/|DE|OF|VON|SU)\s*(\d{1,2})\b")
+
+
+def instalment_of(text: str):
+    """(k, N) when the bank text names instalment k of N, else None."""
+    m = _INSTAL_RX.search(str(text).upper())
+    if not m:
+        return None
+    k, n = int(m.group(1)), int(m.group(2))
+    return (k, n) if 1 <= k <= n <= 24 else None
 
 
 def _tol(amount: float) -> float:
@@ -165,7 +189,7 @@ def assign_exceptions(
                     "currency": getattr(r, "currency", ""),
                     "orig_amount": getattr(r, "orig_amount", ""),
                     "orig_currency": getattr(r, "orig_currency", ""),
-                    "text": getattr(r, "text", "")
+                    "text": f'{getattr(r, "text", "")} {getattr(r, "remittance_info", "")}'
                 }
 
     # Pre-build lookup for open items
@@ -188,7 +212,8 @@ def assign_exceptions(
                     "issue_date": getattr(r, "issue_date", ""),
                     "party_id": party_id,
                     "payment_terms": pt_term,
-                    "item_type": getattr(r, "item_type", iid[:3])
+                    "item_type": getattr(r, "item_type", iid[:3]),
+                    "entity": getattr(r, "entity", ""),
                 }
 
     # Group allocations by bank_txn_id
@@ -263,6 +288,9 @@ def assign_exceptions(
 
         # Step 4 & 5: Check each item
         # Rule 4: FX_DIFFERENCE per item where line currency != item currency
+        inst = instalment_of(bl_info["text"])
+        if inst is not None and sum(1 for it in line_items if it["item_type"] in ("ARI", "API")) != 1:
+            inst = None
         for it in line_items:
             idx = it["idx"]
             if results[idx] is not None:
@@ -271,9 +299,15 @@ def assign_exceptions(
                 continue
 
             tol = _tol(it["open_before"])
+            partial = it["open_after"] > tol
+            if inst is not None and it["item_type"] in ("ARI", "API"):
+                partial = inst[0] < inst[1]  # the text knows better than a ledger that may miss earlier instalments
+                if partial:
+                    results[idx] = "PARTIAL"
+                    continue
             if it["currency"] != b_curr:
                 # FX row
-                if it["open_after"] > tol:
+                if partial:
                     results[idx] = "PARTIAL"
                 else:
                     # Item fully cleared
@@ -283,7 +317,7 @@ def assign_exceptions(
                         results[idx] = None
             else:
                 # Non-FX row: if open_after > tolerance, it is PARTIAL
-                if it["open_after"] > tol:
+                if partial:
                     results[idx] = "PARTIAL"
 
         # Now examine remaining fully cleared items against line cash
@@ -389,12 +423,14 @@ def assign_exceptions(
         # Check 3: SHORT_BANK_CHARGES
         # Non-SEPA payer, single invoice, shortfall <= 60 EUR eq & <= 2% of the item
         payer_party = rem_invoices[0]["party_id"] if rem_invoices else ""
-        is_non_sepa = first_country not in EURO_SEPA_COUNTRIES and bool(first_country)
+        ent_country = _CACHED_ENTITY_COUNTRY.get(item_map.get(rem_invoices[0]["item_id"], {}).get("entity", ""), "")
+        is_non_sepa = (first_country not in EURO_SEPA_COUNTRIES and bool(first_country)
+                       and first_country != ent_country and rem_invoices[0]["item_type"] == "ARI")
         is_card = "CARD SETTLEMENT" in bl_info["text"] or payer_party.startswith("CWEB")
 
         if is_non_sepa and not is_card and len(rem_invoices) == 1 and diff_rem > 0.01:
             it = rem_invoices[0]
-            diff_eur = fx.convert(diff_rem, b_curr, "EUR", b_date)
+            diff_eur = fx.convert(diff_rem, b_curr, "EUR", b_date, masters_dir=masters_dir)
             pct_short = diff_rem / it["total_amount"] if it["total_amount"] else 1.0
             if diff_eur <= 60.01 and pct_short <= 0.0201:
                 results[it["idx"]] = "SHORT_BANK_CHARGES"
@@ -420,3 +456,103 @@ def assign_exceptions(
                 results[cn["idx"]] = None
 
     return pd.Series(results, index=allocations.index, dtype=object)
+
+
+def _explained_shortfall(inv: dict, shortfall: float, b_date: str, b_curr: str, masters_dir: str,
+                         text: str = "") -> Optional[str]:
+    """Code that explains a full clearing with `shortfall` less cash on single invoice `inv`, or None (POLICIES §3)."""
+    if shortfall <= 0.01:
+        return None
+    tot = inv["total_amount"] or 0.0
+    country = inv.get("country", "")
+    if country in WITHHOLDING_COUNTRIES:
+        for rate in WITHHOLDING_RATES:
+            exp = round(rate * tot, 2)
+            if abs(shortfall - exp) <= max(0.05, 0.005 * exp):
+                return "SHORT_WITHHOLDING"
+    pt = (_CACHED_PAYMENT_TERMS or {}).get(inv.get("payment_terms", ""))
+    if pt and inv.get("issue_date") and b_date:
+        pct, days = pt
+        try:
+            ok = datetime.date.fromisoformat(b_date) <= (datetime.date.fromisoformat(inv["issue_date"])
+                                                          + datetime.timedelta(days=days + 3))
+        except ValueError:
+            ok = False
+        exp = round(tot * pct / 100.0, 2)
+        if ok and abs(shortfall - exp) <= max(0.05, 0.005 * exp):
+            return "SHORT_DISCOUNT"
+    ent_country = _CACHED_ENTITY_COUNTRY.get(inv.get("entity", ""), "")
+    if (inv["item_type"] == "ARI" and country and country not in EURO_SEPA_COUNTRIES and country != ent_country
+            and "CARD SETTLEMENT" not in text and tot):
+        try:
+            eur = fx.convert(shortfall, b_curr, "EUR", b_date, masters_dir=masters_dir)
+        except Exception:  # noqa: BLE001
+            eur = shortfall
+        if eur <= 60.01 and shortfall / tot <= 0.0201:
+            return "SHORT_BANK_CHARGES"
+    return None
+
+
+def normalize_amounts(allocations: pd.DataFrame, bank_lines: pd.DataFrame, open_items: pd.DataFrame,
+                      **ctx: Any) -> pd.Series:
+    """Fix the POLICIES §2 amount convention on lines with ONE invoice (+ credit notes), same currency as the line.
+
+    net cash = |line amount| + credit notes on the line; shortfall = open balance before the line − net cash.
+      - the matcher gave the cash (amount ≈ net cash) but the shortfall is explained (withholding, discount within
+        terms, cross-border bank charges) → amount := open balance (full clearing);
+      - the matcher gave the full open amount but the shortfall is NOT explained (and the text does not say it is
+        the last instalment) → amount := net cash (PARTIAL: what was actually applied).
+    Rows with RETURNED / DUPLICATE_PAYMENT / SHORT_DISPUTE / UNIDENTIFIED, FX lines and card settlements are left
+    alone. Returns the amount per row (index aligned with `allocations`)."""
+    amounts = pd.to_numeric(allocations["amount"], errors="coerce").fillna(0.0).astype(float).copy()
+    if allocations is None or not len(allocations):
+        return amounts
+    masters_dir = ctx.get("masters_dir", MASTERS)
+    _load_masters(masters_dir)
+    oi = open_items.copy()
+    for c in ledger.ITEM_COLS:
+        if c not in oi.columns:
+            oi[c] = oi["item_id"].str[:3] if c == "item_type" else ""
+    led = Ledger(oi).apply(allocations, bank_lines)
+    ob = led["open_before"].values
+    info = oi.set_index("item_id")
+    pt_col = "payment_terms" in info.columns
+    bl = bank_lines.set_index("bank_txn_id")
+    exc = allocations["exception"].astype(object).where(allocations["exception"].notna(), "").astype(str).values \
+        if "exception" in allocations.columns else np.array([""] * len(allocations))
+    iids = allocations["item_id"].astype(str).values
+    for tid, idx in allocations.groupby("bank_txn_id", sort=False).indices.items():
+        if tid not in bl.index:
+            continue
+        inv = [i for i in idx if iids[i][:3] in ("ARI", "API")]
+        if len(inv) != 1 or any(exc[i] in MATCHING_PASSTHROUGH for i in idx):
+            continue
+        i = inv[0]
+        it = iids[i]
+        if it not in info.index or np.isnan(ob[i]):
+            continue
+        r = bl.loc[tid]
+        b_curr, b_date = r["currency"], r["booking_date"]
+        text = f'{r.get("text", "")} {r.get("remittance_info", "")}'
+        row = info.loc[it]
+        if row["currency"] != b_curr or "CARD SETTLEMENT" in text:
+            continue
+        cn = sum(amounts.iloc[j] for j in idx if iids[j][:3] in ("ARC", "APC"))
+        net = abs(float(r["amount"] or 0)) + cn
+        open_b = ob[i]
+        short = round(open_b - net, 2)
+        if short <= _tol(open_b):
+            continue
+        party = row["party_id"]
+        meta = (_CACHED_CUSTOMERS if it.startswith("AR") else _CACHED_SUPPLIERS).get(party, ("", ""))
+        d = {"item_type": it[:3], "total_amount": float(row["total_amount"] or 0), "country": meta[0],
+             "payment_terms": (row["payment_terms"] if pt_col and row["payment_terms"] else meta[1]),
+             "issue_date": row["issue_date"], "entity": row["entity"]}
+        why = _explained_shortfall(d, short, b_date, b_curr, masters_dir, text)
+        a = amounts.iloc[i]
+        inst = instalment_of(text)
+        if why and abs(a - net) <= _tol(net):
+            amounts.iloc[i] = round(open_b, 2)
+        elif not why and abs(a - open_b) <= _tol(open_b) and net > 0.01 and not (inst and inst[0] == inst[1]):
+            amounts.iloc[i] = round(net, 2)
+    return amounts

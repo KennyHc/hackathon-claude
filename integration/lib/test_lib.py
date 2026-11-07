@@ -258,7 +258,48 @@ def test_ledger_real_data():
     print("  [PASS] All real-data ledger tests passed!\n")
 
 
+def test_masters_merge():
+    """masters_final may hold full files or only changes: union with data/masters, masters_final wins per key."""
+    import shutil
+    import tempfile
+    from integration.lib import fx as _fx
+    from integration.lib import masters as M
+    print("=" * 60 + "\nTEST: masters_final merge\n" + "=" * 60)
+    tmp = tempfile.mkdtemp()
+    old_merged = M.MERGED
+    M.MERGED = os.path.join(tmp, "merged")
+    try:
+        base = os.path.join(tmp, "masters")
+        shutil.copytree(os.path.join(ROOT, "data", "masters"), base)
+        fd = os.path.join(tmp, "final", "masters_final")
+        os.makedirs(fd)
+        cust = pd.read_csv(os.path.join(base, "customers.csv"), dtype=str, keep_default_na=False)
+        new = cust.head(2).copy()
+        new.loc[new.index[0], "name"] = "RENAMED CO"
+        new.loc[new.index[1], ["customer_id", "entity", "name"]] = ["CZA0001", "ZA01", "Kwiksave Pty"]
+        new.to_csv(os.path.join(fd, "customers.csv"), index=False)  # changes only
+        pd.DataFrame({"date": ["2026-01-02", "2026-01-02"], "currency": ["ZAR", "USD"],
+                      "units_per_eur": ["19.5", "1.04"], "source": ["ECB", "ECB"]}).to_csv(
+            os.path.join(fd, "fx_rates.csv"), index=False)
+        assert M.masters_dir("", tmp) == base and M.masters_dir("live", tmp) == base
+        d = M.masters_dir("final", tmp)
+        c = pd.read_csv(os.path.join(d, "customers.csv"), dtype=str, keep_default_na=False)
+        assert len(c) == len(cust) + 1, (len(c), len(cust))
+        assert c.set_index("customer_id").loc[cust.customer_id.iloc[0], "name"] == "RENAMED CO"
+        assert "CZA0001" in set(c.customer_id)
+        assert os.path.exists(os.path.join(d, "payment_terms.csv"))  # base-only files are there too
+        r = M.read_master("fx_rates.csv", "final", tmp)
+        assert len(r) > 1000 and ((r.currency == "ZAR") & (r.date == "2026-01-02")).sum() == 1
+        assert abs(_fx.rate("ZAR", "2026-01-05", masters_dir=d) - 19.5) < 1e-9
+        assert abs(_fx.rate("USD", "2025-03-03", masters_dir=d) - _fx.rate("USD", "2025-03-03")) < 1e-9
+        print("  [PASS] masters_final merge\n")
+    finally:
+        M.MERGED = old_merged
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
+    test_masters_merge()
     test_fx()
     test_ledger_synthetic()
     test_ledger_real_data()

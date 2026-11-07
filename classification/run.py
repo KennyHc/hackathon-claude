@@ -195,7 +195,7 @@ def main():
     )
     parser.add_argument(
         "--data",
-        default="data",
+        default=os.environ.get("BANKREC_DATA", "data"),
         help="Root path to data directory (default: 'data')",
     )
     parser.add_argument(

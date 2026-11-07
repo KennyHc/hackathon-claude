@@ -14,36 +14,38 @@ import bankrec_score as S  # noqa: E402
 
 EXC = ["PARTIAL", "OVERPAYMENT", "SHORT_DISCOUNT", "SHORT_BANK_CHARGES", "SHORT_WITHHOLDING", "SHORT_DISPUTE",
        "DUPLICATE_PAYMENT", "UNIDENTIFIED", "RETURNED", "FX_DIFFERENCE"]
+# data root (relative to the repo or absolute); BANKREC_DATA overrides it (mock FINAL dry runs)
+DATA_ROOT = os.environ.get("BANKREC_DATA", "data")
 SUB_COLS = ["bank_txn_id", "item_id", "amount", "category", "exception"]
 
 
-def phase_dir(phase, data="data"):
+def phase_dir(phase, data=DATA_ROOT):
     return os.path.join(ROOT, data, phase)
 
 
-def categories(data="data"):
+def categories(data=DATA_ROOT):
     with open(os.path.join(ROOT, data, "masters", "categories.csv"), encoding="utf-8") as fh:
         return [r["category"] for r in csv.DictReader(fh)]
 
 
-def txns_path(phase, data="data"):
+def txns_path(phase, data=DATA_ROOT):
     return os.path.join(phase_dir(phase, data), "bank_transactions.csv.gz")
 
 
-def golden_path(phase, data="data"):
+def golden_path(phase, data=DATA_ROOT):
     return os.path.join(phase_dir(phase, data), "golden_allocations.csv.gz")
 
 
-def has_golden(phase, data="data"):
+def has_golden(phase, data=DATA_ROOT):
     return os.path.exists(golden_path(phase, data))
 
 
-def golden_for(phase, data="data"):
+def golden_for(phase, data=DATA_ROOT):
     """Official Golden for a labelled phase (train, train_lite, sample, val)."""
     return S.load_golden(golden_path(phase, data), txns_path(phase, data), EXC, categories(data))
 
 
-def blank_golden(phase, data="data"):
+def blank_golden(phase, data=DATA_ROOT):
     """Label-less Golden (every line of the phase, no labels): enough for the scorer's format checks on live/final."""
     with tempfile.NamedTemporaryFile("wb", suffix=".csv.gz", delete=False) as tmp:
         pass

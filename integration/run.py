@@ -39,7 +39,7 @@ def load_optional(path, what):
     return None
 
 
-def exceptions_from_c(alloc, lines, phase):
+def exceptions_from_c(alloc, lines, phase, fix_amounts=True):
     try:
         from classification.exceptions import assign_exceptions
         from integration.lib.ledger import load_items
@@ -47,9 +47,33 @@ def exceptions_from_c(alloc, lines, phase):
     except ImportError as e:
         log(f"exceptions: classification/exceptions.py or integration/lib not available ({e}); keeping B's")
         return None
-    exc = assign_exceptions(alloc, lines, load_items(phase), masters_dir=masters_dir(phase))
+    items = load_items(phase)
+    if fix_amounts:
+        try:
+            from classification.exceptions import normalize_amounts
+            new = normalize_amounts(alloc, lines, items, masters_dir=masters_dir(phase))
+            ch = (new - pd.to_numeric(alloc.amount, errors="coerce")).abs() > 0.005
+            log(f"amounts: normalize_amounts changed {int(ch.sum()):,} rows")
+            alloc["amount"] = new.values
+        except ImportError:
+            pass
+    exc = assign_exceptions(alloc, lines, items, masters_dir=masters_dir(phase))
     log(f"exceptions: assign_exceptions gave {exc.notna().sum():,} codes")
     return exc
+
+
+def drop_wild_overpay(items, lines, phase, ratio):
+    from integration.lib.ledger import load_items
+    it = load_items(phase).set_index("item_id")
+    n = items.groupby("bank_txn_id").item_id.transform("size")
+    cash = items.bank_txn_id.map(dict(zip(lines.bank_txn_id, lines.amount.astype(float).abs())))
+    lc = items.bank_txn_id.map(dict(zip(lines.bank_txn_id, lines.currency)))
+    ic = items.item_id.map(it.currency)
+    amt = items.amount.astype(float)
+    bad = (n == 1) & items.item_id.str[:3].isin(["ARI", "API"]) & (lc == ic) & (cash > amt * (1 + ratio)) \
+        & ~items.exception.isin(["DUPLICATE_PAYMENT", "RETURNED"])
+    log(f"overpay guard: dropping {int(bad.sum()):,} single-invoice lines with cash > amount·{1 + ratio:g}")
+    return items[~bad]
 
 
 def main():
@@ -59,6 +83,12 @@ def main():
     ap.add_argument("--unid-p", type=float, default=0.9,
                     help="a receipt nobody covers is UNIDENTIFIED when C's p_items < this (tune on val once B lands)")
     ap.add_argument("--no-c-exceptions", action="store_true", help="use only B's exceptions")
+    ap.add_argument("--no-amount-fix", action="store_true", help="skip classification.exceptions.normalize_amounts")
+    ap.add_argument("--b-exc-fallback", type=int, default=0,
+                    help="1: where assign_exceptions says no exception, keep B's guess; 0: C decides alone")
+    ap.add_argument("--overpay-max", type=float, default=0.1,
+                    help="> 0: drop B's line when it is one same-currency invoice and cash > amount·(1+this) "
+                         "(such 'overpayments' are mostly wrong items)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--b", default=None, help="override B's allocations.parquet path (testing)")
     ap.add_argument("--c", default=None, help="override C's line_labels.parquet path (testing)")
@@ -79,11 +109,13 @@ def main():
         cat = c.category.reindex(b_lines)
         keep = b_lines[(p.isna() | (p >= a.p_items)) | cat.isna() | (cat == "")]
         items = B[B.bank_txn_id.isin(keep)].copy()
+        if a.overpay_max > 0:
+            items = drop_wild_overpay(items, lines, a.phase, a.overpay_max)
         log(f"B keeps {len(keep):,}/{len(b_lines):,} of its lines ({len(items):,} rows)")
         if not a.no_c_exceptions:
-            exc = exceptions_from_c(items, lines, a.phase)
+            exc = exceptions_from_c(items, lines, a.phase, not a.no_amount_fix)
             if exc is not None:
-                items["exception"] = exc.where(exc.notna(), items.get("exception"))
+                items["exception"] = exc.where(exc.notna(), items.get("exception")) if a.b_exc_fallback else exc
         items["category"] = ""
     else:
         items = pd.DataFrame(columns=SUB_COLS)

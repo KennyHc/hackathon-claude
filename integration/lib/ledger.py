@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA = os.path.join(ROOT, "data")
+DATA = os.environ.get("BANKREC_DATA", os.path.join(ROOT, "data"))  # BANKREC_DATA: mock FINAL dry runs
 
 ITEM_COLS = [
     "item_id",
