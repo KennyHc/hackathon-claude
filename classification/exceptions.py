@@ -388,7 +388,7 @@ def overpayment_plausible(open_: float, cash: float) -> bool:
     exc = _cents(cash) - _cents(open_)
     if exc <= 0:
         return False
-    if exc in OVERPAY_ROUND_CENTS and exc <= 0.35 * _cents(open_):
+    if exc in OVERPAY_ROUND_CENTS:  # no size cap for round excesses (insights §13.3)
         return True
     return any(abs(_cents(cash) - _cents(round(open_ * (1 + p), 2))) <= 1 for p in OVERPAY_PCTS)
 

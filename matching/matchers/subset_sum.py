@@ -397,7 +397,7 @@ class Engine:
                     break
         # one invoice overpaid by a round amount (the excess stays on the customer account)
         if OVERPAY:
-            hits = [x for x in inv if 0 < cents - x[3] <= OVERPAY_MAX * x[3] and (cents - x[3]) in OVERPAY_EXCESS]
+            hits = [x for x in inv if (cents - x[3]) in OVERPAY_EXCESS]  # no size cap for round excesses
             if len(hits) == 1:
                 x = hits[0]
                 return "overpayment", [x], {x[0]: (x[3], "OVERPAYMENT")}
