@@ -99,7 +99,7 @@ def run_stage(stage, phase, lines_left, items, claimed, ctx, timeout, fallback_f
 
 
 def enforce(new, stage, lines_left_ids, booking, items_total, bal, overclaim="drop", universe=frozenset(),
-            conflict="rows"):
+            conflict="rows", repay=frozenset()):
     """Apply cascade rules 1-3 to one stage's normalized output. Mutates `bal`. Returns (kept rows, counts)."""
     c = {"rows_in": len(new), "lines_in": new.bank_txn_id.nunique()}
     m = new.bank_txn_id.isin(lines_left_ids)
@@ -121,7 +121,8 @@ def enforce(new, stage, lines_left_ids, booking, items_total, bal, overclaim="dr
     keep = np.ones(len(new), dtype=bool)
     amounts = new.amount.values.astype(float).copy()
     excs = new.exception.astype(object).values.copy()
-    trimmed = dropped = to_dup = 0
+    trimmed = dropped = to_dup = repaid = 0
+    meths = new.method.astype(str).values
     for i, (it, amt, ex) in enumerate(zip(new.item_id.values, amounts, excs)):
         if ex in REOPENS:
             bal.give(it, amt)
@@ -129,6 +130,10 @@ def enforce(new, stage, lines_left_ids, booking, items_total, bal, overclaim="dr
         if ex in NO_BALANCE or it not in bal.open:  # closed before the phase: balance unknown, kept as given
             continue
         avail = bal.get(it)
+        if avail <= 0.01 and meths[i] in repay and amt <= items_total.get(it, 0) + 0.01:
+            repaid += 1  # re-collection (DD re-presentation) after a return no stage matched: keep as given
+            meths[i] = meths[i] + "+repaid"
+            continue
         if avail <= 0.01:
             if overclaim == "dup" and abs(amt - items_total.get(it, -1e9)) <= tol(amt):
                 excs[i] = "DUPLICATE_PAYMENT"
@@ -141,7 +146,7 @@ def enforce(new, stage, lines_left_ids, booking, items_total, bal, overclaim="dr
             amounts[i] = round(avail, 2)
             trimmed += 1
         bal.take(it, amounts[i])
-    new = new.assign(amount=amounts, exception=excs)
+    new = new.assign(amount=amounts, exception=excs, method=meths)
     if conflict == "line":  # a line with any dropped row loses all its rows (balances given back)
         bad = set(new.bank_txn_id.values[~keep])
         for it, amt, ex, tid, k in zip(new.item_id.values, amounts, excs, new.bank_txn_id.values, keep):
@@ -150,7 +155,7 @@ def enforce(new, stage, lines_left_ids, booking, items_total, bal, overclaim="dr
         keep &= ~new.bank_txn_id.isin(bad).values
         c["drop_conflict_lines"] = len(bad)
     new = new[keep]
-    c.update(trimmed=trimmed, drop_overalloc=dropped, to_duplicate=to_dup, rows_kept=len(new),
+    c.update(repaid=repaid, trimmed=trimmed, drop_overalloc=dropped, to_duplicate=to_dup, rows_kept=len(new),
              lines_kept=new.bank_txn_id.nunique())
     new = new.assign(stage=stage)
     return new, c
@@ -194,6 +199,8 @@ def main():
                          "amount ≈ the item total")
     ap.add_argument("--conflict", choices=["rows", "line"], default="rows",
                     help="rows on items with no balance left: drop just those rows, or the whole line")
+    ap.add_argument("--repay-methods", default="dd_batch,dd_batch_part,pr_agg,pr_prefix,pr_e2e,cheque_dep",
+                    help="comma list of methods whose rows may pay an item with no balance left (a missed return)")
     a = ap.parse_args()
     od = a.out or out_dir(a.phase)
     os.makedirs(od, exist_ok=True)
@@ -227,7 +234,8 @@ def main():
             try:
                 new = normalize_stage_output(raw, stage)
                 kept, cnt = enforce(new, stage, set(left.bank_txn_id), booking, items_total, bal, a.overclaim,
-                                     universe, a.conflict)
+                                     universe, a.conflict,
+                                     frozenset(m for m in a.repay_methods.split(",") if m))
                 row.update(cnt)
                 log(f"stage {stage}: " + ", ".join(f"{k} {v:,}" for k, v in cnt.items()))
                 kept.to_parquet(os.path.join(od, f"cascade_{stage}.parquet"), index=False)

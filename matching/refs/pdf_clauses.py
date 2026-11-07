@@ -13,6 +13,7 @@ import sys
 import numpy as np
 import pandas as pd
 import pypdf
+_DATA = os.environ.get("BANKREC_DATA", "data")  # data root (mock FINAL dry runs); relative to the repo root
 
 DISCLAIMER_RE = re.compile(r'Documento sint[eé]tico de prueba', re.IGNORECASE)
 
@@ -311,19 +312,19 @@ def extract_one_pdf(task):
 
 def extract(phase: str, extra_phases: list[str] = None) -> pd.DataFrame:
     """Extract PDF clauses and metadata for a given phase and optional extra phases."""
-    index_path = f'data/{phase}/pdfs/index.csv'
+    index_path = f'{_DATA}/{phase}/pdfs/index.csv'
     if not os.path.exists(index_path):
         raise FileNotFoundError(f"Primary index file not found: {index_path}")
         
     df_primary = pd.read_csv(index_path, dtype=str, keep_default_na=False)
     tasks = [
-        (r.file, r.document_type, r.document_number, r.entity, r.party_id, r.document_date, phase, f'data/{phase}/pdfs/{r.file}')
+        (r.file, r.document_type, r.document_number, r.entity, r.party_id, r.document_date, phase, f'{_DATA}/{phase}/pdfs/{r.file}')
         for _, r in df_primary.iterrows()
     ]
     
     # Process extra_phases if given
     if extra_phases:
-        oi_path = f'data/{phase}/open_items_at_start.csv.gz'
+        oi_path = f'{_DATA}/{phase}/open_items_at_start.csv.gz'
         oi_keys = set()
         if os.path.exists(oi_path):
             oi = pd.read_csv(oi_path, dtype=str, keep_default_na=False)
@@ -332,7 +333,7 @@ def extract(phase: str, extra_phases: list[str] = None) -> pd.DataFrame:
         primary_keys = set(zip(df_primary['entity'], df_primary['document_number']))
         
         for ep in extra_phases:
-            ep_index = f'data/{ep}/pdfs/index.csv'
+            ep_index = f'{_DATA}/{ep}/pdfs/index.csv'
             if not os.path.exists(ep_index):
                 continue
             df_ep = pd.read_csv(ep_index, dtype=str, keep_default_na=False)
@@ -343,7 +344,7 @@ def extract(phase: str, extra_phases: list[str] = None) -> pd.DataFrame:
                 if key in primary_keys:
                     continue
                 tasks.append(
-                    (r.file, r.document_type, r.document_number, r.entity, r.party_id, r.document_date, ep, f'data/{ep}/pdfs/{r.file}')
+                    (r.file, r.document_type, r.document_number, r.entity, r.party_id, r.document_date, ep, f'{_DATA}/{ep}/pdfs/{r.file}')
                 )
                 
     print(f"Extracting clauses from {len(tasks)} PDFs (phase={phase}, extra={extra_phases}) with 8 workers...")

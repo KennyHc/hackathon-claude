@@ -75,7 +75,8 @@ def unid_evidence(lines, phase):
         from matching.party.unid import unid_evidence as k3
         r = k3(lines, items, phase)
         if isinstance(r, pd.DataFrame):  # bank_txn_id, has_ref_like, payer_known, …
-            ev = r.has_ref_like.fillna(False).astype(bool) | r.payer_known.fillna(False).astype(bool)
+            ev = r.evidence.fillna(False).astype(bool) if "evidence" in r else \
+                r.has_ref_like.fillna(False).astype(bool) | r.payer_known.fillna(False).astype(bool)
             out = dict(zip(r.bank_txn_id, ev))
             log(f"unid evidence: K3 unid_evidence on {len(r):,} lines, {int(ev.sum()):,} with evidence")
             return out
@@ -106,6 +107,38 @@ def unid_evidence(lines, phase):
     return out
 
 
+def supplier_refunds(cand, lines, items, phase):
+    """A leftover receipt that returns exactly what we paid earlier (same entity/currency, booked on or before) to
+    a supplier whose name is in the receipt = the supplier refunding our duplicate payment (POLICIES §4)."""
+    from integration.lib.masters import read_master
+    from matching.common import norm_name
+    if not len(cand) or not len(items):
+        return set()
+    su = read_master("suppliers.csv", phase).set_index("supplier_id")
+    api = items[items.item_id.astype(str).str.startswith("API")]
+    from integration.lib.ledger import load_items
+    sup_of_item = load_items(phase).set_index("item_id").party_id
+    sup_line = api.assign(sup=api.item_id.map(sup_of_item)).groupby("bank_txn_id").sup.first()
+    L = lines.assign(a=pd.to_numeric(lines.amount, errors="coerce"))
+    out = L[(L.a < 0) & L.bank_txn_id.isin(sup_line.index)].assign(sup=lambda d: d.bank_txn_id.map(sup_line))
+    out = out.assign(k=out.entity + "|" + out.currency + "|" + (-out.a).round(2).astype(str))
+    by_key = out.groupby("k")
+    hits = set()
+    for r in L[L.bank_txn_id.isin(cand.bank_txn_id)].itertuples(index=False):
+        k = f"{r.entity}|{r.currency}|{round(r.a, 2)}"
+        if k not in by_key.groups:
+            continue
+        o = by_key.get_group(k)
+        o = o[o.booking_date <= r.booking_date]
+        txt = norm_name(f"{r.counterparty_name} {r.text}")
+        for sp in set(o.sup):
+            toks = [w for w in norm_name(su.name.get(sp, "")).split() if len(w) > 2][:2]
+            if toks and all(w in txt for w in toks):
+                hits.add(r.bank_txn_id)
+                break
+    return hits
+
+
 def train_entities():
     from integration.scoring import txns_path
     return set(pd.read_csv(txns_path("train"), dtype=str, keep_default_na=False, usecols=["entity"]).entity)
@@ -115,6 +148,17 @@ def train_entities():
 # overrides on these methods were wrong in 32/32 rows)
 TRUST_METHODS = {"dd_batch", "dd_batch_part", "card_settle", "late_discount", "retention_release",
                  "party_discount_late", "k4_sbc"}
+# K1's requests (round 2), A/B'd per group on val: (method regex, matcher exceptions kept as given, amount too)
+TRUST_GROUPS = {
+    "ret": (r"(dd_return|card_chargeback|cheque_return|pr_return)$", {"RETURNED"}),
+    "dup": (r"pr_dup_(e2e|prefix)$", {"DUPLICATE_PAYMENT"}),
+    "remit": (r"remit_", {"SHORT_DISPUTE", "PARTIAL"}),
+    "pr": (r"pr_", {"PARTIAL", "FX_DIFFERENCE"}),
+    "noup": (r"(pr_|dd_|card_|cheque_|apdd|ap_dd|aprefund|ap_refund)", "NO_UPGRADE"),
+    # rows the cascade let re-pay an item whose return no stage matched (matching/run.py --repay-methods): the
+    # ledger thinks the item is closed and would call them DUPLICATE_PAYMENT
+    "repaid": (r".*\+repaid$", "ALL"),
+}
 KEEP_EMPTY_METHODS = {"instalment_last", "settlement"}
 
 
@@ -149,6 +193,9 @@ def main():
                     help="'default' (TRUST_METHODS) or a comma list: keep the matcher's exception and amount there")
     ap.add_argument("--unid-evidence", choices=["off", "new", "all"], default="new",
                     help="leftover receipts: UNIDENTIFIED only without evidence of items (new = unseen entities)")
+    ap.add_argument("--trust-groups", default="ret,dup,remit,noup,repaid", help="comma list of TRUST_GROUPS (K1's requests)")
+    ap.add_argument("--supplier-refund", type=int, default=1,
+                    help="1: leftover receipt = earlier equal payment to a supplier named in it → SUPPLIER_REFUND")
     ap.add_argument("--out", default=None)
     ap.add_argument("--b", default=None, help="override B's allocations.parquet path (testing)")
     ap.add_argument("--c", default=None, help="override C's line_labels.parquet path (testing)")
@@ -188,6 +235,21 @@ def main():
                     items.loc[t2, "exception"] = items.loc[t2, "b_exc"]
                     items.loc[t2, "amount"] = b_amt[t2]
                     log(f"exceptions: trusted the matcher on {int(t2.sum()):,} rows ({ch:,} exceptions restored)")
+                if "method" in items and a.trust_groups:
+                    meth = items.method.astype(str)
+                    for gname in a.trust_groups.split(","):
+                        rx, keep = TRUST_GROUPS[gname]
+                        mm = meth.str.match(rx)
+                        if keep == "NO_UPGRADE":  # empty from the matcher: never turned into DUPLICATE / PARTIAL
+                            t3 = mm & items.b_exc.isna() & items.exception.isin(["DUPLICATE_PAYMENT", "PARTIAL"])
+                            items.loc[t3, "exception"] = None
+                        else:
+                            t3 = mm if keep == "ALL" else mm & items.b_exc.isin(keep)
+                            ch = t3 & (items.exception.fillna("") != items.b_exc.fillna(""))
+                            items.loc[t3, "exception"] = items.loc[t3, "b_exc"]
+                            items.loc[t3, "amount"] = b_amt[t3]
+                            t3 = ch
+                        log(f"trust group {gname}: {int(t3.sum()):,} rows changed")
                 if "method" in items:
                     trust = items.method.astype(str).isin(KEEP_EMPTY_METHODS) & items.b_exc.isna()
                     items.loc[trust, "exception"] = None
@@ -230,6 +292,10 @@ def main():
     default[receipt & ~c_says_items] = "UNIDENTIFIED"
     default[receipt & c_says_items] = "CUSTOMER_ADVANCE"
     rest["category"] = ccat.where(has_c_cat, default)
+    if a.supplier_refund:
+        sr = supplier_refunds(rest[(rest.category == "CUSTOMER_ADVANCE") & receipt], lines, items, a.phase)
+        rest.loc[rest.bank_txn_id.isin(sr), "category"] = "SUPPLIER_REFUND"
+        log(f"supplier refunds: {len(sr):,} leftover receipts → SUPPLIER_REFUND")
     rest["exception"] = ""
     rest.loc[rest.category == "UNIDENTIFIED", "exception"] = "UNIDENTIFIED"
     rest["item_id"], rest["amount"] = "", ""
