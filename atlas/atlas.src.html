@@ -1,0 +1,800 @@
+<title>Valtermia Data Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (max 1120px) on cool ledger-paper ground; each section = plain-language question, one-line answer, then the chart. Family colours are fixed across every chart. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --ink:#0d1524; --ink-2:#4a5568; --muted:#78829a; --line:#e1e6ee; --grid:#edf0f5;
+  --accent:#2f3fb8; --accent-soft:#e6e9fb; --hl:#fff1c2; --ok:#137a4b;
+  --f-receipts:#2a78d6; --f-payments:#eb6834; --f-remittances:#1baf7a; --f-batches:#eda100; --f-exceptions:#e87ba4; --f-pdf:#008300; --f-nonitem:#6250d6;
+  --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body:"Geist", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  --mono:"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r:10px; --shadow:0 1px 2px rgba(13,21,36,.04), 0 8px 24px -12px rgba(13,21,36,.12);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0a0e16; --surface:#121927; --ink:#e9edf4; --ink-2:#aeb7c6; --muted:#7f899c; --line:#253047; --grid:#1a2232;
+  --accent:#93a0ff; --accent-soft:#1f2747; --hl:#3d3412; --ok:#4cc38a;
+  --f-receipts:#3987e5; --f-payments:#d95926; --f-remittances:#199e70; --f-batches:#c98500; --f-exceptions:#d55181; --f-pdf:#008300; --f-nonitem:#9085e9;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0a0e16; --surface:#121927; --ink:#e9edf4; --ink-2:#aeb7c6; --muted:#7f899c; --line:#253047; --grid:#1a2232;
+  --accent:#93a0ff; --accent-soft:#1f2747; --hl:#3d3412; --ok:#4cc38a;
+  --f-receipts:#3987e5; --f-payments:#d95926; --f-remittances:#199e70; --f-batches:#c98500; --f-exceptions:#d55181; --f-pdf:#008300; --f-nonitem:#9085e9;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6); color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15.5px;line-height:1.55;-webkit-font-smoothing:antialiased;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:0 64px}
+.wrap{max-width:1120px;margin:0 auto}
+h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:-.02em;text-wrap:balance;margin:0;line-height:1.08}
+h1{font-size:clamp(34px,5.6vw,64px);font-variation-settings:"opsz" 96;max-width:16ch}
+h2{font-size:clamp(25px,3.2vw,36px);font-variation-settings:"opsz" 60}
+h3{font-size:18px;letter-spacing:-.01em;font-weight:650;line-height:1.25}
+p{margin:0;max-width:68ch}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--mono)}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .ink2{color:var(--ink-2)}
+code{font-family:var(--mono);font-size:.88em;background:var(--grid);padding:1px 5px;border-radius:4px}
+a{color:var(--accent)}
+
+/* header */
+header{padding-block:56px 32px;display:grid;gap:22px}
+.lede{font-size:clamp(16px,1.6vw,19px);color:var(--ink-2);max-width:62ch}
+.stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-top:10px}
+.stat{background:var(--surface);padding:16px 16px 14px;display:grid;gap:2px;min-width:0}
+.stat b{font-family:var(--display);font-size:clamp(24px,2.6vw,32px);font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat span{font-size:12.5px;color:var(--muted);line-height:1.35}
+@media (max-width:860px){.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:460px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+nav.toc{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:4px}
+nav.toc a{font-size:13px;color:var(--ink-2);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:4px 11px;background:var(--surface)}
+nav.toc a:hover,nav.toc a:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
+
+/* sections */
+section{padding-block:56px 8px;display:grid;gap:22px;scroll-margin-top:12px}
+section + section{border-top:1px solid var(--line)}
+.head{display:grid;gap:10px}
+.answer{font-size:17px;color:var(--ink-2);max-width:72ch}
+.answer strong{color:var(--ink);font-weight:600}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:22px;min-width:0}
+.panel > h3{margin-bottom:4px}
+.panel .sub{font-size:13.5px;color:var(--muted);margin-bottom:16px;max-width:80ch}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+@media (max-width:860px){.grid2,.grid3{grid-template-columns:minmax(0,1fr)}}
+.note{font-size:13px;color:var(--muted);max-width:90ch}
+.scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* ---------- hero example ---------- */
+.flow{position:relative;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:80px;align-items:center}
+.flow svg.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.bankcard{position:relative;z-index:1;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow);padding:18px 18px 16px;display:grid;gap:12px}
+.bc-top{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+.amt{font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.amt small{font-family:var(--mono);font-size:13px;color:var(--muted);font-weight:400;margin-left:4px;letter-spacing:0}
+.kv{font-family:var(--mono);font-size:11.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 12px}
+.n43{font-family:var(--mono);font-size:13px;line-height:1.75;background:var(--grid);border-radius:8px;padding:10px 12px;word-break:break-word}
+.n43 .fld{display:block}
+.n43 .fld::before{content:attr(data-n);color:var(--muted);font-size:10.5px;margin-right:10px;display:inline-block;width:1.4em}
+.n43 .cut{color:var(--muted)}
+.hl{background:var(--hl);border-radius:3px;padding:0 2px;box-shadow:inset 0 -2px 0 var(--accent)}
+.hl.payer{box-shadow:inset 0 -2px 0 var(--ink-2)}
+.hl.amb{box-shadow:inset 0 -2px 0 var(--muted)}
+.items{position:relative;z-index:1;display:grid;gap:8px}
+.item{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:baseline;box-shadow:var(--shadow)}
+.item .doc{font-family:var(--mono);font-size:13.5px;font-weight:500}
+.item .doc u{text-decoration:none;background:var(--hl);border-radius:2px}
+.item .a{font-family:var(--mono);font-size:13.5px;font-variant-numeric:tabular-nums;text-align:right}
+.item .seen{grid-column:1/-1;font-size:12px;color:var(--muted)}
+.sum{display:flex;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:13.5px;padding:8px 12px;border-top:2px solid var(--ink);margin-top:2px}
+.sum .ok{color:var(--ok);font-weight:500}
+.payerrow{font-size:12.5px;color:var(--ink-2);display:flex;gap:8px;align-items:center}
+.payerrow .dot{width:8px;height:8px;border-radius:50%;background:var(--f-receipts);flex:none}
+.csv{font-family:var(--mono);font-size:12.5px;line-height:1.7;background:var(--grid);border-radius:8px;padding:12px 14px;white-space:pre;overflow-x:auto;color:var(--ink-2)}
+.csv b{color:var(--ink);font-weight:500}
+.csv .h{color:var(--muted)}
+@media (max-width:860px){.flow{grid-template-columns:minmax(0,1fr);gap:18px}.flow svg.wires{display:none}}
+
+.case{display:grid;gap:10px;align-content:start}
+.case .tag{justify-self:start;font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:3px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:500}
+.case .line{font-family:var(--mono);font-size:12.5px;background:var(--grid);border-radius:6px;padding:8px 10px;word-break:break-word}
+.case .line .m{color:var(--muted)}
+.case p{font-size:14px;color:var(--ink-2)}
+.case .csv{font-size:11.5px;white-space:pre-wrap;word-break:break-all}
+
+/* ---------- timeline ---------- */
+.tl{position:relative;min-width:640px;padding:86px 0 0 40px}
+.tl-plot{position:relative;height:190px}
+.tl-plot svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
+.tl-y{position:absolute;left:-40px;width:34px;text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--muted);transform:translateY(-50%)}
+.tl-bands{display:grid;grid-template-columns:48fr 6fr 6fr;gap:3px;margin-top:8px}
+.band{border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.3;min-width:0;border:1px solid var(--line);background:var(--grid)}
+.band b{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.1em}
+.band.live{background:var(--accent-soft);border-color:transparent}
+.band.final{border-style:dashed;background:transparent}
+.tl-years{position:relative;height:18px;margin-top:4px}
+.tl-years span{position:absolute;font-family:var(--mono);font-size:10.5px;color:var(--muted);transform:translateX(-50%)}
+.mk{position:absolute;top:0;width:0;bottom:0;pointer-events:none}
+.mk::after{content:"";position:absolute;left:0;top:var(--top);bottom:-4px;border-left:1px solid var(--ink-2);opacity:.55}
+.mk i{position:absolute;top:var(--top);left:0;transform:translate(-50%,-100%);width:20px;height:20px;border-radius:50%;background:var(--ink);color:var(--bg);font:600 11px/20px var(--mono);text-align:center;font-style:normal;pointer-events:auto;cursor:default}
+.drift{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px 20px;margin-top:6px;padding:0;list-style:none}
+.drift li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;font-size:13.5px;color:var(--ink-2);align-items:start}
+.drift li i{width:20px;height:20px;border-radius:50%;background:var(--ink);color:var(--bg);font:600 11px/20px var(--mono);text-align:center;font-style:normal}
+.drift li b{color:var(--ink);font-weight:600;display:block;font-size:12px;font-family:var(--mono);letter-spacing:.02em}
+
+.phases{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+@media (max-width:860px){.phases{grid-template-columns:minmax(0,1fr)}}
+.phase{display:grid;gap:12px;align-content:start}
+.phase .ph-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.phase .dates{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.pill{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2)}
+.pill.key{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+dl.vol{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;margin:0;font-size:13.5px}
+dl.vol dt{color:var(--ink-2)} dl.vol dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.phase.final{border-style:dashed;box-shadow:none;background:transparent}
+
+/* ---------- files diagram ---------- */
+.files svg{display:block;width:100%;min-width:760px;height:auto}
+.files text{font-family:var(--body);fill:var(--ink)}
+.files .t1{font-family:var(--mono);font-size:13px;font-weight:500}
+.files .t2{font-size:12px;fill:var(--ink-2)}
+.files .t3{font-size:11px;fill:var(--muted)}
+.files .big{font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-.02em}
+.files .colh{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;fill:var(--muted)}
+.files .box{fill:var(--surface);stroke:var(--line);stroke-width:1}
+.files .box.hub{stroke:var(--ink);stroke-width:1.5}
+.files .box.dash{fill:none;stroke:var(--muted);stroke-dasharray:5 4}
+.files .frame{fill:var(--grid);stroke:none}
+.files .edge{fill:none;stroke:var(--ink-2);stroke-width:1.2;opacity:.55}
+.files .edge.flowing{stroke-dasharray:4 6;animation:flow 1.6s linear infinite}
+.files .edge.direct{stroke:var(--accent);opacity:.9;stroke-width:1.6}
+.files .chipbg{fill:var(--surface);stroke:var(--line)}
+.files .sw{stroke:none}
+@keyframes flow{to{stroke-dashoffset:-20}}
+
+/* ---------- bars & charts ---------- */
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;flex:none}
+.hundred{display:flex;height:44px;gap:2px;border-radius:6px;overflow:hidden}
+.hundred > div{position:relative;min-width:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:500;color:var(--ink);transform-origin:left}
+.hundred > div span{background:var(--surface);padding:1px 6px;border-radius:4px;white-space:nowrap}
+.hundred .excseg{background-image:repeating-linear-gradient(135deg,var(--ink-2) 0 1.5px,transparent 1.5px 7px);background-color:var(--grid);color:var(--ink)}
+.hundred .excseg span{background:var(--surface);padding:1px 6px;border-radius:4px}
+.famtable{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,.7fr));gap:0;font-size:13.5px;margin-top:16px}
+.famtable > div{padding:8px 6px;border-bottom:1px solid var(--grid);min-width:0}
+.famtable .th{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line)}
+.famtable .r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.famtable .fname{display:flex;gap:9px;align-items:baseline}
+.famtable .fname small{display:block;color:var(--muted);font-size:12px}
+.famtable .pts{font-weight:600;color:var(--ink)}
+
+.ribbon{position:relative}
+.ribbon svg{display:block;width:100%;height:240px}
+.ribbon .lab{position:absolute;transform:translateX(-50%);font-family:var(--mono);font-size:11.5px;color:var(--ink-2);white-space:nowrap}
+
+.segs{display:grid;grid-template-columns:minmax(0,2.1fr) minmax(0,1fr) minmax(0,1fr) 64px;font-size:13.5px}
+.segs > div{padding:7px 8px;border-bottom:1px solid var(--grid);min-width:0;display:flex;align-items:center}
+.segs .th{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);align-items:flex-end}
+.segs .nm{gap:9px;align-items:flex-start;flex-direction:row}
+.segs .nm .sw{margin-top:5px}
+.segs .nm div{min-width:0}
+.segs .nm small{display:block;font-family:var(--mono);font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.segs .bc{gap:8px}
+.segs .track{flex:1;height:12px;position:relative;min-width:30px}
+.segs .bar{position:absolute;left:0;top:0;bottom:0;border-radius:0 4px 4px 0;transform-origin:left;min-width:2px}
+.segs .bar.p{opacity:1}
+.segs .bar.l{opacity:.55}
+.segs .v{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;width:44px;text-align:right;flex:none;color:var(--ink-2)}
+.segs .pt{justify-content:flex-end;font-family:var(--mono);font-weight:600;font-variant-numeric:tabular-nums}
+.segs .nm.hi small::after{content:" · few lines, many pairs";color:var(--accent);font-family:var(--body)}
+@media (max-width:620px){.segs{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 46px;font-size:13px}.segs > .nm,.segs > .th:first-child{grid-column:1/-1}.segs > .nm{border-bottom:none;padding-bottom:2px}.segs .v{width:38px;font-size:11px}.segs .track{min-width:20px}.famtable .fname small{display:none}}
+.btn{justify-self:start;font:500 13px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;margin-top:12px}
+.btn:hover{border-color:var(--ink-2)} .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.hbars{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 12px;align-items:center;font-size:13px}
+.hbars .k{font-family:var(--mono);font-size:12px;color:var(--ink);white-space:nowrap}
+.hbars .t{position:relative;height:18px;display:flex;align-items:center;gap:8px}
+.hbars .b{height:14px;border-radius:0 4px 4px 0;transform-origin:left;flex:none;min-width:2px}
+.hbars .val{font-family:var(--mono);font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.exc{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,2fr) 120px;font-size:13.5px}
+.exc > div{padding:7px 8px;border-bottom:1px solid var(--grid);display:flex;align-items:center;gap:8px;min-width:0}
+.exc .th{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line)}
+.exc .code{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
+.exc .b{height:14px;border-radius:0 4px 4px 0;background:var(--accent);transform-origin:left;flex:none;min-width:2px}
+.exc .val{font-family:var(--mono);font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.exc .w{justify-content:flex-end;white-space:nowrap;font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.exc .w em{font-style:normal;color:var(--muted);margin-left:4px}
+@media (max-width:520px){.exc{grid-template-columns:minmax(0,1.3fr) minmax(0,1.6fr) 64px}.exc .w em{display:none}}
+
+.cols{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:end;height:200px;padding-top:22px;border-bottom:1px solid var(--line)}
+.cols .c{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.cols .c .bar{width:min(28px,70%);border-radius:4px 4px 0 0;transform-origin:bottom;min-height:2px}
+.cols .c .v{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);margin-bottom:4px;white-space:nowrap}
+.cols-x{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:center;margin-top:6px}
+.callout{border-left:2px solid var(--ink);padding:2px 0 2px 14px;font-size:14px;color:var(--ink-2)}
+.callout strong{color:var(--ink)}
+
+.ents{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.ent{border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:var(--surface);display:grid;gap:3px;min-width:0}
+.ent .e1{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.ent .e1 b{font-family:var(--mono);font-size:13px;font-weight:500}
+.ent .e1 span{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.ent .role{font-size:11.5px;color:var(--muted);line-height:1.3;min-height:2.6em}
+.ent .mini{height:4px;background:var(--grid);border-radius:2px;overflow:hidden}
+.ent .mini i{display:block;height:100%;background:var(--ink-2);border-radius:2px;transform-origin:left}
+.ent .n{font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.ent.new{border-style:dashed;background:transparent}
+
+.fcols{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;height:170px;align-items:end}
+.fcol{display:flex;flex-direction:column-reverse;align-items:center;gap:2px;height:100%;justify-content:flex-start;min-width:0}
+.fcol i{width:min(52px,82%)}
+.fcol i{display:block;border-radius:2px;transform-origin:bottom}
+.fcol i:last-child{border-radius:4px 4px 2px 2px}
+.fx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;margin-top:6px}
+
+footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);display:grid;gap:8px;font-size:13px;color:var(--muted)}
+
+/* tooltip */
+#tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12.5px;line-height:1.45;padding:8px 10px;border-radius:8px;max-width:280px;opacity:0;transform:translateY(4px);transition:opacity .12s, transform .12s;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+#tip.on{opacity:1;transform:none}
+#tip b{font-weight:600}
+[data-tip]{cursor:default}
+[data-tip]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* motion: only when JS + IntersectionObserver are present and motion is welcome */
+.anim .rv{opacity:0;transform:translateY(14px)}
+.anim .rv.in{opacity:1;transform:none;transition:opacity .7s cubic-bezier(.2,.7,.2,1) var(--d,0s), transform .7s cubic-bezier(.2,.7,.2,1) var(--d,0s)}
+.anim .grow:not(.in) .gx{transform:scaleX(0)}
+.anim .grow:not(.in) .gy{transform:scaleY(0)}
+.anim .grow .gx,.anim .grow .gy{transition:transform .9s cubic-bezier(.2,.7,.2,1) var(--d,0s)}
+.anim .grow:not(.in) svg .gyr{transform:scaleY(0)}
+.anim .grow svg .gyr{transform-box:fill-box;transform-origin:bottom;transition:transform .8s cubic-bezier(.2,.7,.2,1) var(--d,0s)}
+.anim .grow:not(.in) .rib{opacity:0}
+.anim .grow .rib{transition:opacity 1s ease var(--d,0s)}
+.anim .wires path.draw{stroke-dasharray:var(--len);stroke-dashoffset:var(--len)}
+.anim .wires.in path.draw{stroke-dashoffset:0;transition:stroke-dashoffset 1.1s cubic-bezier(.3,.6,.2,1) var(--d,0s)}
+.anim .wires:not(.in) path.amb,.anim .wires:not(.in) circle{opacity:0}
+.anim .wires path.amb,.anim .wires circle{transition:opacity .8s ease var(--d,0s)}
+@media (prefers-reduced-motion: reduce){ .files .edge.flowing{animation:none} }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow rv">Talky × Anthropic · Close the Books · dataset briefing</div>
+  <h1 class="rv" style="--d:.05s">What is this money?</h1>
+  <p class="lede rv" style="--d:.1s">Every bank line asks it. Grupo Valtermia is a synthetic water-equipment group: 17 entities, 12 currencies and about 200,000 bank lines every half-year. This page shows what data we get, how the files connect, and which kinds of cases hold the 100 points.</p>
+  <div class="stats rv" style="--d:.15s" id="stats"></div>
+  <nav class="toc rv" style="--d:.2s" aria-label="Sections">
+    <a href="#task">The task</a><a href="#phases">Phases & drift</a><a href="#files">Files</a><a href="#points">Where the points are</a><a href="#exceptions">Exceptions</a><a href="#shape">Lines & categories</a><a href="#world">Entities & formats</a>
+  </nav>
+</header>
+
+<!-- ============ 1. TASK ============ -->
+<section id="task">
+  <div class="head rv">
+    <div class="eyebrow">The task</div>
+    <h2>What do we have to say about each bank line?</h2>
+    <p class="answer">Which open items it settles and <strong>how much of each</strong>. If it settles none, <strong>what it is</strong> (a category). And when cash and paperwork disagree, <strong>why</strong> (an exception). Here is one real line from TRAIN.</p>
+  </div>
+
+  <div class="flow rv" id="flow">
+    <svg class="wires" id="wires" aria-hidden="true"></svg>
+    <div class="bankcard" id="bankcard">
+      <div class="bc-top">
+        <div class="eyebrow">Bank line · money in</div>
+        <div class="amt">+5,368.52<small>EUR</small></div>
+      </div>
+      <div class="kv"><span>BT-2025-0047048</span><span>ES01 · Norma 43</span><span>booked 2025-02-18</span></div>
+      <div class="n43" aria-label="Bank text, split in 38-character fields">
+        <span class="fld" data-n="1">TRANSFERENCIA DE <span class="hl payer" id="h-payer">RHH HOTELES S.L.U.</span></span>
+        <span class="fld" data-n="2">CONCEPTO: FRAS <span class="hl amb" id="h-a">FV24-0223</span> <span class="hl" id="h-b">0224722</span> <span class="hl" id="h-c">02228</span></span>
+        <span class="fld" data-n="3"><span class="hl" id="h-c2">96</span> <span class="cut">022</span></span>
+        <span class="fld" data-n="4">ORDENANTE ES6094369200251550072991</span>
+      </div>
+      <p class="note">Norma 43 prints the text in 38-character fields. Invoice numbers lose their prefix and get cut at the field edge: <span class="mono">02228 | 96</span> is one number split in two.</p>
+    </div>
+    <div class="items" id="items">
+      <div class="payerrow"><span class="dot"></span>Payer name → customer <b>RHH Hoteles S.L.U.</b> · 4 open invoices settled</div>
+      <div class="item" id="i1"><span class="doc">FV24-<u>02228</u><u>96</u></span><span class="a">550.66</span><span class="seen">issued 2024-11-13 · seen as “02228 | 96”, split by the field edge</span></div>
+      <div class="item" id="i2"><span class="doc">FV24-<u>0224722</u></span><span class="a">1,746.99</span><span class="seen">issued 2024-12-10 · seen as “0224722”, prefix dropped</span></div>
+      <div class="item" id="i3"><span class="doc"><u>FV24-0223</u>648</span><span class="a">2,027.38</span><span class="seen">issued 2024-11-27 · “FV24-0223…” fits this one…</span></div>
+      <div class="item" id="i4"><span class="doc"><u>FV24-0223</u>471</span><span class="a">1,043.49</span><span class="seen">issued 2024-11-25 · …and this one. Only the amount decides.</span></div>
+      <div class="sum"><span>Sum of the four</span><span><span class="num">5,368.52</span> <span class="ok">= bank amount ✓</span></span></div>
+    </div>
+  </div>
+
+  <div class="grid2 rv">
+    <div class="panel">
+      <h3>What we submit for this line</h3>
+      <p class="sub">One row per item settled, amount in the item currency. The golden answer has exactly these four rows (segment <code>ar_ref_noise</code>, difficulty 2).</p>
+<div class="csv"><span class="h">bank_txn_id,item_id,amount,category,exception</span>
+<b>BT-2025-0047048</b>,ARI-2024-0765326,550.66,,
+<b>BT-2025-0047048</b>,ARI-2024-2754108,1746.99,,
+<b>BT-2025-0047048</b>,ARI-2024-4322590,2027.38,,
+<b>BT-2025-0047048</b>,ARI-2024-4469351,1043.49,,</div>
+    </div>
+    <div class="panel">
+      <h3>How it is scored</h3>
+      <p class="sub">Score = 100 × (0.5 · allocation F1 + 0.3 · transaction accuracy + 0.2 · exception macro-F1)</p>
+      <div class="hbars" style="grid-template-columns:auto minmax(0,1fr)">
+        <span class="k">50 pts</span><span class="ink2" style="font-size:13.5px"><b class="ink" style="font-weight:600">Allocation F1</b>, counted per (line, item) pair. Amount must be within 0.5 %. Here: 4 pairs.</span>
+        <span class="k">30 pts</span><span class="ink2" style="font-size:13.5px"><b class="ink" style="font-weight:600">Transaction accuracy</b>, per bank line, all or nothing. Here: 1 line, right only if all 4 rows are right.</span>
+        <span class="k">20 pts</span><span class="ink2" style="font-size:13.5px"><b class="ink" style="font-weight:600">Exception macro-F1</b>, the average F1 over the 10 exception codes. Each code weighs the same.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid3">
+    <div class="panel case rv" style="--d:0s">
+      <span class="tag">NO ITEM → CATEGORY</span>
+      <div class="line"><span class="m">FR01 · 2025-01-09 ·</span> −1.20 EUR<br>COM. TRANSF. SEPA</div>
+      <p>A transfer fee. It settles no invoice, so it gets one row with a category from <code>categories.csv</code>.</p>
+      <div class="csv">BT-2025-0007708,,,BANK_FEES,</div>
+    </div>
+    <div class="panel case rv" style="--d:.08s">
+      <span class="tag">CASH ≠ PAPER → EXCEPTION</span>
+      <div class="line"><span class="m">DE01 · 2025-01-06 ·</span> +4,124.67 EUR<br>SEPA-UEBERWEISUNG … SVWZ+RE-NR RE240216522</div>
+      <p>Invoice RE240216522 is 4,208.85, terms “2 % within 10 days”, paid 7 days after issue. 4,208.85 × 0.98 = 4,124.67, so the invoice is fully cleared with a discount.</p>
+      <div class="csv">BT-2025-0002660,ARI-2024-4578236,4208.85,,SHORT_DISCOUNT</div>
+    </div>
+    <div class="panel case rv" style="--d:.16s">
+      <span class="tag">NOTHING FITS → UNIDENTIFIED</span>
+      <div class="line"><span class="m">AU01 · 2025-01-16 ·</span> +1,022.18 AUD<br>DIRECT CREDIT TAYLOR &amp; BAKER RESOR ORDER</div>
+      <p>An open AUD invoice of exactly 1,022.18 exists (INV24-0111440), but this receipt is not its payment. The golden says: don't force a match.</p>
+      <div class="csv">BT-2025-0014979,,,UNIDENTIFIED,UNIDENTIFIED</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. PHASES ============ -->
+<section id="phases">
+  <div class="head rv">
+    <div class="eyebrow">Phases &amp; drift</div>
+    <h2>Which data do we get, and when does it change?</h2>
+    <p class="answer">Four years of TRAIN <strong>with answers</strong>, then six months of LIVE for the leaderboard, then FINAL at 18:00 for <strong>one scored shot</strong>. The month-by-month volume is steady, about 31,000 lines a month. What changes is how the data looks.</p>
+  </div>
+  <div class="panel rv grow" id="tlpanel">
+    <h3>How many bank lines arrive each month?</h3>
+    <p class="sub">Bank lines per booking month, TRAIN and LIVE counted from <code>bank_transactions</code>. FINAL is drawn at its announced size (about 220,000 lines over 6 months). Numbered markers are the known drift events.</p>
+    <div class="scroll-x"><div class="tl" id="tl"></div></div>
+    <ol class="drift" id="drift"></ol>
+  </div>
+  <div class="phases" id="phasecards"></div>
+</section>
+
+<!-- ============ 3. FILES ============ -->
+<section id="files">
+  <div class="head rv">
+    <div class="eyebrow">The files</div>
+    <h2>How do the files connect?</h2>
+    <p class="answer">A bank line on one side, open items on the other. Most lines link <strong>directly</strong>, through the payer name and the amount. The rest link through an <strong>evidence file</strong> that lists what one line contains: a batch, a payment run, a remittance advice. Counts below are for LIVE.</p>
+  </div>
+  <div class="panel files rv">
+    <div class="scroll-x" id="filesvg"></div>
+  </div>
+</section>
+
+<!-- ============ 4. POINTS ============ -->
+<section id="points">
+  <div class="head rv">
+    <div class="eyebrow">Where the points are</div>
+    <h2>Which kinds of cases hold the points?</h2>
+    <p class="answer" id="pointsAnswer"></p>
+  </div>
+
+  <div class="panel rv grow" id="hundredPanel">
+    <h3>How are the 100 points split across families of cases?</h3>
+    <p class="sub">≈ points = 30 × share of bank lines + 50 × share of (line, item) pairs, in a LIVE-like window (TRAIN, Jan–Jun 2025). That is what a family would earn if it were solved perfectly. The 20 exception points are scored per code, shown in the next section.</p>
+    <div class="hundred" id="hundred"></div>
+    <div class="famtable" id="famtable"></div>
+  </div>
+
+  <div class="panel rv grow" id="ribbonPanel">
+    <h3>Are the lines and the pairs made of the same cases?</h3>
+    <p class="sub">No. Each band is one family. Top: its share of bank lines (30 points). Bottom: its share of pairs (50 points). Remittances and batches are thin on top and wide below: few lines, hundreds of items each.</p>
+    <div class="ribbon" id="ribbon"></div>
+    <div class="legend" id="famlegend" style="margin-top:14px"></div>
+  </div>
+
+  <div class="panel rv grow" id="segPanel">
+    <h3>Which individual case types matter most?</h3>
+    <p class="sub">The <code>segment</code> column of the golden, ranked by ≈ points. Faded bar = share of lines, solid bar = share of pairs, both on the same 0–22 % scale. Hover a row for the counts.</p>
+    <div class="segs" id="segs"></div>
+    <button class="btn" id="segmore" type="button">Show all segments</button>
+  </div>
+</section>
+
+<!-- ============ 5. EXCEPTIONS ============ -->
+<section id="exceptions">
+  <div class="head rv">
+    <div class="eyebrow">Exceptions</div>
+    <h2>Which exceptions occur, and what is each one worth?</h2>
+    <p class="answer" id="excAnswer"></p>
+  </div>
+  <div class="panel rv grow">
+    <h3>How many golden rows carry each exception code?</h3>
+    <p class="sub">Rows with a non-empty <code>exception</code>, LIVE-like window. Every code is worth the same 2 points of the macro-F1, so the right column shows how many rows share those 2 points.</p>
+    <div class="exc" id="exc"></div>
+  </div>
+</section>
+
+<!-- ============ 6. SHAPE ============ -->
+<section id="shape">
+  <div class="head rv">
+    <div class="eyebrow">Lines &amp; categories</div>
+    <h2>How many items does one bank line settle?</h2>
+    <p class="answer" id="shapeAnswer"></p>
+  </div>
+  <div class="grid2">
+    <div class="panel rv grow">
+      <h3>How many bank lines fall in each size bucket?</h3>
+      <p class="sub">Bank lines by number of items settled (LIVE-like window).</p>
+      <div class="cols" id="colsL"></div><div class="cols-x" id="colsLx"></div>
+    </div>
+    <div class="panel rv grow" style="--d:.08s">
+      <h3>How many pairs does each bucket carry?</h3>
+      <p class="sub">(line, item) pairs by the same buckets. The 50 allocation points follow this chart.</p>
+      <div class="cols" id="colsP"></div><div class="cols-x" id="colsPx"></div>
+    </div>
+  </div>
+  <div class="panel rv grow">
+    <h3>What are the lines that settle no item?</h3>
+    <p class="sub" id="catSub"></p>
+    <div class="hbars" id="cats"></div>
+  </div>
+</section>
+
+<!-- ============ 7. WORLD ============ -->
+<section id="world">
+  <div class="head rv">
+    <div class="eyebrow">Entities &amp; formats</div>
+    <h2>Who books the lines, in which currency and which format?</h2>
+    <p class="answer" id="worldAnswer"></p>
+  </div>
+  <div class="panel rv grow">
+    <h3>How many LIVE bank lines does each entity have?</h3>
+    <p class="sub">17 entities from <code>masters/entities.csv</code>, ordered by LIVE volume. ZA01 joins in FINAL.</p>
+    <div class="ents" id="ents"></div>
+  </div>
+  <div class="grid2">
+    <div class="panel rv grow">
+      <h3>Which currencies are the accounts in?</h3>
+      <p class="sub">LIVE bank lines by account currency.</p>
+      <div class="hbars" id="ccy"></div>
+    </div>
+    <div class="panel rv grow" style="--d:.08s">
+      <h3>Which statement formats do the lines come from?</h3>
+      <p class="sub">LIVE bank lines per month by raw format. Banco del Moncayo moves from Norma 43 to camt.053 on 1 Oct 2025.</p>
+      <div class="legend" id="fleg" style="margin-bottom:12px"></div>
+      <div class="fcols" id="fcols"></div><div class="fx" id="fx"></div>
+      <p class="note" id="moncayoNote" style="margin-top:12px"></p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div><b class="ink">How these numbers were made.</b> Every figure is counted from the hackathon data in <code>data/</code>. The LIVE-like window is TRAIN bank lines booked 2025-01-01 → 2025-06-30, joined to <code>golden_allocations</code>. Family groupings and plain-language names are ours; the codes in grey are the real <code>segment</code> values. “≈ points” is an upper bound that ignores precision and the exception part.</div>
+  <div>FINAL sizes are the organisers' announcement; everything else is measured.</div>
+</footer>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const D = /*__DATA__*/null;
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const nf = n => Math.round(n).toLocaleString('en-US');
+const big = n => n >= 1e6 ? (n/1e6).toFixed(2).replace(/\.?0+$/,'')+' M' : n >= 1e4 ? Math.round(n/1e3)+' k' : nf(n);
+const pct = (x, d) => { const v = x*100; const dd = d ?? (v < 1 ? 1 : v < 10 ? 1 : 0); return v.toFixed(dd) + ' %'; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const FAM = {
+  receipts:   {name:'Customer transfers', desc:'one customer pays by transfer, with or without a usable reference'},
+  payments:   {name:'Supplier payments', desc:'our transfers, payment runs, confirming, supplier direct debits'},
+  remittances:{name:'Remittance advices', desc:'big customers send a list of invoices and deductions'},
+  batches:    {name:'Collection batches', desc:'direct-debit, card and cheque batches: one line, many receipts'},
+  exceptions: {name:'Short-pays, returns, duplicates', desc:'discounts, partials, withholding, returns, overpayments'},
+  pdf:        {name:'PDF small print', desc:'instalments, retentions, advances, replaced invoices'},
+  nonitem:    {name:'No-item lines', desc:'fees, cash pool, payroll, unidentified receipts…'},
+};
+const FORDER = ['receipts','payments','remittances','batches','exceptions','pdf','nonitem'];
+const fc = f => `var(--f-${f})`;
+
+const SEG = {
+ar_ref_noise:'Customer transfer, noisy or no reference', ap_payment_multi:'Supplier transfer paying several invoices', ar_short_dispute:'Remittance with disputed deductions',
+ar_dd_batch:'Direct-debit batch (one line, many receipts)', ar_1to1:'Customer pays one invoice, clean reference', ar_1toN_remittance:'Remittance advice listing many invoices',
+ap_payment_single:'Supplier transfer, one invoice', ar_1toN_text:'Several invoice numbers in the bank text', ap_fx:'Supplier payment in another currency',
+ar_1toN_credit_note:'Invoices minus a credit note', ar_card_settlement:'Card acquirer settlement', ap_paid_by_holding:'Supplier paid by the holding (ES00)',
+ar_short_discount:'Early-payment discount taken', ar_same_amount_fifo:'Same-amount invoices, oldest first', ap_credit_note_netted:'Supplier payment net of a credit note',
+ap_partial:'Partial supplier payment', ap_direct_debit:'Supplier collects by direct debit', ar_fx:'Customer pays in another currency', nonitem_bank_fees:'Bank fees',
+ar_instalment:'Instalment plan (from the PDF)', ar_same_amount_month:'Same amount, month named in the text', ar_partial:'Partial customer payment',
+ar_dd_returned:'Returned direct debit', ar_n_to_m:'Several lines ↔ several invoices', ar_cheque_deposit:'Cheque / lockbox deposit', ap_confirming:'Confirming remittance',
+ap_supplier_refund:'Supplier refunds its credit note', ar_short_withholding:'Tax withheld at source', unidentified:'Unidentified receipt',
+nonitem_bank_fees_intl:'International transfer fees', ap_factored:'Supplier invoice paid to a factor', ar_discount_late:'Discount taken too late (partial)',
+ar_dispute_settlement:'Disputed amount paid later', nonitem_cash_pool:'Cash-pool sweep', ar_dd_represented_transfer:'Returned debit, later paid by transfer',
+unidentified_lookalike:'Unidentified, amount matches an invoice', ar_retention:'Guarantee retention (PDF)', ar_third_party_confirming:'Paid by a confirming bank',
+ar_retention_release:'Retention released', ar_duplicate_payment:'Customer pays twice', ar_third_party_parent:'Parent company pays', ar_third_party_agency:'Collection agency pays',
+ar_overpayment:'Overpayment', ar_replaced_invoice:'Cancelled and replaced invoice (PDF)', ar_new_iban:'New paying account (PDF notice)', nonitem_payroll:'Payroll',
+nonitem_intercompany:'Intercompany financing', ar_advance_deduction:'Advance to deduct (PDF)', ap_returned_transfer:'Our transfer rejected', nonitem_leasing:'Leasing',
+customer_refund:'Refund to a customer', nonitem_bank_reversal:'Bank error and its reversal', customer_advance:'Proforma paid in advance', ar_short_bank_charges:'Intermediary bank charges',
+nonitem_internal_transfer:'Own-account transfer', nonitem_fx_deal:'FX deal', nonitem_tax_payment:'Tax payment', nonitem_loan_repayment:'Loan repayment',
+nonitem_social_security:'Social security', ap_duplicate_payment:'We pay a supplier twice', ar_cheque_returned:'Returned cheque', nonitem_card_expenses:'Corporate card statement',
+ap_duplicate_refund:'Supplier refunds a duplicate', ar_credit_note_paid_out:'Rebate credit note paid out', ar_card_chargeback:'Card chargeback',
+nonitem_interest_income:'Interest income', nonitem_interest_expense:'Interest expense', nonitem_insurance:'Insurance', ar_1to1_remittance:'Remittance advice, one invoice',
+nonitem_loan_drawdown:'Loan drawdown', nonitem_tax_refund:'Tax refund'};
+
+const EXC = {FX_DIFFERENCE:'bank line in another currency than the invoice', SHORT_DISCOUNT:'early-payment discount within terms', PARTIAL:'item still has an open balance',
+UNIDENTIFIED:'receipt with no open item', SHORT_WITHHOLDING:'tax withheld (MX, BR, MA)', RETURNED:'debit, cheque or transfer comes back', SHORT_DISPUTE:'deduction with a stated reason',
+DUPLICATE_PAYMENT:'item paid a second time', OVERPAYMENT:'paid more than the open amount', SHORT_BANK_CHARGES:'intermediary bank fee ≤ 60 EUR'};
+
+const W = D.window; const TL = W.lines, TP = W.pairs;
+const pts = (l, p) => 30*l/TL + 50*p/TP;
+
+/* ---------- header stats ---------- */
+const P = D.phases;
+const liveItems = P.live.open_items_at_start + P.live.ar_invoices + P.live.ap_invoices + P.live.credit_notes;
+const stats = [
+  [P.train.bank_lines, 'TRAIN bank lines, Jul 2021 → Jun 2025'],
+  [P.train.golden_rows, 'golden answer rows in TRAIN'],
+  [P.live.bank_lines, 'LIVE bank lines, Jul → Dec 2025'],
+  [liveItems, 'LIVE candidate items (open at start + issued)'],
+  [17, 'legal entities, +1 in FINAL'],
+  [12, 'account currencies'],
+];
+$('#stats').innerHTML = stats.map(([v, l]) => `<div class="stat"><b data-count="${v}">${big(v)}</b><span>${l}</span></div>`).join('');
+
+/* ---------- timeline ---------- */
+(function(){
+  const m = D.monthly; const n = m.length + 6; const max = 40000;
+  const vbw = n*10, vbh = 100;
+  let bars = '';
+  m.forEach(([k, v], i) => {
+    const live = k >= '2025-07'; const h = v/max*vbh;
+    bars += `<rect class="gyr" style="--d:${(i*0.012).toFixed(3)}s" x="${i*10+1.2}" y="${vbh-h}" width="7.6" height="${h}" rx="1.2" fill="${live ? 'var(--accent)' : 'var(--ink-2)'}" opacity="${live ? 1 : .42}"/>`;
+    bars += `<rect x="${i*10}" y="0" width="10" height="${vbh}" fill="transparent" data-tip="<b>${k}</b><br>${nf(v)} bank lines · ${live ? 'LIVE' : 'TRAIN'}"/>`;
+  });
+  const fin = 220000/6; const fh = fin/max*vbh;
+  bars += `<rect x="${m.length*10+1.2}" y="${vbh-fh}" width="${6*10-2.4}" height="${fh}" fill="var(--grid)" stroke="var(--muted)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" data-tip="<b>FINAL, 2026-01 → 06</b><br>about 220,000 lines announced (≈ 36,700 / month). Released 18:00."/>`;
+  let grid = '';
+  [10000,20000,30000,40000].forEach(g => { const y = vbh - g/max*vbh; grid += `<line x1="0" x2="${vbw}" y1="${y}" y2="${y}" stroke="var(--grid)" vector-effect="non-scaling-stroke"/>`; });
+  const ylab = [0,10000,20000,30000,40000].map(g => `<span class="tl-y" style="top:${100 - g/max*100}%">${g ? g/1000 + ' k' : '0'}</span>`).join('');
+  const ev = [
+    ['2025-09', 'Sep 2025', 'A big customer changes its remittance-advice layout.'],
+    ['2025-10', '1 Oct 2025', 'Banco del Moncayo: Norma 43 → camt.053, texts look different.'],
+    ['2026-01', '1 Jan 2026', 'New subsidiary ZA01 (South Africa, ZAR, invoices “KWI…”). New masters in final/masters_final/.'],
+    ['2026-02', '1 Feb 2026', 'IT01 opens a new collections account; the old one stays valid.'],
+    ['2026-04', '1 Apr 2026', 'ZA01 is renamed. 2026 customers also pay later.'],
+  ];
+  const idx = k => { const [y, mo] = k.split('-').map(Number); return (y-2021)*12 + (mo-7); };
+  const rows = [0, 26, 0, 26, 52];
+  const mk = ev.map((e, i) => `<div class="mk" style="left:${(idx(e[0])+.5)/n*100}%;--top:${-rows[i] - 6}px"><i tabindex="0" data-tip="<b>${e[1]}</b><br>${esc(e[2])}">${i+1}</i></div>`).join('');
+  const years = []; for (let y = 2022; y <= 2026; y++) years.push(`<span style="left:${idx(y+'-01')/n*100}%">${y}</span>`);
+  $('#tl').innerHTML = `<div class="tl-plot">${ylab}<svg viewBox="0 0 ${vbw} ${vbh}" preserveAspectRatio="none" role="img" aria-label="Monthly bank lines, July 2021 to June 2026">${grid}${bars}</svg>${mk}</div>
+    <div class="tl-years">${years.join('')}</div>
+    <div class="tl-bands"><div class="band"><b>TRAIN</b>4 years · with answers</div><div class="band live"><b>LIVE</b>leaderboard</div><div class="band final"><b>FINAL</b>one shot</div></div>`;
+  $('#drift').innerHTML = ev.map((e, i) => `<li><i>${i+1}</i><span><b>${e[1]}</b>${esc(e[2])}</span></li>`).join('');
+
+  const t = P.train, l = P.live;
+  const card = (cls, name, dates, pill, rows, extra) => `<div class="panel phase ${cls} rv"><div class="ph-h"><h3>${name}</h3>${pill}</div><div class="dates">${dates}</div><dl class="vol">${rows.map(([a,b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>${extra || ''}</div>`;
+  $('#phasecards').innerHTML =
+    card('', 'TRAIN', '2021-07-01 → 2025-06-30 · 48 months', '<span class="pill key">has answers</span>', [
+      ['Bank lines', nf(t.bank_lines)], ['Golden rows', nf(t.golden_rows)], ['AR invoices', nf(t.ar_invoices)], ['AP invoices', nf(t.ap_invoices)], ['Credit notes', nf(t.credit_notes)], ['Invoice PDFs', nf(t.pdfs)], ['Remittance advices', nf(t.remittances)]],
+      '<p class="note">Use Jan–Jun 2025 as a LIVE-like test window: same shape as LIVE, but with answers.</p>') +
+    card('', 'LIVE', '2025-07-01 → 2025-12-31 · 6 months', '<span class="pill">leaderboard</span>', [
+      ['Bank lines', nf(l.bank_lines)], ['Open items at start', nf(l.open_items_at_start)], ['AR invoices', nf(l.ar_invoices)], ['AP invoices', nf(l.ap_invoices)], ['Credit notes', nf(l.credit_notes)], ['Invoice PDFs', nf(l.pdfs)], ['Remittance advices', nf(l.remittances)]],
+      '<p class="note">20 submissions a day per team, 1 every 3 minutes. Only the integration owner submits.</p>') +
+    card('final', 'FINAL', '2026-01-01 → 2026-06-30 · released 18:00', '<span class="pill">one shot</span>', [
+      ['Bank lines', '≈ 220,000'], ['New entity', 'ZA01 · ZAR'], ['New masters', 'masters_final/'], ['Submissions', '1 scored'], ['Deadline', '19:30']],
+      '<p class="note">Same pipeline, rerun on <code>final</code>. A file rejected by validation does not use the shot. Score hidden until 20:30.</p>');
+})();
+
+/* ---------- files diagram ---------- */
+(function(){
+  const l = D.phases.live;
+  const B = (x, y, w, h, cls='box') => `<rect class="${cls}" x="${x}" y="${y}" width="${w}" height="${h}" rx="9"/>`;
+  const T = (x, y, cls, s, anchor='start') => `<text x="${x}" y="${y}" class="${cls}" text-anchor="${anchor}">${s}</text>`;
+  let s = `<svg viewBox="0 0 1120 610" role="img" aria-label="Diagram: bank lines connect to open items directly or through evidence files">`;
+  // column heads
+  s += T(20, 18, 'colh', 'BANK SIDE') + T(420, 18, 'colh', 'EVIDENCE: WHAT ONE LINE CONTAINS') + T(850, 18, 'colh', 'ITEM SIDE');
+  // statements -> hub
+  s += B(20, 120, 250, 76) + T(36, 146, 't1', 'bank_statements/') + T(36, 166, 't2', `${nf(l.statements)} raw files, one per account·month`) + T(36, 184, 't3', 'n43 · mt940 (.sta) · camt.053 (.xml)');
+  s += `<path class="edge" d="M145 196 V 252" marker-end="url(#ar)"/>` + T(155, 230, 't3', 'normalised, de-duplicated');
+  s += B(20, 258, 250, 132, 'box hub') + T(36, 284, 't1', 'bank_transactions') + T(36, 316, 'big', nf(l.bank_lines)) + T(36, 338, 't2', 'bank lines (LIVE)') + T(36, 360, 't3', 'amount · dates · text · ref1/ref2') + T(36, 376, 't3', 'payer name · IBAN · end_to_end_id');
+  // items frame
+  s += `<rect class="frame" x="840" y="90" width="270" height="372" rx="12"/>` + T(856, 112, 'colh', 'OPEN ITEMS · ARI ARC API APC');
+  const items = [['open_items_at_start', l.open_items_at_start, 'still open on 1 Jul 2025'], ['ar_invoices', l.ar_invoices, 'our invoices to customers'], ['ap_invoices', l.ap_invoices, 'supplier invoices to us'], ['credit_notes', l.credit_notes, 'AR + AP, netted or refunded']];
+  items.forEach(([n, v, d], i) => { const y = 126 + i*82; s += B(856, y, 238, 70) + T(872, y+22, 't1', n) + T(872, y+42, 't2', nf(v) + ' items') + T(872, y+60, 't3', d); });
+  // golden
+  s += B(856, 476, 238, 50, 'box dash') + T(872, 497, 't1', 'golden_allocations') + T(872, 515, 't3', `TRAIN only · ${big(D.phases.train.golden_rows)} rows · the answer key`);
+  // evidence
+  const ev = [
+    ['direct_debit_batches/', l.dd_files, 'files', 'batch total + date → receipts', 'gives all items of a SEPA/BACS/ACH batch'],
+    ['card_settlements/', l.card_files, 'files', 'settlement → card orders at gross', 'acquirer fee is not an exception'],
+    ['cheque_deposits/', l.cheque_files, 'files', 'deposit total → cheques + stub refs', 'US lockbox, FR/MA cheque remittances'],
+    ['payment_runs/', l.run_files, 'files', 'end_to_end_id → supplier documents', 'transfers, aggregated, confirming'],
+    ['remittance_advices/', l.remittances, 'advices', 'payer ref → invoices + deductions', 'pdf · csv · xlsx · txt, may arrive late'],
+    ['pdfs/', l.pdfs, 'PDFs', 'document_number → hidden clauses', 'instalments, retention, replaces X, month'],
+  ];
+  ev.forEach(([n, v, u, k, d], i) => {
+    const y = 56 + i*78, cy = y + 33;
+    s += B(420, y, 284, 66) + T(436, y+22, 't1', n) + T(688, y+22, 't1', nf(v), 'end') + T(436, y+41, 't2', k) + T(436, y+57, 't3', d);
+    s += `<path class="edge flowing" d="M270 ${324} C 350 ${324}, 340 ${cy}, 420 ${cy}"/>`;
+    s += `<path class="edge flowing" d="M704 ${cy} C 780 ${cy}, 770 ${Math.max(140, Math.min(440, cy))}, 840 ${Math.max(140, Math.min(440, cy))}"/>`;
+  });
+  // direct lane
+  s += `<path class="edge direct" d="M270 282 C 350 282, 330 34, 420 34 L 940 34 C 965 34, 975 50, 975 88" marker-end="url(#ar2)"/>`;
+  s += `<rect class="chipbg" x="452" y="22" width="216" height="24" rx="12"/>` + T(560, 38, 't2', 'direct: payer + references + amount', 'middle');
+  // masters band
+  s += `<rect class="frame" x="20" y="548" width="1090" height="56" rx="12"/>` + T(36, 570, 'colh', 'MASTERS · USED EVERYWHERE');
+  const ms = [['customers', nf(D.n_customers)], ['suppliers', nf(D.n_suppliers)], ['bank_accounts', '47'], ['payment_terms', '13'], ['fx_rates', 'ECB daily'], ['categories', '21'], ['entities', '17']];
+  let mx = 36; ms.forEach(([a, b]) => { s += T(mx, 592, 't1', a) + T(mx + a.length*8.1 + 8, 592, 't3', b); mx += a.length*8.1 + b.length*6.4 + 34; });
+  s += `<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--ink-2)"/></marker><marker id="ar2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--accent)"/></marker></defs></svg>`;
+  $('#filesvg').innerHTML = s;
+})();
+
+/* ---------- points ---------- */
+(function(){
+  const F = D.families;
+  const fp = f => pts(F[f][0], F[f][1]);
+  const ordered = FORDER.slice();
+  // 100-point bar
+  let h = ordered.map((f, i) => { const v = fp(f); const lbl = v >= 4 ? `<span>${v.toFixed(1)}</span>` : ''; return `<div class="gx" style="flex:${v};background:${fc(f)};--d:${i*0.06}s" data-tip="<b>${FAM[f].name}</b><br>≈ ${v.toFixed(1)} of 100 points" tabindex="0">${lbl}</div>`; }).join('');
+  h += `<div class="excseg gx" style="flex:20;--d:.45s" data-tip="<b>Exception macro-F1</b><br>20 points: 10 codes × 2 points" tabindex="0"><span>20 · exceptions</span></div>`;
+  $('#hundred').innerHTML = h;
+  fitLabels();
+  let t = `<div class="th">Family</div><div class="th r">Lines</div><div class="th r">Pairs</div><div class="th r">≈ pts</div>`;
+  ordered.slice().sort((a, b) => fp(b) - fp(a)).forEach(f => {
+    t += `<div class="fname"><span class="sw" style="background:${fc(f)}"></span><span>${FAM[f].name}<small>${FAM[f].desc}</small></span></div><div class="r">${pct(F[f][0]/TL)}</div><div class="r">${pct(F[f][1]/TP)}</div><div class="r pts">${fp(f).toFixed(1)}</div>`;
+  });
+  $('#famtable').innerHTML = t;
+  const rem = F.remittances, bat = F.batches;
+  $('#pointsAnswer').innerHTML = `Customer transfers and supplier payments are the bulk: <strong>${pct(F.receipts[0]/TL)}</strong> and <strong>${pct(F.payments[0]/TL)}</strong> of lines. But remittance advices and collection batches are only <strong>${pct((rem[0]+bat[0])/TL)}</strong> of lines and carry <strong>${pct((rem[1]+bat[1])/TP)}</strong> of the pairs. That is ≈ ${(fp('remittances')+fp('batches')).toFixed(0)} points from about ${nf(rem[0]+bat[0])} lines.`;
+
+  // ribbon
+  const gap = 0.25; // % units
+  let x0 = 0, x1 = 0; const top = [], bot = [];
+  ordered.forEach(f => { const a = F[f][0]/TL*100, b = F[f][1]/TP*100; top.push([x0, x0 + a]); bot.push([x1, x1 + b]); x0 += a; x1 += b; });
+  const sc = 100/(100 + gap*(ordered.length-1));
+  const pos = (arr, i) => [arr[i][0]*sc + gap*i*sc, arr[i][1]*sc + gap*i*sc];
+  let svg = `<svg viewBox="0 0 100 240" preserveAspectRatio="none" aria-hidden="true">`;
+  let labs = '';
+  ordered.forEach((f, i) => {
+    const [a0, a1] = pos(top, i), [b0, b1] = pos(bot, i);
+    svg += `<path class="rib" style="--d:${.3 + i*.07}s" d="M${a0} 64 C ${a0} 120, ${b0} 120, ${b0} 176 L ${b1} 176 C ${b1} 120, ${a1} 120, ${a1} 64 Z" fill="${fc(f)}" opacity=".18"/>`;
+    svg += `<rect class="gx" style="--d:${i*.05}s;transform-origin:left;transform-box:fill-box" x="${a0}" y="34" width="${Math.max(a1-a0, .15)}" height="30" fill="${fc(f)}" data-tip="<b>${FAM[f].name}</b><br>${nf(F[f][0])} lines · ${pct(F[f][0]/TL)} of lines"/>`;
+    svg += `<rect class="gx" style="--d:${.2 + i*.05}s;transform-origin:left;transform-box:fill-box" x="${b0}" y="176" width="${Math.max(b1-b0, .15)}" height="30" fill="${fc(f)}" data-tip="<b>${FAM[f].name}</b><br>${nf(F[f][1])} pairs · ${pct(F[f][1]/TP)} of pairs"/>`;
+    if (a1 - a0 > 5) labs += `<span class="lab" style="left:${(a0+a1)/2}%;top:14px">${pct(F[f][0]/TL)}</span>`;
+    if (b1 - b0 > 5) labs += `<span class="lab" style="left:${(b0+b1)/2}%;top:212px">${pct(F[f][1]/TP)}</span>`;
+  });
+  svg += `</svg>`;
+  $('#ribbon').innerHTML = `<div class="note"><b class="ink" style="font-weight:600">Bank lines</b> · ${nf(TL)}</div><div style="position:relative">${svg}${labs}</div><div class="note" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:6px"><span><b class="ink" style="font-weight:600">(line, item) pairs</b> · ${nf(TP)}</span><span>Hover a thin band for its numbers</span></div>`;
+  $('#famlegend').innerHTML = ordered.map(f => `<span><i class="sw" style="background:${fc(f)}"></i>${FAM[f].name}</span>`).join('');
+
+  // segment table
+  const segs = D.segments.map(([s, f, l, p]) => ({s, f, l, p, pt: pts(l, p)})).sort((a, b) => b.pt - a.pt);
+  const mx = 22;
+  const HI = new Set(['ar_dd_batch','ar_short_dispute','ar_1toN_remittance','ap_fx']);
+  const row = (r, i) => `<div class="nm${HI.has(r.s) ? ' hi' : ''}" data-tip="<b>${esc(SEG[r.s] || r.s)}</b><br>${nf(r.l)} lines · ${nf(r.p)} pairs<br>${r.l ? (r.p/r.l).toFixed(1) : 0} items per line on average" tabindex="0"><i class="sw" style="background:${fc(r.f)}"></i><div>${esc(SEG[r.s] || r.s)}<small>${r.s}</small></div></div>
+    <div class="bc"><div class="track"><div class="bar l gx" style="width:${r.l/TL*100/mx*100}%;background:${fc(r.f)};--d:${Math.min(i,20)*.03}s"></div></div><span class="v">${pct(r.l/TL)}</span></div>
+    <div class="bc"><div class="track"><div class="bar p gx" style="width:${r.p/TP*100/mx*100}%;background:${fc(r.f)};--d:${Math.min(i,20)*.03 + .1}s"></div></div><span class="v">${pct(r.p/TP)}</span></div>
+    <div class="pt">${r.pt >= .1 ? r.pt.toFixed(1) : r.pt.toFixed(2)}</div>`;
+  const head = `<div class="th">Case type</div><div class="th">% of lines</div><div class="th">% of pairs</div><div class="th" style="justify-content:flex-end">≈ pts</div>`;
+  let all = false; const N = 16;
+  const draw = () => { $('#segs').innerHTML = head + segs.slice(0, all ? segs.length : N).map(row).join(''); $('#segmore').textContent = all ? `Show top ${N} only` : `Show all ${segs.length} segments`; };
+  draw();
+  $('#segmore').addEventListener('click', () => { all = !all; draw(); });
+})();
+
+/* ---------- exceptions ---------- */
+(function(){
+  const E = D.exceptions; const mx = E[0].rows;
+  let h = `<div class="th">Code</div><div class="th">Rows</div><div class="th" style="justify-content:flex-end">Rows per pt</div>`;
+  E.forEach((e, i) => {
+    h += `<div class="code" data-tip="<b>${e.exception}</b><br>${esc(EXC[e.exception])}<br>${nf(e.rows)} rows on ${nf(e.lines)} lines" tabindex="0">${e.exception}</div>
+      <div><div class="b gx" style="width:calc(${e.rows/mx} * (100% - 64px));--d:${i*.05}s"></div><span class="val">${nf(e.rows)}</span></div>
+      <div class="w">${nf(e.rows/2)}<em>/ pt</em></div>`;
+  });
+  $('#exc').innerHTML = h;
+  const a = E[0], z = E[E.length-1];
+  $('#excAnswer').innerHTML = `${pct(D.lines_with_exc/TL)} of bank lines carry at least one exception. Because the score averages F1 over the 10 codes, <strong>${nf(z.rows)} ${z.exception} rows count as much as ${nf(a.rows)} ${a.exception} rows</strong>: 2 points each. Rare codes are cheap points.`;
+})();
+
+/* ---------- shape ---------- */
+(function(){
+  const B = D.items_per_line;
+  const mk = (id, key, color) => {
+    const mx = Math.max(...B.map(b => b[key]));
+    $(id).innerHTML = B.map((b, i) => `<div class="c" data-tip="<b>${b.bucket} item${b.bucket === '1' ? '' : 's'}</b><br>${nf(b.lines)} lines · ${nf(b.pairs)} pairs" tabindex="0"><span class="v">${b[key] ? pct(b[key]/(key === 'lines' ? TL : TP)) : '0'}</span><i class="bar gy" style="height:calc(${b[key]/mx} * (100% - 22px));background:${color};--d:${i*.06}s;display:block"></i></div>`).join('');
+    $(id + 'x').innerHTML = B.map(b => `<span>${b.bucket}</span>`).join('');
+  };
+  mk('#colsL', 'lines', 'var(--ink-2)'); mk('#colsP', 'pairs', 'var(--accent)');
+  const one = B.find(b => b.bucket === '1'); const tail = B.filter(b => b.bucket === '21–100' || b.bucket === '100+');
+  const tl = tail.reduce((s, b) => s + b.lines, 0), tp = tail.reduce((s, b) => s + b.pairs, 0);
+  $('#shapeAnswer').innerHTML = `Most lines settle exactly one item (<strong>${pct(one.lines/TL)}</strong>). But the <strong>${nf(tl)} lines with more than 20 items</strong> (${pct(tl/TL)} of lines) carry <strong>${pct(tp/TP)} of all pairs</strong>. The biggest single line settles ${nf(D.max_items)} items.`;
+  const C = D.categories; const tot = C.reduce((s, c) => s + c[1], 0); const mx = C[0][1];
+  $('#catSub').innerHTML = `${nf(tot)} lines (${pct(tot/TL)} of the window) get a category instead of items. Bank fees are half of them; UNIDENTIFIED is the second biggest and also an exception code.`;
+  $('#cats').innerHTML = C.map(([k, v], i) => `<span class="k">${k}</span><span class="t" data-tip="<b>${k}</b><br>${nf(v)} lines · ${pct(v/tot)} of no-item lines"><i class="b gx" style="width:calc(${v/mx} * (100% - 90px));background:var(--f-nonitem);--d:${Math.min(i,12)*.04}s"></i><span class="val">${nf(v)}</span></span>`).join('');
+})();
+
+/* ---------- world ---------- */
+(function(){
+  const cnt = Object.fromEntries(D.live_entity); const mx = Math.max(...D.live_entity.map(e => e[1]));
+  const ents = D.entities.slice().sort((a, b) => (cnt[b[0]]||0) - (cnt[a[0]]||0));
+  let h = ents.map(([e, c, ccy, role], i) => `<div class="ent"><div class="e1"><b>${e}</b><span>${c} · ${ccy}</span></div><div class="role">${esc(role)}</div><div class="mini"><i class="gx" style="width:${(cnt[e]||0)/mx*100}%;--d:${i*.03}s"></i></div><div class="n">${nf(cnt[e]||0)} lines</div></div>`).join('');
+  h += `<div class="ent new"><div class="e1"><b>ZA01</b><span>ZA · ZAR</span></div><div class="role">acquired 2026-01-01, renamed 2026-04-01</div><div class="mini"></div><div class="n">${cnt.ZA01||0} lines in LIVE (proformas)</div></div>`;
+  $('#ents').innerHTML = h;
+  const C = D.live_currency; const tot = C.reduce((s, c) => s + c[1], 0); const cm = C[0][1];
+  $('#ccy').innerHTML = C.map(([k, v], i) => `<span class="k">${k}</span><span class="t" data-tip="<b>${k}</b><br>${nf(v)} LIVE lines"><i class="b gx" style="width:calc(${v/cm} * (100% - 96px));background:var(--ink-2);--d:${i*.04}s"></i><span class="val">${v/tot < .0005 ? nf(v) + ' lines' : pct(v/tot)}</span></span>`).join('');
+  const FM = D.live_formats_monthly; const keys = [['n43','Norma 43','var(--f-receipts)'],['mt940','MT940','var(--f-payments)'],['camt053','camt.053','var(--f-remittances)']];
+  const fmax = Math.max(...FM.map(r => r.n43 + r.mt940 + r.camt053));
+  const lf = {}; FM.forEach(r => keys.forEach(([k]) => lf[k] = (lf[k]||0) + r[k]));
+  const lt = Object.values(lf).reduce((a, b) => a + b, 0);
+  $('#fleg').innerHTML = keys.map(([k, n, c]) => `<span><i class="sw" style="background:${c}"></i>${n} · ${pct(lf[k]/lt)}</span>`).join('');
+  $('#fcols').innerHTML = FM.map((r, i) => `<div class="fcol">${keys.map(([k, n, c], j) => `<i class="gy" style="height:calc(${r[k]/fmax} * (100% - 6px));background:${c};--d:${i*.06 + j*.05}s" data-tip="<b>${r.booking_date} · ${n}</b><br>${nf(r[k])} lines"></i>`).join('')}</div>`).join('');
+  const mon = ['Jul','Aug','Sep','Oct','Nov','Dec'];
+  $('#fx').innerHTML = FM.map((r, i) => `<span>${mon[i]}</span>`).join('');
+  const M = D.moncayo; const before = M.filter(r => r.booking_date < '2025-10'), after = M.filter(r => r.booking_date >= '2025-10');
+  $('#moncayoNote').innerHTML = `Banco del Moncayo alone: ${nf(before.reduce((s, r) => s + r.n43, 0))} Norma 43 lines in Jul–Sep, then ${nf(after.reduce((s, r) => s + r.camt053, 0))} camt.053 lines in Oct–Dec and none in N43. FINAL is all camt for this bank.`;
+  $('#worldAnswer').innerHTML = `${D.live_banks} banks and ${D.live_accounts} accounts in LIVE. The US entity alone books <strong>${pct(cnt.US01/D.phases.live.bank_lines)}</strong> of LIVE lines, and only <strong>${pct(C[0][1]/tot)}</strong> of lines are in EUR. More than half the lines come as camt.053 XML.`;
+})();
+
+/* ---------- tooltip ---------- */
+(function(){
+  const tip = $('#tip');
+  const show = (el, x, y) => { tip.innerHTML = el.getAttribute('data-tip'); tip.classList.add('on'); place(x, y); };
+  const place = (x, y) => { const r = tip.getBoundingClientRect(); let L = x + 14, T = y + 14; if (L + r.width > innerWidth - 8) L = x - r.width - 14; if (T + r.height > innerHeight - 8) T = y - r.height - 14; tip.style.left = Math.max(8, L) + 'px'; tip.style.top = Math.max(8, T) + 'px'; };
+  document.addEventListener('pointerover', e => { const el = e.target.closest('[data-tip]'); if (el) show(el, e.clientX, e.clientY); else tip.classList.remove('on'); });
+  document.addEventListener('pointermove', e => { if (tip.classList.contains('on')) place(e.clientX, e.clientY); });
+  document.addEventListener('focusin', e => { const el = e.target.closest('[data-tip]'); if (el) { const r = el.getBoundingClientRect(); show(el, r.left + r.width/2, r.bottom); } });
+  document.addEventListener('focusout', () => tip.classList.remove('on'));
+  document.addEventListener('scroll', () => tip.classList.remove('on'), {passive: true});
+})();
+
+function fitLabels(){ document.querySelectorAll('.hundred > div > span').forEach(sp => { sp.hidden = false; if (sp.offsetWidth + 8 > sp.parentElement.clientWidth) sp.hidden = true; }); }
+
+/* ---------- hero wires ---------- */
+function drawWires(){
+  const flow = $('#flow'), svg = $('#wires'); if (getComputedStyle(svg).display === 'none') return;
+  const fr = flow.getBoundingClientRect(), card = $('#bankcard').getBoundingClientRect();
+  const map = [['h-c', 'i1'], ['h-c2', 'i1'], ['h-b', 'i2'], ['h-a', 'i3', 1], ['h-a', 'i4', 1], ['h-payer', null]];
+  let s = '', k = 0;
+  map.forEach(([h, it, amb]) => {
+    const hr = document.getElementById(h).getBoundingClientRect();
+    const y1 = hr.top + hr.height/2 - fr.top, x1 = card.right - fr.left;
+    let x2, y2;
+    if (it) { const ir = document.getElementById(it).getBoundingClientRect(); x2 = ir.left - fr.left; y2 = ir.top + ir.height/2 - fr.top; }
+    else { const pr = document.querySelector('.payerrow').getBoundingClientRect(); x2 = pr.left - fr.left - 4; y2 = pr.top + pr.height/2 - fr.top; }
+    const mid = (x1 + x2)/2;
+    const d = `M${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`;
+    const len = Math.hypot(x2 - x1, y2 - y1) * 1.25;
+    s += `<path class="${amb ? 'amb' : 'draw'}" d="${d}" fill="none" stroke="${it ? 'var(--accent)' : 'var(--ink-2)'}" stroke-width="1.5" ${amb ? 'stroke-dasharray="4 4"' : ''} style="--len:${len};--d:${.3 + k*.12}s"/>`;
+    s += `<circle style="--d:${.3 + k*.12}s" cx="${x1}" cy="${y1}" r="3.5" fill="var(--surface)" stroke="${it ? 'var(--accent)' : 'var(--ink-2)'}" stroke-width="1.5"/>`;
+    k++;
+  });
+  svg.innerHTML = s;
+}
+
+/* ---------- motion & counting ---------- */
+(function(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  drawWires();
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { drawWires(); fitLabels(); }, 120); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { drawWires(); fitLabels(); });
+  if (reduce || !('IntersectionObserver' in window)) return;
+  document.documentElement.classList.add('anim');
+  const targets = document.querySelectorAll('.rv, .grow, #wires');
+  const count = el => { const end = +el.dataset.count; const t0 = performance.now(); const dur = 1300;
+    const step = t => { const p = Math.min(1, (t - t0)/dur); const e = 1 - Math.pow(1 - p, 3); el.textContent = end < 100 ? Math.round(end*e) : big(end*e); if (p < 1) requestAnimationFrame(step); else el.textContent = big(end); };
+    requestAnimationFrame(step); };
+  const io = new IntersectionObserver(es => es.forEach(e => { if (!e.isIntersecting) return; e.target.classList.add('in'); e.target.querySelectorAll('[data-count]').forEach(count); io.unobserve(e.target); }), {threshold: 0.12, rootMargin: '0px 0px -40px 0px'});
+  targets.forEach(t => io.observe(t));
+})();
+</script>

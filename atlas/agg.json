@@ -1,0 +1,1480 @@
+{
+ "phases": {
+  "train": {
+   "bank_lines": 1489931,
+   "ar_invoices": 3963735,
+   "ap_invoices": 1530203,
+   "credit_notes": 150215,
+   "pdfs": 131637,
+   "remittances": 50890,
+   "dd_files": 1440,
+   "card_files": 240,
+   "cheque_files": 816,
+   "run_files": 1056,
+   "statements": 2300,
+   "golden_rows": 5403411
+  },
+  "live": {
+   "bank_lines": 203083,
+   "ar_invoices": 487243,
+   "ap_invoices": 199414,
+   "credit_notes": 19500,
+   "pdfs": 16688,
+   "remittances": 6889,
+   "dd_files": 180,
+   "card_files": 30,
+   "cheque_files": 102,
+   "run_files": 132,
+   "statements": 287,
+   "open_items_at_start": 325419
+  }
+ },
+ "monthly": [
+  [
+   "2021-07",
+   27772
+  ],
+  [
+   "2021-08",
+   29711
+  ],
+  [
+   "2021-09",
+   28138
+  ],
+  [
+   "2021-10",
+   26477
+  ],
+  [
+   "2021-11",
+   30099
+  ],
+  [
+   "2021-12",
+   28374
+  ],
+  [
+   "2022-01",
+   28718
+  ],
+  [
+   "2022-02",
+   25980
+  ],
+  [
+   "2022-03",
+   29666
+  ],
+  [
+   "2022-04",
+   29777
+  ],
+  [
+   "2022-05",
+   32700
+  ],
+  [
+   "2022-06",
+   31150
+  ],
+  [
+   "2022-07",
+   30398
+  ],
+  [
+   "2022-08",
+   32247
+  ],
+  [
+   "2022-09",
+   28730
+  ],
+  [
+   "2022-10",
+   30303
+  ],
+  [
+   "2022-11",
+   29472
+  ],
+  [
+   "2022-12",
+   29391
+  ],
+  [
+   "2023-01",
+   30583
+  ],
+  [
+   "2023-02",
+   27138
+  ],
+  [
+   "2023-03",
+   31577
+  ],
+  [
+   "2023-04",
+   28945
+  ],
+  [
+   "2023-05",
+   36641
+  ],
+  [
+   "2023-06",
+   33005
+  ],
+  [
+   "2023-07",
+   32230
+  ],
+  [
+   "2023-08",
+   31398
+  ],
+  [
+   "2023-09",
+   29458
+  ],
+  [
+   "2023-10",
+   32737
+  ],
+  [
+   "2023-11",
+   30399
+  ],
+  [
+   "2023-12",
+   29591
+  ],
+  [
+   "2024-01",
+   31922
+  ],
+  [
+   "2024-02",
+   27949
+  ],
+  [
+   "2024-03",
+   31003
+  ],
+  [
+   "2024-04",
+   34343
+  ],
+  [
+   "2024-05",
+   33949
+  ],
+  [
+   "2024-06",
+   31003
+  ],
+  [
+   "2024-07",
+   37089
+  ],
+  [
+   "2024-08",
+   31887
+  ],
+  [
+   "2024-09",
+   32448
+  ],
+  [
+   "2024-10",
+   32859
+  ],
+  [
+   "2024-11",
+   30357
+  ],
+  [
+   "2024-12",
+   32330
+  ],
+  [
+   "2025-01",
+   30017
+  ],
+  [
+   "2025-02",
+   30487
+  ],
+  [
+   "2025-03",
+   32131
+  ],
+  [
+   "2025-04",
+   36162
+  ],
+  [
+   "2025-05",
+   33391
+  ],
+  [
+   "2025-06",
+   37799
+  ],
+  [
+   "2025-07",
+   36371
+  ],
+  [
+   "2025-08",
+   30673
+  ],
+  [
+   "2025-09",
+   35129
+  ],
+  [
+   "2025-10",
+   33513
+  ],
+  [
+   "2025-11",
+   31068
+  ],
+  [
+   "2025-12",
+   36329
+  ]
+ ],
+ "window": {
+  "lines": 199987,
+  "pairs": 735474,
+  "rows": 754525,
+  "bank_lines": 199987
+ },
+ "segments": [
+  {
+   "segment": "ar_ref_noise",
+   "lines": 42462,
+   "pairs": 92722,
+   "family": "receipts",
+   "line_pct": 0.21232,
+   "pair_pct": 0.12607,
+   "points": 12.67327
+  },
+  {
+   "segment": "ap_payment_multi",
+   "lines": 24058,
+   "pairs": 85430,
+   "family": "payments",
+   "line_pct": 0.1203,
+   "pair_pct": 0.11616,
+   "points": 9.41675
+  },
+  {
+   "segment": "ar_short_dispute",
+   "lines": 1067,
+   "pairs": 104691,
+   "family": "remittances",
+   "line_pct": 0.00534,
+   "pair_pct": 0.14234,
+   "points": 7.27731
+  },
+  {
+   "segment": "ar_dd_batch",
+   "lines": 1530,
+   "pairs": 94025,
+   "family": "batches",
+   "line_pct": 0.00765,
+   "pair_pct": 0.12784,
+   "points": 6.62165
+  },
+  {
+   "segment": "ar_1to1",
+   "lines": 19143,
+   "pairs": 19143,
+   "family": "receipts",
+   "line_pct": 0.09572,
+   "pair_pct": 0.02603,
+   "points": 4.17304
+  },
+  {
+   "segment": "ar_1toN_remittance",
+   "lines": 1206,
+   "pairs": 54817,
+   "family": "remittances",
+   "line_pct": 0.00603,
+   "pair_pct": 0.07453,
+   "points": 3.90756
+  },
+  {
+   "segment": "ap_payment_single",
+   "lines": 17368,
+   "pairs": 17368,
+   "family": "payments",
+   "line_pct": 0.08685,
+   "pair_pct": 0.02361,
+   "points": 3.7861
+  },
+  {
+   "segment": "ar_1toN_text",
+   "lines": 6124,
+   "pairs": 36220,
+   "family": "receipts",
+   "line_pct": 0.03062,
+   "pair_pct": 0.04925,
+   "points": 3.38102
+  },
+  {
+   "segment": "ap_fx",
+   "lines": 1217,
+   "pairs": 45117,
+   "family": "payments",
+   "line_pct": 0.00609,
+   "pair_pct": 0.06134,
+   "points": 3.24977
+  },
+  {
+   "segment": "ar_1toN_credit_note",
+   "lines": 3184,
+   "pairs": 32775,
+   "family": "receipts",
+   "line_pct": 0.01592,
+   "pair_pct": 0.04456,
+   "points": 2.70579
+  },
+  {
+   "segment": "ar_card_settlement",
+   "lines": 1252,
+   "pairs": 21557,
+   "family": "batches",
+   "line_pct": 0.00626,
+   "pair_pct": 0.02931,
+   "points": 1.65333
+  },
+  {
+   "segment": "ap_paid_by_holding",
+   "lines": 4798,
+   "pairs": 12497,
+   "family": "payments",
+   "line_pct": 0.02399,
+   "pair_pct": 0.01699,
+   "points": 1.56933
+  },
+  {
+   "segment": "ar_short_discount",
+   "lines": 6317,
+   "pairs": 7156,
+   "family": "exceptions",
+   "line_pct": 0.03159,
+   "pair_pct": 0.00973,
+   "points": 1.4341
+  },
+  {
+   "segment": "ar_same_amount_fifo",
+   "lines": 6151,
+   "pairs": 6151,
+   "family": "receipts",
+   "line_pct": 0.03076,
+   "pair_pct": 0.00836,
+   "points": 1.34088
+  },
+  {
+   "segment": "ap_credit_note_netted",
+   "lines": 2591,
+   "pairs": 13402,
+   "family": "payments",
+   "line_pct": 0.01296,
+   "pair_pct": 0.01822,
+   "points": 1.29979
+  },
+  {
+   "segment": "ap_partial",
+   "lines": 2536,
+   "pairs": 12534,
+   "family": "payments",
+   "line_pct": 0.01268,
+   "pair_pct": 0.01704,
+   "points": 1.23253
+  },
+  {
+   "segment": "ap_direct_debit",
+   "lines": 5444,
+   "pairs": 5444,
+   "family": "payments",
+   "line_pct": 0.02722,
+   "pair_pct": 0.0074,
+   "points": 1.18675
+  },
+  {
+   "segment": "ar_fx",
+   "lines": 725,
+   "pairs": 13951,
+   "family": "receipts",
+   "line_pct": 0.00363,
+   "pair_pct": 0.01897,
+   "points": 1.05719
+  },
+  {
+   "segment": "nonitem_bank_fees",
+   "lines": 6625,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.03313,
+   "pair_pct": 0.0,
+   "points": 0.99381
+  },
+  {
+   "segment": "ar_instalment",
+   "lines": 4275,
+   "pairs": 4275,
+   "family": "pdf",
+   "line_pct": 0.02138,
+   "pair_pct": 0.00581,
+   "points": 0.93192
+  },
+  {
+   "segment": "ar_same_amount_month",
+   "lines": 4242,
+   "pairs": 4242,
+   "family": "receipts",
+   "line_pct": 0.02121,
+   "pair_pct": 0.00577,
+   "points": 0.92473
+  },
+  {
+   "segment": "ar_partial",
+   "lines": 3679,
+   "pairs": 3679,
+   "family": "exceptions",
+   "line_pct": 0.0184,
+   "pair_pct": 0.005,
+   "points": 0.802
+  },
+  {
+   "segment": "ar_dd_returned",
+   "lines": 3512,
+   "pairs": 3512,
+   "family": "exceptions",
+   "line_pct": 0.01756,
+   "pair_pct": 0.00478,
+   "points": 0.76559
+  },
+  {
+   "segment": "ar_n_to_m",
+   "lines": 1857,
+   "pairs": 6920,
+   "family": "receipts",
+   "line_pct": 0.00929,
+   "pair_pct": 0.00941,
+   "points": 0.74901
+  },
+  {
+   "segment": "ar_cheque_deposit",
+   "lines": 1950,
+   "pairs": 6154,
+   "family": "batches",
+   "line_pct": 0.00975,
+   "pair_pct": 0.00837,
+   "points": 0.71089
+  },
+  {
+   "segment": "ap_confirming",
+   "lines": 788,
+   "pairs": 8133,
+   "family": "payments",
+   "line_pct": 0.00394,
+   "pair_pct": 0.01106,
+   "points": 0.67112
+  },
+  {
+   "segment": "ap_supplier_refund",
+   "lines": 2515,
+   "pairs": 2515,
+   "family": "payments",
+   "line_pct": 0.01258,
+   "pair_pct": 0.00342,
+   "points": 0.54825
+  },
+  {
+   "segment": "ar_short_withholding",
+   "lines": 1401,
+   "pairs": 4505,
+   "family": "exceptions",
+   "line_pct": 0.00701,
+   "pair_pct": 0.00613,
+   "points": 0.51643
+  },
+  {
+   "segment": "unidentified",
+   "lines": 3221,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.01611,
+   "pair_pct": 0.0,
+   "points": 0.48318
+  },
+  {
+   "segment": "nonitem_bank_fees_intl",
+   "lines": 3093,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.01547,
+   "pair_pct": 0.0,
+   "points": 0.46398
+  },
+  {
+   "segment": "ap_factored",
+   "lines": 1376,
+   "pairs": 3528,
+   "family": "payments",
+   "line_pct": 0.00688,
+   "pair_pct": 0.0048,
+   "points": 0.44626
+  },
+  {
+   "segment": "ar_discount_late",
+   "lines": 788,
+   "pairs": 2946,
+   "family": "exceptions",
+   "line_pct": 0.00394,
+   "pair_pct": 0.00401,
+   "points": 0.31849
+  },
+  {
+   "segment": "ar_dispute_settlement",
+   "lines": 1103,
+   "pairs": 1103,
+   "family": "remittances",
+   "line_pct": 0.00552,
+   "pair_pct": 0.0015,
+   "points": 0.24045
+  },
+  {
+   "segment": "nonitem_cash_pool",
+   "lines": 1554,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00777,
+   "pair_pct": 0.0,
+   "points": 0.23312
+  },
+  {
+   "segment": "ar_dd_represented_transfer",
+   "lines": 956,
+   "pairs": 956,
+   "family": "exceptions",
+   "line_pct": 0.00478,
+   "pair_pct": 0.0013,
+   "points": 0.2084
+  },
+  {
+   "segment": "unidentified_lookalike",
+   "lines": 1364,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00682,
+   "pair_pct": 0.0,
+   "points": 0.20461
+  },
+  {
+   "segment": "ar_retention",
+   "lines": 928,
+   "pairs": 928,
+   "family": "pdf",
+   "line_pct": 0.00464,
+   "pair_pct": 0.00126,
+   "points": 0.2023
+  },
+  {
+   "segment": "ar_third_party_confirming",
+   "lines": 747,
+   "pairs": 747,
+   "family": "receipts",
+   "line_pct": 0.00374,
+   "pair_pct": 0.00102,
+   "points": 0.16284
+  },
+  {
+   "segment": "ar_retention_release",
+   "lines": 710,
+   "pairs": 710,
+   "family": "pdf",
+   "line_pct": 0.00355,
+   "pair_pct": 0.00097,
+   "points": 0.15478
+  },
+  {
+   "segment": "ar_duplicate_payment",
+   "lines": 641,
+   "pairs": 641,
+   "family": "exceptions",
+   "line_pct": 0.00321,
+   "pair_pct": 0.00087,
+   "points": 0.13973
+  },
+  {
+   "segment": "ar_third_party_parent",
+   "lines": 175,
+   "pairs": 1656,
+   "family": "receipts",
+   "line_pct": 0.00088,
+   "pair_pct": 0.00225,
+   "points": 0.13883
+  },
+  {
+   "segment": "ar_third_party_agency",
+   "lines": 356,
+   "pairs": 753,
+   "family": "receipts",
+   "line_pct": 0.00178,
+   "pair_pct": 0.00102,
+   "points": 0.10459
+  },
+  {
+   "segment": "ar_overpayment",
+   "lines": 400,
+   "pairs": 400,
+   "family": "exceptions",
+   "line_pct": 0.002,
+   "pair_pct": 0.00054,
+   "points": 0.0872
+  },
+  {
+   "segment": "ar_replaced_invoice",
+   "lines": 253,
+   "pairs": 546,
+   "family": "pdf",
+   "line_pct": 0.00127,
+   "pair_pct": 0.00074,
+   "points": 0.07507
+  },
+  {
+   "segment": "ar_new_iban",
+   "lines": 278,
+   "pairs": 485,
+   "family": "pdf",
+   "line_pct": 0.00139,
+   "pair_pct": 0.00066,
+   "points": 0.07467
+  },
+  {
+   "segment": "nonitem_payroll",
+   "lines": 487,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00244,
+   "pair_pct": 0.0,
+   "points": 0.07305
+  },
+  {
+   "segment": "nonitem_intercompany",
+   "lines": 425,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00213,
+   "pair_pct": 0.0,
+   "points": 0.06375
+  },
+  {
+   "segment": "ar_advance_deduction",
+   "lines": 275,
+   "pairs": 275,
+   "family": "pdf",
+   "line_pct": 0.00138,
+   "pair_pct": 0.00037,
+   "points": 0.05995
+  },
+  {
+   "segment": "ap_returned_transfer",
+   "lines": 171,
+   "pairs": 478,
+   "family": "exceptions",
+   "line_pct": 0.00086,
+   "pair_pct": 0.00065,
+   "points": 0.05815
+  },
+  {
+   "segment": "nonitem_leasing",
+   "lines": 354,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00177,
+   "pair_pct": 0.0,
+   "points": 0.0531
+  },
+  {
+   "segment": "customer_refund",
+   "lines": 354,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00177,
+   "pair_pct": 0.0,
+   "points": 0.0531
+  },
+  {
+   "segment": "nonitem_bank_reversal",
+   "lines": 326,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00163,
+   "pair_pct": 0.0,
+   "points": 0.0489
+  },
+  {
+   "segment": "customer_advance",
+   "lines": 283,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00142,
+   "pair_pct": 0.0,
+   "points": 0.04245
+  },
+  {
+   "segment": "ar_short_bank_charges",
+   "lines": 169,
+   "pairs": 169,
+   "family": "exceptions",
+   "line_pct": 0.00085,
+   "pair_pct": 0.00023,
+   "points": 0.03684
+  },
+  {
+   "segment": "nonitem_internal_transfer",
+   "lines": 228,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00114,
+   "pair_pct": 0.0,
+   "points": 0.0342
+  },
+  {
+   "segment": "nonitem_fx_deal",
+   "lines": 164,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00082,
+   "pair_pct": 0.0,
+   "points": 0.0246
+  },
+  {
+   "segment": "nonitem_tax_payment",
+   "lines": 120,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.0006,
+   "pair_pct": 0.0,
+   "points": 0.018
+  },
+  {
+   "segment": "nonitem_loan_repayment",
+   "lines": 107,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00054,
+   "pair_pct": 0.0,
+   "points": 0.01605
+  },
+  {
+   "segment": "nonitem_social_security",
+   "lines": 102,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00051,
+   "pair_pct": 0.0,
+   "points": 0.0153
+  },
+  {
+   "segment": "ap_duplicate_payment",
+   "lines": 66,
+   "pairs": 66,
+   "family": "exceptions",
+   "line_pct": 0.00033,
+   "pair_pct": 9e-05,
+   "points": 0.01439
+  },
+  {
+   "segment": "ar_cheque_returned",
+   "lines": 66,
+   "pairs": 66,
+   "family": "exceptions",
+   "line_pct": 0.00033,
+   "pair_pct": 9e-05,
+   "points": 0.01439
+  },
+  {
+   "segment": "nonitem_card_expenses",
+   "lines": 89,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00045,
+   "pair_pct": 0.0,
+   "points": 0.01335
+  },
+  {
+   "segment": "ap_duplicate_refund",
+   "lines": 63,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00032,
+   "pair_pct": 0.0,
+   "points": 0.00945
+  },
+  {
+   "segment": "ar_credit_note_paid_out",
+   "lines": 43,
+   "pairs": 43,
+   "family": "pdf",
+   "line_pct": 0.00022,
+   "pair_pct": 6e-05,
+   "points": 0.00937
+  },
+  {
+   "segment": "ar_card_chargeback",
+   "lines": 36,
+   "pairs": 36,
+   "family": "exceptions",
+   "line_pct": 0.00018,
+   "pair_pct": 5e-05,
+   "points": 0.00785
+  },
+  {
+   "segment": "nonitem_interest_income",
+   "lines": 36,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00018,
+   "pair_pct": 0.0,
+   "points": 0.0054
+  },
+  {
+   "segment": "nonitem_interest_expense",
+   "lines": 27,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00014,
+   "pair_pct": 0.0,
+   "points": 0.00405
+  },
+  {
+   "segment": "nonitem_insurance",
+   "lines": 25,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 0.00013,
+   "pair_pct": 0.0,
+   "points": 0.00375
+  },
+  {
+   "segment": "ar_1to1_remittance",
+   "lines": 7,
+   "pairs": 7,
+   "family": "remittances",
+   "line_pct": 4e-05,
+   "pair_pct": 1e-05,
+   "points": 0.00153
+  },
+  {
+   "segment": "nonitem_loan_drawdown",
+   "lines": 3,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 2e-05,
+   "pair_pct": 0.0,
+   "points": 0.00045
+  },
+  {
+   "segment": "nonitem_tax_refund",
+   "lines": 1,
+   "pairs": 0,
+   "family": "nonitem",
+   "line_pct": 1e-05,
+   "pair_pct": 0.0,
+   "points": 0.00015
+  }
+ ],
+ "families": [
+  {
+   "family": "batches",
+   "lines": 4732,
+   "pairs": 121736,
+   "n": 3,
+   "line_pct": 0.02366,
+   "pair_pct": 0.16552,
+   "points": 8.98587
+  },
+  {
+   "family": "exceptions",
+   "lines": 18202,
+   "pairs": 24610,
+   "n": 13,
+   "line_pct": 0.09102,
+   "pair_pct": 0.03346,
+   "points": 4.40355
+  },
+  {
+   "family": "nonitem",
+   "lines": 19051,
+   "pairs": 0,
+   "n": 23,
+   "line_pct": 0.09526,
+   "pair_pct": 0.0,
+   "points": 2.85784
+  },
+  {
+   "family": "payments",
+   "lines": 62691,
+   "pairs": 205968,
+   "n": 10,
+   "line_pct": 0.31348,
+   "pair_pct": 0.28005,
+   "points": 23.40666
+  },
+  {
+   "family": "pdf",
+   "lines": 6762,
+   "pairs": 7262,
+   "n": 7,
+   "line_pct": 0.03381,
+   "pair_pct": 0.00987,
+   "points": 1.50806
+  },
+  {
+   "family": "receipts",
+   "lines": 85166,
+   "pairs": 215280,
+   "n": 11,
+   "line_pct": 0.42586,
+   "pair_pct": 0.29271,
+   "points": 27.41119
+  },
+  {
+   "family": "remittances",
+   "lines": 3383,
+   "pairs": 160618,
+   "n": 4,
+   "line_pct": 0.01692,
+   "pair_pct": 0.21839,
+   "points": 11.42684
+  }
+ ],
+ "exceptions": [
+  {
+   "exception": "FX_DIFFERENCE",
+   "rows": 15793,
+   "lines": 2075
+  },
+  {
+   "exception": "SHORT_DISCOUNT",
+   "rows": 15624,
+   "lines": 6588
+  },
+  {
+   "exception": "PARTIAL",
+   "rows": 12511,
+   "lines": 10743
+  },
+  {
+   "exception": "UNIDENTIFIED",
+   "rows": 4585,
+   "lines": 4585
+  },
+  {
+   "exception": "SHORT_WITHHOLDING",
+   "rows": 4330,
+   "lines": 1407
+  },
+  {
+   "exception": "RETURNED",
+   "rows": 4092,
+   "lines": 3785
+  },
+  {
+   "exception": "SHORT_DISPUTE",
+   "rows": 3036,
+   "lines": 1161
+  },
+  {
+   "exception": "DUPLICATE_PAYMENT",
+   "rows": 707,
+   "lines": 707
+  },
+  {
+   "exception": "OVERPAYMENT",
+   "rows": 400,
+   "lines": 400
+  },
+  {
+   "exception": "SHORT_BANK_CHARGES",
+   "rows": 171,
+   "lines": 171
+  }
+ ],
+ "exc_rows_total": 61249,
+ "lines_with_exc": 31327,
+ "items_per_line": [
+  {
+   "bucket": "No item",
+   "lines": 19051,
+   "pairs": 0
+  },
+  {
+   "bucket": "1",
+   "lines": 116409,
+   "pairs": 116409
+  },
+  {
+   "bucket": "2\u20135",
+   "lines": 45207,
+   "pairs": 133151
+  },
+  {
+   "bucket": "6\u201320",
+   "lines": 14745,
+   "pairs": 138689
+  },
+  {
+   "bucket": "21\u2013100",
+   "lines": 3766,
+   "pairs": 143950
+  },
+  {
+   "bucket": "100+",
+   "lines": 809,
+   "pairs": 203275
+  }
+ ],
+ "max_items": 1540,
+ "max_items_segment": "ap_fx",
+ "categories": [
+  [
+   "BANK_FEES",
+   9718
+  ],
+  [
+   "UNIDENTIFIED",
+   4585
+  ],
+  [
+   "CASH_POOL",
+   1554
+  ],
+  [
+   "PAYROLL",
+   487
+  ],
+  [
+   "INTERCOMPANY",
+   425
+  ],
+  [
+   "LEASING",
+   354
+  ],
+  [
+   "CUSTOMER_REFUND",
+   354
+  ],
+  [
+   "BANK_REVERSAL",
+   326
+  ],
+  [
+   "CUSTOMER_ADVANCE",
+   283
+  ],
+  [
+   "INTERNAL_TRANSFER",
+   228
+  ],
+  [
+   "FX_DEAL",
+   164
+  ],
+  [
+   "TAX_PAYMENT",
+   120
+  ],
+  [
+   "LOAN_REPAYMENT",
+   107
+  ],
+  [
+   "SOCIAL_SECURITY",
+   102
+  ],
+  [
+   "CARD_EXPENSES",
+   89
+  ],
+  [
+   "SUPPLIER_REFUND",
+   63
+  ],
+  [
+   "INTEREST_INCOME",
+   36
+  ],
+  [
+   "INTEREST_EXPENSE",
+   27
+  ],
+  [
+   "INSURANCE",
+   25
+  ],
+  [
+   "LOAN_DRAWDOWN",
+   3
+  ],
+  [
+   "TAX_REFUND",
+   1
+  ]
+ ],
+ "difficulty": {
+  "1": 53413,
+  "2": 89376,
+  "3": 57198
+ },
+ "live_formats": {
+  "camt053": 105538,
+  "mt940": 59565,
+  "n43": 37980
+ },
+ "live_formats_monthly": [
+  {
+   "booking_date": "2025-07",
+   "camt053": 17362,
+   "mt940": 10700,
+   "n43": 8309
+  },
+  {
+   "booking_date": "2025-08",
+   "camt053": 14384,
+   "mt940": 9880,
+   "n43": 6409
+  },
+  {
+   "booking_date": "2025-09",
+   "camt053": 16856,
+   "mt940": 9957,
+   "n43": 8316
+  },
+  {
+   "booking_date": "2025-10",
+   "camt053": 18906,
+   "mt940": 9650,
+   "n43": 4957
+  },
+  {
+   "booking_date": "2025-11",
+   "camt053": 16978,
+   "mt940": 9278,
+   "n43": 4812
+  },
+  {
+   "booking_date": "2025-12",
+   "camt053": 21052,
+   "mt940": 10100,
+   "n43": 5177
+  }
+ ],
+ "live_currency": [
+  [
+   "EUR",
+   84172
+  ],
+  [
+   "USD",
+   60691
+  ],
+  [
+   "AUD",
+   16414
+  ],
+  [
+   "CNY",
+   10672
+  ],
+  [
+   "BRL",
+   6581
+  ],
+  [
+   "MXN",
+   6182
+  ],
+  [
+   "GBP",
+   4991
+  ],
+  [
+   "PLN",
+   4922
+  ],
+  [
+   "MAD",
+   3958
+  ],
+  [
+   "CHF",
+   3785
+  ],
+  [
+   "CAD",
+   713
+  ],
+  [
+   "ZAR",
+   2
+  ]
+ ],
+ "live_entity": [
+  [
+   "US01",
+   60470
+  ],
+  [
+   "ES01",
+   23315
+  ],
+  [
+   "AU01",
+   16537
+  ],
+  [
+   "FR01",
+   16059
+  ],
+  [
+   "ES00",
+   11264
+  ],
+  [
+   "CN01",
+   10898
+  ],
+  [
+   "DE01",
+   9118
+  ],
+  [
+   "IT01",
+   8048
+  ],
+  [
+   "BR01",
+   6581
+  ],
+  [
+   "MX01",
+   6355
+  ],
+  [
+   "NL01",
+   6178
+  ],
+  [
+   "ES02",
+   5348
+  ],
+  [
+   "PT01",
+   5112
+  ],
+  [
+   "PL01",
+   5005
+  ],
+  [
+   "UK01",
+   4983
+  ],
+  [
+   "MA01",
+   4009
+  ],
+  [
+   "CH01",
+   3801
+  ],
+  [
+   "ZA01",
+   2
+  ]
+ ],
+ "entities": [
+  {
+   "entity": "ES00",
+   "country": "ES",
+   "functional_currency": "EUR",
+   "role": "holding / in-house bank / cash-pool header"
+  },
+  {
+   "entity": "ES01",
+   "country": "ES",
+   "functional_currency": "EUR",
+   "role": "commercial Spain (branches)"
+  },
+  {
+   "entity": "ES02",
+   "country": "ES",
+   "functional_currency": "EUR",
+   "role": "manufacturing"
+  },
+  {
+   "entity": "PT01",
+   "country": "PT",
+   "functional_currency": "EUR",
+   "role": "commercial"
+  },
+  {
+   "entity": "FR01",
+   "country": "FR",
+   "functional_currency": "EUR",
+   "role": "commercial + plant"
+  },
+  {
+   "entity": "IT01",
+   "country": "IT",
+   "functional_currency": "EUR",
+   "role": "commercial"
+  },
+  {
+   "entity": "DE01",
+   "country": "DE",
+   "functional_currency": "EUR",
+   "role": "commercial"
+  },
+  {
+   "entity": "NL01",
+   "country": "NL",
+   "functional_currency": "EUR",
+   "role": "commercial + logistics hub"
+  },
+  {
+   "entity": "UK01",
+   "country": "GB",
+   "functional_currency": "GBP",
+   "role": "commercial"
+  },
+  {
+   "entity": "PL01",
+   "country": "PL",
+   "functional_currency": "PLN",
+   "role": "commercial"
+  },
+  {
+   "entity": "CH01",
+   "country": "CH",
+   "functional_currency": "CHF",
+   "role": "commercial"
+  },
+  {
+   "entity": "US01",
+   "country": "US",
+   "functional_currency": "USD",
+   "role": "commercial + manufacturing"
+  },
+  {
+   "entity": "MX01",
+   "country": "MX",
+   "functional_currency": "MXN",
+   "role": "commercial"
+  },
+  {
+   "entity": "BR01",
+   "country": "BR",
+   "functional_currency": "BRL",
+   "role": "commercial"
+  },
+  {
+   "entity": "MA01",
+   "country": "MA",
+   "functional_currency": "MAD",
+   "role": "commercial"
+  },
+  {
+   "entity": "CN01",
+   "country": "CN",
+   "functional_currency": "CNY",
+   "role": "sourcing + manufacturing"
+  },
+  {
+   "entity": "AU01",
+   "country": "AU",
+   "functional_currency": "AUD",
+   "role": "commercial + manufacturing APAC"
+  }
+ ],
+ "n_banks": 12,
+ "n_accounts": 47,
+ "n_customers": 55672,
+ "n_suppliers": 12831,
+ "za_live": [
+  {
+   "booking_date": "2025-12-29",
+   "amount": "58327.43",
+   "currency": "ZAR"
+  },
+  {
+   "booking_date": "2025-12-30",
+   "amount": "62069.06",
+   "currency": "ZAR"
+  }
+ ],
+ "moncayo": [
+  {
+   "booking_date": "2025-07",
+   "camt053": 0,
+   "n43": 3337
+  },
+  {
+   "booking_date": "2025-08",
+   "camt053": 0,
+   "n43": 1579
+  },
+  {
+   "booking_date": "2025-09",
+   "camt053": 0,
+   "n43": 2384
+  },
+  {
+   "booking_date": "2025-10",
+   "camt053": 3083,
+   "n43": 0
+  },
+  {
+   "booking_date": "2025-11",
+   "camt053": 1354,
+   "n43": 0
+  },
+  {
+   "booking_date": "2025-12",
+   "camt053": 2146,
+   "n43": 0
+  }
+ ],
+ "rem_formats_live": {
+  "csv": 2381,
+  "pdf": 2196,
+  "txt": 1815,
+  "xlsx": 497
+ },
+ "pdf_types_live": {
+  "invoice": 9499,
+  "supplier_invoice": 3578,
+  "credit_note": 1841,
+  "supplier_credit_note": 1394,
+  "proforma": 297,
+  "bank_account_notice": 79
+ },
+ "open_items_types": {
+  "ARI": 229534,
+  "API": 68356,
+  "ARC": 25434,
+  "APC": 2095
+ }
+}
