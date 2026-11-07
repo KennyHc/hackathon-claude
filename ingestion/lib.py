@@ -139,7 +139,14 @@ def load(phase: str):
         golden = golden_train()
         items = items_of("train").drop_duplicates("item_id")
         dates = pd.Series(bank_all.booking_date.values, index=bank_all.bank_txn_id.values)
-        items["open_amount"] = items.item_id.map(open_at_backward(items, golden, dates, start))
+        # Items issued inside TRAIN: forward replay is exact (all their bank settlements are in the golden) and keeps
+        # items that later disappear WITHOUT a bank payment (cancelled / netted) — LIVE's open_items_at_start has those
+        # too, so they must stay as distractors. Older items (issued before TRAIN, unknown history): backward replay
+        # from LIVE's official open list. Only labels booked BEFORE `start` are used for the forward part.
+        fwd = open_at(items, golden, dates, start)
+        bwd = open_at_backward(items, golden, dates, start)
+        in_train = items.set_index("item_id").issue_date >= "2021-07-01"
+        items["open_amount"] = items.item_id.map(fwd.where(in_train, bwd))
         new = items.issue_date >= start
         items.loc[new, "open_amount"] = items.loc[new, "total_amount"]   # issued during the window: fully open
         items = items[((items.open_amount > 0.005) | new) & (items.issue_date <= end)]
