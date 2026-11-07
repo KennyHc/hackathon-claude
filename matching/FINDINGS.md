@@ -15,8 +15,11 @@ numbers in section 1 were measured end to end with the team's `integration/run.p
 | **+ AR references (current)** | **82.89** | **0.910 (0.9986 / 0.836)** | **0.886** | **0.539** |
 
 Points of the current run: alloc 45.51 · txn 26.59 · exc 10.79.
-LIVE: the same code builds a valid `integration/out/live/submission.csv.gz` (203,083/203,083 lines, 163,156 with items vs
-160,669 on val: similar coverage, a first sign the rules are not fitted to val). Not uploaded yet.
+**LIVE (official leaderboard): 82.53** for the same code (commit 686146c): alloc F1 90.6% (P 99.9%, R 82.8%), txn accuracy
+88.6%, exception macro-F1 53.4%, amount-weighted accuracy 90.1%. Val predicted 82.89: **val tracks LIVE within 0.4 points**,
+so the rules are not fitted to val. Weakest LIVE segments: ar_fx, ar_duplicate_payment, ar_overpayment, ar_short_bank_charges
+(all 0%), ar_retention 0.3%, ar_short_withholding 2.5%, ar_advance_deduction 23%, ar_replaced_invoice 28%, ar_n_to_m 32%,
+ar_discount_late 33%, ar_short_discount 44%, ar_1toN_credit_note 52%, ar_instalment 63%; ar_ref_noise 87.8% on ~42k lines.
 
 Matchers, in priority order (a line claimed by an earlier matcher is never touched by a later one):
 

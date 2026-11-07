@@ -24,7 +24,8 @@ sys.path.insert(0, ROOT)
 
 from matching.lib import data, evalutil  # noqa: E402
 
-ORDER = ["batches", "ap", "remittance", "refs"]   # matcher modules under matching/matchers/, in priority order
+# matcher modules under matching/matchers/, in priority order (a missing module is skipped)
+ORDER = ["batches", "ap", "remittance", "pdf_cases", "refs", "shortpay", "duplicates"]
 COLS = ["bank_txn_id", "item_id", "amount", "exception", "confidence", "method"]
 # Per-matcher confidence gate. Structural matchers (batches, ap, remittance) are kept whole: their low-confidence methods
 # still measured >= 98% precise. refs' weak tiers (risky subset sums, withholding/charges guesses) sit below 0.65.
