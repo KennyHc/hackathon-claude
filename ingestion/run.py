@@ -65,6 +65,10 @@ def main():
     ap.add_argument("--phase", default="sample", choices=list(lib.PHASES))
     a = ap.parse_args()
     t = time.time()
+    # PDF text caches (clauses + PDF remittance advices) for every folder this phase reads; built once, ~1-4 min
+    from ingestion import pdftext
+    for fo in dict.fromkeys([lib.PHASES[a.phase][0], *lib.PHASES[a.phase][3]]):
+        pdftext.ensure(fo)
     bank, items, m, golden, folder = lib.load(a.phase)
     od = lib.out_dir("ingestion", a.phase)
     bl = bank_lines(bank, m)

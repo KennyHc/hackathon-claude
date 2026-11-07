@@ -223,9 +223,10 @@ def extract(text: str, entity: str) -> list[dict]:
 
 
 def load_texts(folder: str, files: set[str] | None = None) -> dict[str, str]:
-    p = os.path.join(lib.DATA, "cache", f"pdftext_{folder}.jsonl.gz")
+    from ingestion import pdftext
+    p = pdftext.path(folder, "pdfs")
     if not os.path.exists(p):
-        print(f"[pdf_clauses] no text cache {p}")
+        print(f"[pdf_clauses] WARNING no text cache {p}: PDF clauses of {folder} are skipped (run ingestion/pdftext.py {folder})")
         return {}
     d = {}
     with gzip.open(p, "rt", encoding="utf-8") as f:

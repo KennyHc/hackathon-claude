@@ -245,8 +245,11 @@ def parse_xlsx(path: str) -> tuple[dict, list[dict]]:
 
 # ---------------------------------------------------------------------------------------------------------------------
 def _pdf_texts(folder: str) -> dict[str, str]:
-    p = os.path.join(lib.DATA, "cache", f"pdftext_{folder}_remittance_advices.jsonl.gz")
+    from ingestion import pdftext
+    p = pdftext.path(folder, "remittance_advices")
     out = {}
+    if not os.path.exists(p) and os.path.isdir(os.path.join(lib.DATA, folder, "remittance_advices")):
+        print(f"[remittance] WARNING no PDF text cache {p}: PDF advices of {folder} are skipped (run ingestion/pdftext.py {folder})")
     if os.path.exists(p):
         with gzip.open(p, "rt", encoding="utf-8") as fh:
             for line in fh:
