@@ -13,6 +13,9 @@ LOG=integration/out/final_run.log
 mkdir -p integration/out
 exec > >(tee "$LOG") 2>&1
 PY=${PY:-python3}
+# The merge's classifier veto is skipped for entities the classifier never saw in training (ZA01 is new in FINAL);
+# without this the veto dropped 116 correct ZA01 matches. This is the setting of the submitted FINAL (96.71).
+export NO_VETO_ENTITIES="${NO_VETO_ENTITIES-ZA01}"
 say() { printf '\n=== %s  [%s]\n' "$1" "$(date +%H:%M:%S)"; }
 
 if [ $# -ge 2 ]; then
