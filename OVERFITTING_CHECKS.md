@@ -442,3 +442,66 @@ and write to their own folder:
   from the dashboard's segment files, which are copied next to it.
 
 The drift checks in `part6.py` work for `final` by changing the phase list. Run them with `python3` from that folder.
+
+---
+
+## In plain words: the strongest sign we are not overfitting
+
+**The window we never looked at scores as well as the one we tuned on.** Every rule and threshold was written while
+looking at the answers for January–June 2025 (val). We set aside January–June 2024 (hold) and never used it while
+building anything; the learned parts only see data from before 2024. If our rules had memorised quirks of the 2025
+window, they would score clearly worse on 2024. They don't: the untouched window scores **96.50** against **96.41** on
+the window we tuned on, slightly *higher*, and the two differ by less than the normal month-to-month wobble (about
+0.36 points). Precision, the share of our matches that are right, is identical in both: **99.86 %**.
+
+Two things back this up on data nobody has answers for. First, on the LIVE leaderboard (July–December 2025) precision
+is still **99.83 %**: when the pipeline makes a match on new data, it is right as often as at home. Second, when a
+change helped locally it helped on LIVE by about the same amount, which is what a real improvement does and an
+overfit tweak does not: the second-wave matchers gained about +2.06 on val and **+1.85** on LIVE (90 % carried over),
+and the UNIDENTIFIED threshold change gained +0.05 / +0.04 locally and **+0.04** on LIVE.
+
+**Conclusion.** The rules generalise: an untouched window scores the same, precision holds on unseen data, and local
+gains show up on the leaderboard. The 0.8 points LIVE is below val is not overfitting but drift: all of it is recall
+(lines we leave unmatched in the newer data), concentrated in a few segments where the 2024 and 2025 windows agree with
+each other. That points to FINAL landing near LIVE (roughly 94.5–95.5), not to a collapse.
+
+### The evidence in three pictures
+
+**1. Same score on the window we never touched** (higher is better; scores at the current UNIDENTIFIED threshold 0.97 —
+with the old 0.9 it was 96.36 vs 96.46, the same picture).
+
+```mermaid
+xychart-beta
+    title "Score by window"
+    x-axis ["Val: tuned on (2025 H1)", "Hold: never used (2024 H1)", "LIVE v3: no answers (2025 H2)"]
+    y-axis "Score" 90 --> 100
+    bar [96.41, 96.50, 95.62]
+```
+
+**2. Precision does not move** — the share of submitted matches that are right.
+
+```mermaid
+xychart-beta
+    title "Allocation precision (%)"
+    x-axis ["Val (tuned on)", "Hold (never used)", "LIVE (no answers)"]
+    y-axis "Precision %" 99 --> 100
+    bar [99.86, 99.86, 99.83]
+```
+
+**3. Local gains carry over to the leaderboard** — what we measured at home before uploading vs what LIVE returned.
+
+| Change | Gain on val (at home) | Gain on LIVE (leaderboard) | Carried over |
+|---|---|---|---|
+| Second-wave matchers (LIVE v1 → v2) | about +2.06 | **+1.85** (93.73 → 95.58) | 90 % |
+| UNIDENTIFIED threshold 0.9 → 0.97 (v2 → v3) | +0.05 (hold +0.04) | **+0.04** (95.58 → 95.62) | about 100 % |
+
+```mermaid
+xychart-beta
+    title "Second-wave matchers: gain at home vs on LIVE"
+    x-axis ["Val (at home)", "LIVE (leaderboard)"]
+    y-axis "Score gain" 0 --> 2.5
+    bar [2.06, 1.85]
+```
+
+Sources: `integration/out/val_latest.log`, `integration/out/hold_latest.log`, `overfit_metrics.json`
+(`overall.*.precision`, `gap.val_minus_hold.*`), and the LIVE leaderboard responses for v1, v2 and v3.
