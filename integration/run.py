@@ -24,7 +24,7 @@ from ingestion import lib  # noqa: E402
 
 P_MIN = 0.2      # classification must be fairly sure the line settles NO item to override a matcher
 CONF_OVERRIDE = 0.9
-UNID_P = float(os.environ.get("UNID_P", "0.9"))   # flag UNIDENTIFIED only when p_items is below this
+UNID_P = float(os.environ.get("UNID_P", "0.97"))  # flag UNIDENTIFIED only when p_items is below this (flat 0.8-0.99; best 0.97 on val and hold)
 
 
 def merge(phase: str) -> tuple[pd.DataFrame, pd.Series]:
