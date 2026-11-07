@@ -5,9 +5,10 @@ number behind it, and why it matters or what we did about it. Numbers come from 
 `integration/out/*.log`), the agents' reports, the code and the LIVE leaderboard response. Where a number is uncertain,
 the text says so.
 
-**Where we stand (17:40):** LIVE **96.34** (v5), validation **96.73**, untouched holdout **96.84**. The FINAL version is tag
-`final-v5-robust`: v5 plus robustness guards, byte-identical on LIVE and validation and re-confirmed at 96.34 on the
-leaderboard. Sections 10–13 cover the afternoon round, teammates' cross-checks, what is left and the robustness round.
+**Where we stand (18:45, FINAL submitted):** LIVE **96.46**, validation **96.82**. The submitted FINAL file is v5 +
+robustness guards (`final-v5-robust`) + the LR + LightGBM line classifier + the `sd_noadv` ranker + a fix for the new
+ZA01 entity (veto off). Sections 10–13 cover the afternoon round, teammates' cross-checks, what is left and the
+robustness round; section 14 covers the classifier, the ranker and FINAL day.
 
 **Words used throughout**
 - **Bank line**: one row of a bank statement (a payment in or out).
@@ -60,6 +61,10 @@ session; every number was checked against the logs, the code or the LIVE respons
 8. **Late gains came from evidence the pipeline was mis-reading, not from new guessing.** The afternoon round (§10)
    added +0.72 on LIVE: currency-less remittance advices read in their invoices' currency, two policy-backed exception
    refinements, and a matcher that claims only the invoices a bank line actually cites. Precision never dropped.
+9. **On FINAL, the biggest risk was our own safety rule on the new company.** The merge lets a confident classifier
+   veto a matcher's claim. The classifier had never seen ZA01, was confidently wrong, and the veto dropped 116 correct
+   ZA01 matches (85 exact invoice-number matches). The drift scripts flagged ZA01 but not this; only opening the
+   lines behind the flag found it. Fixed by keeping the veto off for ZA01 before submitting (§14.3).
 
 ---
 
@@ -415,7 +420,12 @@ against LIVE is the cheapest early warning.
 | Remittance FX + exception refinements + ZA01 fixes | **96.46** (hold **96.59**) | §10.1 fixes 1–3 |
 | LIVE leaderboard, v4 file | **96.05** | +0.43: the remittance fix only had LIVE cases (§10.1) |
 | + `cn_bundles` matcher | **96.73** (hold **96.84**) | §10.1 fix 4 |
-| LIVE leaderboard, v5 file | **96.34** | Current best, frozen as `best-live-96.34` |
+| LIVE leaderboard, v5 file | **96.34** | Frozen as `best-live-96.34` |
+| + LR + LightGBM line classifier | **96.76** | §14.1 |
+| LIVE leaderboard, v5 + classifier | **96.38** | +0.04 |
+| + `sd_noadv` ranker | **96.82** | §14.2 |
+| LIVE leaderboard, v5 + classifier + ranker | **96.46** | Best LIVE score; what FINAL ran |
+| FINAL: + ZA01 veto off | submitted | Restores 116 ZA01 matches; no effect on LIVE or val (§14.3) |
 
 Exception macro-F1 went from **0.716** in the first full run to **0.962**: DUPLICATE_PAYMENT 0.110 → 0.966,
 SHORT_BANK_CHARGES 0.368 → 0.937, OVERPAYMENT 0.575 → 0.992, UNIDENTIFIED 0.614 → 0.956.
@@ -740,3 +750,76 @@ Six agents running data-heavy analyses at once exhausted the machine's memory an
 folder was wiped; the repo, the frozen FINAL folder and the data were intact. After the restart every Python run went
 through a gate (at most 2 heavy processes, only with ≥ 7 GB free) with a watchdog that kills the largest agent process
 below 3 GB, and full-pipeline runs were banned for the agents. Nothing crashed again.
+
+---
+
+## 14. Classifier, ranker and FINAL day (16:00–18:45)
+
+> **TL;DR:** a LightGBM model stacked on the line classifier (+0.04 LIVE) and Kenny's ranker for bulk payments without
+> an advice (+0.08 LIVE) stack to **LIVE 96.46**. On FINAL, every drift flag was traced to its lines; one hid a real
+> problem: the classifier's veto dropping correct ZA01 matches. It was fixed before submitting.
+
+Full detail: `classification/insights.md`.
+
+### 14.1 The line classifier ensemble
+- The 22-class logistic regression already labelled lines that settle no invoice ~99.99 % right. The only lever left
+  was `p_items` (does this line settle invoices?), which drives the veto (`< 0.2`) and the UNIDENTIFIED flag (`< 0.97`).
+- Seven models were tried as binary P(ITEM): LightGBM, XGBoost, a ranker LightGBM on the UNIDENTIFIED population,
+  character n-gram LR, linear SVM and Naive Bayes, plus stacks and averages. Each was fit on the 6 months before the
+  cutoff, then refit on everything before it.
+- **Chosen: LR + LightGBM, quantile-mapped back onto the LR's probability scale**, so 0.2 / 0.97 keep their meaning.
+  - val 96.4141 → 96.4419, hold 96.4991 → 96.5276, LIVE 95.62 → 95.65 (on Kenny's v3), then 96.34 → 96.38 (on v5).
+  - The 6-model stack was +0.0024 on val and −0.0005 on hold: noise, so the simpler model won.
+  - Naive Bayes was clearly worse (−0.6), and SVM alone slightly worse than the LR.
+- **Lesson: calibration beat diversity.** The quantile map alone gave +0.012. Four extra models added +0.0015.
+- Safety: the models are pre-trained and in git (`classification/pretrained/`, about 12 MB). Any error falls back to
+  the plain LR. Runs need `PY=.venv/bin/python`, otherwise LightGBM silently falls back.
+
+### 14.2 The `sd_noadv` ranker (Kenny, `kenny/ranker`)
+- What it does: big customer payments with no advice. A logistic regression rates each open invoice and credit note
+  of the payer, and the ranker claims the top-rated items while their total stays at or under the cash, covering at
+  least 80 % of it.
+- About 205–250 lines per phase; 28 % of the invoice pairs it adds are wrong, but it is net positive everywhere.
+- It runs as an add-on after the full run (`matching/addon.py`), with `submission_safe.csv.gz` kept as a fallback.
+- **The classifier and the ranker work on different lines, so their gains add up:**
+  - val 96.76 → 96.82
+  - LIVE: 96.34 for v5 alone, 96.38 with the classifier, 96.42 with the ranker, **96.46 with both**
+- Caveat: the ranker's hold model learned from val's 2025 answers, so its hold number doesn't follow the time rule.
+  The val number is clean.
+
+### 14.3 FINAL day
+- **Run:** 220,256 lines (2026-01-02 → 06-30), 18:10 → 18:23. Every matching stage produced lines, the ensemble ran
+  without fallback, and validation passed.
+- **Drift flags, each traced to lines:**
+  - Moncayo moved fully to camt053, which has more fields: fine.
+  - PAYROLL +162 % is 900 ZA01 payroll lines: fine.
+  - IT01 money matched fell 0.60 → 0.34, but the line share is unchanged; three no-invoice transfers (€96.5 M and
+    2 × €9.3 M) are labelled correctly: fine.
+  - The new ZA01 entity: **hid a real problem.**
+- **The problem:**
+  - ZA01 (4,339 lines, MT940, all details inside the text, 35 advices) never appears in TRAIN.
+  - The classifier gave its `EFT CREDIT … INVOICE KWI…` receipts p_items ≈ 0.03 with high category confidence.
+  - The merge's veto therefore dropped **116 ZA01 receipts that matching had claimed**: 85 `refs:exact`, 64 of them
+    with the exact amount and the right payer.
+- **How it was found:** the drift report's "52 % UNIDENTIFIED" was a ratio over a sub-population; the real rate was
+  8.2 %. Opening the 192 UNIDENTIFIED receipts showed 91 cite an existing invoice, and every exact one had been
+  claimed and then vetoed.
+- **The fix:**
+  - `NO_VETO_ENTITIES=ZA01` in `integration/run.py`; only the merge was re-run.
+  - 122 lines changed, all ZA01; UNIDENTIFIED went from 192 to 76.
+  - Validation passed, and the LIVE result is byte-identical in content (LIVE has 2 ZA01 lines).
+  - Expected gain: about +0.02–0.04.
+  - Submitted: `submission_v2_za_noveto.csv.gz` (sha256 `c6bb886b…`).
+- None of the advices use South African number formats. The parser fix for them (§13.3) is in place but wasn't
+  needed.
+
+### 14.4 Lessons
+1. **A rule that lets a learned model override evidence must check the model knows this kind of data.** On an unseen
+   entity a confident-but-wrong classifier beat exact invoice-number matches. Next time: no veto for unseen entities,
+   banks or formats, and never against `refs:exact`.
+2. **A model's confidence doesn't mean much outside its training data.** A 0.98 category confidence on ZA01 was
+   confidence about text it had never seen.
+3. **Drift scripts point; they don't conclude.** Every flag needed its lines opened, and the dangerous one sat behind
+   a ratio that looked normal. "In the same range as other entities" is not a check.
+4. **Check the new entity first in a FINAL.** For each new entity: how many receipts were matched, and how many were
+   dropped between matching and the merge.

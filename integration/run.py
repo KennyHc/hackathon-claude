@@ -37,6 +37,13 @@ def merge(phase: str) -> tuple[pd.DataFrame, pd.Series]:
     # drop matcher lines that classification is confident settle no item
     lab = labels.reindex(alloc.bank_txn_id)
     veto = (lab.p_items.values < P_MIN) & (lab.confidence.values >= CONF_OVERRIDE)
+    # NO_VETO_ENTITIES=ZA01: entities the classifier never saw in training keep their matcher claims
+    nv = [e for e in os.environ.get("NO_VETO_ENTITIES", "").split(",") if e]
+    if nv:
+        ent = bank.set_index("bank_txn_id").entity.reindex(alloc.bank_txn_id).values
+        keep = veto & pd.Series(ent).isin(nv).values
+        print(f"[integration] veto kept off for {nv}: {pd.Series(alloc.bank_txn_id.values[keep]).nunique():,} lines")
+        veto = veto & ~keep
     alloc = alloc[~veto].copy()
 
     # exceptions: rules library first, matcher's guess otherwise
