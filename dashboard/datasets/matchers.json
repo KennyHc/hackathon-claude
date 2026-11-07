@@ -33,7 +33,7 @@
  },
  {
   "matcher":"pdf_cases",
-  "lines_val":6336,
+  "lines_val":6400,
   "precision_val":0.9992,
   "lines_hold":6269,
   "precision_hold":0.9982,
@@ -41,15 +41,15 @@
  },
  {
   "matcher":"refs",
-  "lines_val":43223,
-  "precision_val":0.9946,
+  "lines_val":43162,
+  "precision_val":0.9967,
   "lines_hold":42025,
-  "precision_hold":0.995,
+  "precision_hold":0.9968,
   "order":6
  },
  {
   "matcher":"subset_sum",
-  "lines_val":39035,
+  "lines_val":39032,
   "precision_val":0.9947,
   "lines_hold":37595,
   "precision_hold":0.9947,
@@ -88,11 +88,19 @@
   "order":11
  },
  {
-  "matcher":"classifier",
-  "lines_val":23110,
-  "precision_val":0.8165,
-  "lines_hold":21542,
-  "precision_hold":0.821,
+  "matcher":"cn_bundles",
+  "lines_val":1070,
+  "precision_val":0.1402,
+  "lines_hold":939,
+  "precision_hold":0.1523,
   "order":12
+ },
+ {
+  "matcher":"classifier",
+  "lines_val":22040,
+  "precision_val":0.8561,
+  "lines_hold":20603,
+  "precision_hold":0.8584,
+  "order":13
  }
 ]

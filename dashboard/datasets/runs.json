@@ -4,24 +4,24 @@
   "window": "TRAIN Jan\u2013Jun 2025",
   "role": "Tuned on",
   "lines": 199987,
-  "score": 96.41,
-  "allocation_f1": 0.958,
-  "precision": 0.999,
-  "recall": 0.92,
-  "txn_accuracy": 0.976,
-  "exception_macro_f1": 0.963
+  "score": 96.73,
+  "allocation_f1": 0.962,
+  "precision": 0.998,
+  "recall": 0.929,
+  "txn_accuracy": 0.977,
+  "exception_macro_f1": 0.965
  },
  {
   "run": "Holdout",
   "window": "TRAIN Jan\u2013Jun 2024",
   "role": "Never tuned on",
   "lines": 190169,
-  "score": 96.5,
-  "allocation_f1": 0.96,
-  "precision": 0.999,
-  "recall": 0.925,
-  "txn_accuracy": 0.976,
-  "exception_macro_f1": 0.96
+  "score": 96.84,
+  "allocation_f1": 0.965,
+  "precision": 0.998,
+  "recall": 0.933,
+  "txn_accuracy": 0.978,
+  "exception_macro_f1": 0.964
  },
  {
   "run": "LIVE v1",
@@ -50,7 +50,7 @@
  {
   "run": "LIVE v3",
   "window": "LIVE Jul\u2013Dec 2025",
-  "role": "Leaderboard (current code)",
+  "role": "Leaderboard (UNIDENTIFIED 0.97)",
   "lines": 203083,
   "score": 95.62,
   "allocation_f1": 0.9487,
@@ -58,5 +58,29 @@
   "recall": 0.9038,
   "txn_accuracy": 0.9741,
   "exception_macro_f1": 0.9481
+ },
+ {
+  "run": "LIVE v4",
+  "window": "LIVE Jul\u2013Dec 2025",
+  "role": "Leaderboard (remittance FX + exception fixes)",
+  "lines": 203083,
+  "score": 96.05,
+  "allocation_f1": 0.9511,
+  "precision": 0.9985,
+  "recall": 0.9079,
+  "txn_accuracy": 0.9746,
+  "exception_macro_f1": 0.9631
+ },
+ {
+  "run": "LIVE v5",
+  "window": "LIVE Jul\u2013Dec 2025",
+  "role": "Leaderboard (current code, + cn_bundles)",
+  "lines": 203083,
+  "score": 96.34,
+  "allocation_f1": 0.9562,
+  "precision": 0.9983,
+  "recall": 0.9175,
+  "txn_accuracy": 0.9753,
+  "exception_macro_f1": 0.9637
  }
 ]

@@ -208,12 +208,14 @@ class PartyResolver:
         self.keys: dict = collections.defaultdict(lambda: collections.defaultdict(set))
         self.iban: dict = collections.defaultdict(set)
         for r in cust.itertuples(index=False):
-            for nm in (r.name, r.trade_name):
+            former = str(getattr(r, "former_names", "") or "")      # names before a rename (lib.merge_master)
+            for nm in (r.name, r.trade_name, *former.split("|")):
                 if nm:
                     for k in name_keys(nm):
                         self.keys[r.entity][k].add(r.customer_id)
-            if r.iban:
-                self.iban[(r.entity, r.iban.replace(" ", "").upper())].add(r.customer_id)
+            for ib in (r.iban, *str(getattr(r, "former_ibans", "") or "").split("|")):   # old paying account: still valid
+                if ib:
+                    self.iban[(r.entity, ib.replace(" ", "").upper())].add(r.customer_id)
         ar = ctx.items[ctx.items.side == "AR"].drop_duplicates(["party_id", "party_name"])
         for pid, ent, nm in zip(ar.party_id, ar.entity, ar.party_name):
             if nm:

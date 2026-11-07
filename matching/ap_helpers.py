@@ -54,11 +54,17 @@ def load_runs(ctx, months_before: int = 2, months_after: int = 1) -> pd.DataFram
     files = {}
     for folder in ("train", "live", "final"):
         for f in glob.glob(os.path.join(lib.DATA, folder, "payment_runs", "*.csv")):
-            ym = os.path.basename(f).split("_")[1]
+            m6 = re.search(r"_(\d{6})(?:_|\.csv$)", os.path.basename(f))   # ENT_YYYYMM_k.csv; robust to extra name parts
+            ym = m6.group(1) if m6 else ""
             if lo <= ym <= hi:
                 files.setdefault(os.path.basename(f), f)   # same file in two folders -> keep first
     parts = [pd.read_csv(f, dtype=str, keep_default_na=False).assign(run_file=os.path.basename(f))
              for f in sorted(files.values())]
+    cur = glob.glob(os.path.join(lib.DATA, ctx.folder, "payment_runs", "*.csv"))
+    print(f"[payment_runs] {len(files)} run files in window {lo}..{hi} ({len(cur)} in {ctx.folder}/payment_runs)"
+          + ("  WARNING files present but none in window (name pattern changed?)" if cur and not any(
+              os.path.dirname(f) == os.path.dirname(cur[0]) for f in files.values())
+             else "  WARNING no run files in this phase's folder" if not cur else ""))
     if not parts:
         return pd.DataFrame()
     r = pd.concat(parts, ignore_index=True)

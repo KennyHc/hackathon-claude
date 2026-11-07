@@ -40,6 +40,11 @@ def side_files(ctx, sub: str) -> pd.DataFrame:
             if lo <= mo <= hi:
                 seen[os.path.basename(p)] = p   # a later folder wins on duplicate names
     parts = [pd.read_csv(p, dtype=str, keep_default_na=False) for p in seen.values()]
+    cur = glob.glob(os.path.join(lib.DATA, ctx.folder, sub, "*.csv"))
+    used = sum(os.path.dirname(p) == os.path.join(lib.DATA, ctx.folder, sub) for p in seen.values())
+    print(f"[side_files] {ctx.folder}/{sub}: {len(cur)} files in folder, {used} in window {lo}..{hi}, {sum(map(len, parts)):,} rows"
+          + ("  WARNING files present but none used (file-name month pattern changed?)" if cur and not used
+             else "  WARNING no files for this phase's folder" if not cur else ""))
     if not parts:
         return pd.DataFrame()
     return pd.concat(parts, ignore_index=True).drop_duplicates()

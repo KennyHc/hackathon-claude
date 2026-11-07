@@ -68,6 +68,17 @@ def main():
     flags += _compare("exception share of rows", ex(rs), ex(cs), a.tol, 0.0005)
     cat = lambda s: s[s.item_id == ""].category.value_counts(normalize=True)
     flags += _compare("category share of no-item rows", cat(rs), cat(cs), a.tol)
+    # entities that are new OR nearly absent from the reference (ZA01 has 2 LIVE lines, so it is not "new")
+    for e, n in cb.entity.value_counts().items():
+        nr = int((rb.entity == e).sum())
+        if nr < 100:
+            print(f"[drift] small/new entity {e}: {n:,} lines now ({nr} in {a.ref}), {cb[cb.entity == e].claimed.mean():.1%} claimed")
+    rl = os.path.join(ROOT, "matching", "out", a.phase, "remittance_lines.parquet")
+    if os.path.exists(rl):   # advice parse coverage per format (a new layout parses to advices without lines)
+        r = pd.read_parquet(rl, columns=["file", "format", "line_no"]).groupby("file").agg(f=("format", "first"), n=("line_no", "max"))
+        cov = (r.n >= 0).groupby(r.f).mean()
+        print("\n--- remittance advices with parsed lines, by format ---\n" + cov.map("{:.1%}".format).to_string())
+        flags += [f"remittance: {k} advices only {v:.0%} parsed" for k, v in cov.items() if v < 0.9]
     new_ent = sorted(set(cb.entity) - set(rb.entity))
     if new_ent:
         for e in new_ent:

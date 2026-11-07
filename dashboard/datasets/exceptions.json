@@ -3,12 +3,12 @@
   "exception":"PARTIAL",
   "golden_val":12511,
   "precision_val":0.991,
-  "recall_val":0.936,
-  "f1_val":0.963,
+  "recall_val":0.943,
+  "f1_val":0.966,
   "golden_hold":12056,
   "precision_hold":0.991,
-  "recall_hold":0.943,
-  "f1_hold":0.966
+  "recall_hold":0.949,
+  "f1_hold":0.97
  },
  {
   "exception":"OVERPAYMENT",
@@ -35,13 +35,13 @@
  {
   "exception":"SHORT_BANK_CHARGES",
   "golden_val":171,
-  "precision_val":0.957,
-  "recall_val":0.918,
-  "f1_val":0.937,
+  "precision_val":0.958,
+  "recall_val":0.942,
+  "f1_val":0.95,
   "golden_hold":125,
-  "precision_hold":0.946,
-  "recall_hold":0.84,
-  "f1_hold":0.89
+  "precision_hold":0.949,
+  "recall_hold":0.896,
+  "f1_hold":0.922
  },
  {
   "exception":"SHORT_WITHHOLDING",
@@ -102,11 +102,11 @@
   "exception":"FX_DIFFERENCE",
   "golden_val":15793,
   "precision_val":1.0,
-  "recall_val":0.858,
-  "f1_val":0.924,
+  "recall_val":0.868,
+  "f1_val":0.929,
   "golden_hold":14795,
   "precision_hold":0.999,
-  "recall_hold":0.849,
-  "f1_hold":0.918
+  "recall_hold":0.86,
+  "f1_hold":0.924
  }
 ]

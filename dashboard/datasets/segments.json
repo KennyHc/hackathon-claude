@@ -4,12 +4,12 @@
   "lines":42462,
   "pairs":92722,
   "max_points":12.6733,
-  "accuracy_val":0.9607,
-  "accuracy_hold":0.9631,
+  "accuracy_val":0.9623,
+  "accuracy_hold":0.9646,
   "accuracy_live_v1":0.948,
-  "accuracy_live":0.959,
-  "points_lost_val":1.2832,
-  "points_lost_hold":1.2215
+  "accuracy_live":0.96,
+  "points_lost_val":1.2309,
+  "points_lost_hold":1.1703
  },
  {
   "segment":"ap_payment_multi",
@@ -31,7 +31,7 @@
   "accuracy_val":0.8285,
   "accuracy_hold":0.8559,
   "accuracy_live_v1":0.808,
-  "accuracy_live":0.808,
+  "accuracy_live":0.812,
   "points_lost_val":0.9774,
   "points_lost_hold":0.9023
  },
@@ -88,12 +88,12 @@
   "lines":6124,
   "pairs":36220,
   "max_points":3.381,
-  "accuracy_val":0.9476,
-  "accuracy_hold":0.9497,
+  "accuracy_val":0.9502,
+  "accuracy_hold":0.9551,
   "accuracy_live_v1":0.941,
-  "accuracy_live":0.943,
-  "points_lost_val":0.4419,
-  "points_lost_hold":0.4318
+  "accuracy_live":0.949,
+  "points_lost_val":0.423,
+  "points_lost_hold":0.3966
  },
  {
   "segment":"ap_fx",
@@ -112,12 +112,12 @@
   "lines":3184,
   "pairs":32775,
   "max_points":2.7058,
-  "accuracy_val":0.7481,
-  "accuracy_hold":0.7658,
+  "accuracy_val":0.767,
+  "accuracy_hold":0.7797,
   "accuracy_live_v1":0.718,
-  "accuracy_live":0.733,
-  "points_lost_val":1.2489,
-  "points_lost_hold":1.128
+  "accuracy_live":0.746,
+  "points_lost_val":1.1761,
+  "points_lost_hold":1.0766
  },
  {
   "segment":"ar_card_settlement",
@@ -208,12 +208,12 @@
   "lines":725,
   "pairs":13951,
   "max_points":1.0572,
-  "accuracy_val":0.8745,
-  "accuracy_hold":0.879,
+  "accuracy_val":0.8772,
+  "accuracy_hold":0.8843,
   "accuracy_live_v1":0.493,
-  "accuracy_live":0.845,
-  "points_lost_val":0.1723,
-  "points_lost_hold":0.1829
+  "accuracy_live":0.879,
+  "points_lost_val":0.171,
+  "points_lost_hold":0.1806
  },
  {
   "segment":"nonitem_bank_fees",
@@ -256,12 +256,12 @@
   "lines":3679,
   "pairs":3679,
   "max_points":0.802,
-  "accuracy_val":0.9818,
-  "accuracy_hold":0.9835,
+  "accuracy_val":0.9842,
+  "accuracy_hold":0.9868,
   "accuracy_live_v1":0.858,
-  "accuracy_live":0.983,
-  "points_lost_val":0.0146,
-  "points_lost_hold":0.0138
+  "accuracy_live":0.985,
+  "points_lost_val":0.0126,
+  "points_lost_hold":0.011
  },
  {
   "segment":"ar_dd_returned",
@@ -280,12 +280,12 @@
   "lines":1857,
   "pairs":6920,
   "max_points":0.749,
-  "accuracy_val":0.6834,
-  "accuracy_hold":0.6714,
+  "accuracy_val":0.7259,
+  "accuracy_hold":0.7053,
   "accuracy_live_v1":0.545,
-  "accuracy_live":0.657,
-  "points_lost_val":0.2755,
-  "points_lost_hold":0.2761
+  "accuracy_live":0.693,
+  "points_lost_val":0.2492,
+  "points_lost_hold":0.2557
  },
  {
   "segment":"ar_cheque_deposit",
@@ -487,7 +487,7 @@
   "accuracy_val":0.9657,
   "accuracy_hold":0.9795,
   "accuracy_live_v1":0.941,
-  "accuracy_live":0.941,
+  "accuracy_live":0.952,
   "points_lost_val":0.0069,
   "points_lost_hold":0.0045
  },
@@ -496,12 +496,12 @@
   "lines":356,
   "pairs":753,
   "max_points":0.1046,
-  "accuracy_val":0.9494,
-  "accuracy_hold":0.9435,
+  "accuracy_val":0.9551,
+  "accuracy_hold":0.9492,
   "accuracy_live_v1":0.92,
   "accuracy_live":0.934,
-  "points_lost_val":0.0103,
-  "points_lost_hold":0.01
+  "points_lost_val":0.0095,
+  "points_lost_hold":0.0076
  },
  {
   "segment":"ar_overpayment",
@@ -520,11 +520,11 @@
   "lines":253,
   "pairs":546,
   "max_points":0.0751,
-  "accuracy_val":0.9763,
+  "accuracy_val":0.9802,
   "accuracy_hold":0.9809,
   "accuracy_live_v1":0.949,
   "accuracy_live":0.965,
-  "points_lost_val":0.004,
+  "points_lost_val":0.0037,
   "points_lost_hold":0.0045
  },
  {
@@ -640,12 +640,12 @@
   "lines":169,
   "pairs":169,
   "max_points":0.0368,
-  "accuracy_val":0.9172,
-  "accuracy_hold":0.84,
+  "accuracy_val":0.9408,
+  "accuracy_hold":0.896,
   "accuracy_live_v1":0.354,
-  "accuracy_live":0.884,
-  "points_lost_val":0.0031,
-  "points_lost_hold":0.0046
+  "accuracy_live":0.932,
+  "points_lost_val":0.0022,
+  "points_lost_hold":0.003
  },
  {
   "segment":"nonitem_internal_transfer",

@@ -47,13 +47,27 @@ EOF
 say "wipe cached final artefacts"
 rm -rf ingestion/out/final matching/out/final classification/out/final integration/out/final
 rm -f ingestion/out/_cache/final__* ingestion/out/_cache/pdftext_final*
+# build the PDF text caches HERE (pdftext.path() otherwise falls back to a legacy data/cache/pdftext_final* that any
+# teammate's older code may have written; ensure() only checks its file count, not how it was extracted)
+$PY ingestion/pdftext.py final || { echo "PDF TEXT EXTRACTION FAILED"; exit 1; }
 
 say "ingestion (+ PDF text)"
 $PY ingestion/run.py --phase final || { echo "INGESTION FAILED"; exit 1; }
+$PY - <<'EOF2'
+import pandas as pd
+b = pd.read_parquet("ingestion/out/final/bank_lines.parquet", columns=["entity", "currency", "amount_eur"])
+o = pd.read_parquet("ingestion/out/final/open_items.parquet", columns=["entity", "open_amount"])
+print("bank lines per entity:", b.entity.value_counts().to_dict())
+print("open items per entity:", o[o.open_amount > 0.005].entity.value_counts().to_dict())
+if b.amount_eur.isna().any():
+    print(f"WARNING amount_eur missing for {int(b.amount_eur.isna().sum())} lines, currencies {sorted(b.currency[b.amount_eur.isna()].unique())} (no fx rate)")
+for e in sorted(set(b.entity) - set(o.entity)):
+    print(f"WARNING entity {e} has bank lines but no open items")
+EOF2
 
 say "matching + classification + integration"
 $PY integration/run.py --phase final --all || { echo "PIPELINE FAILED"; exit 1; }
-grep -E "CRASHED|WARNING no" "$LOG" && echo ">>> a matcher crashed or a PDF cache is missing: read above before submitting"
+grep -E "CRASHED|WARNING|ERROR|FAILED|: 0 lines" "$LOG" && echo ">>> a matcher crashed / produced 0 lines, a fallback fired (assign_exceptions/refine FAILED) or a parser warned: read above before submitting"
 
 say "validate"
 $PY integration/validate.py --phase final || { echo "VALIDATION FAILED — do not submit this file"; exit 1; }

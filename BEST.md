@@ -1,6 +1,6 @@
 # Best version: what to submit for FINAL
 
-**Git tag `best-live-96.34`** on branch `kenny/full-pipeline` · frozen copy in
+**Git tag `final-v5-robust`** (same output as `best-live-96.34`) on branch `kenny/full-pipeline` · frozen copy in
 `/Users/kenny/Documents/GitHub/hackathon-claude-best` (a separate checkout of the tag; nothing else edits it).
 
 | Where | Score |
@@ -10,7 +10,9 @@
 | Validation (TRAIN Jan–Jun 2025, tuned on) | 96.73 |
 | Untouched holdout (TRAIN Jan–Jun 2024) | 96.84 |
 
-Code = merge `b7457de`: v4 + the `cn_bundles` matcher (cited invoices and their credit notes on unclaimed lines,
+Code = v5 (merge `b7457de`) + FINAL robustness guards that leave val, hold and LIVE byte-identical: masters_final merged
+by key with former names/IBANs kept, remittance parser hardening + coverage warnings, side-file guards, `final.sh` /
+`drift.py` checks, `.csv.gz` masters. v5 = v4 + the `cn_bundles` matcher (cited invoices and their credit notes on unclaimed lines,
 unique completion or the cited part only). v4 = v3 + remittance FX for currency-less advices, voucher discount grace, exception refinements
 (`integration/refine.py`), ZA01 one-liners, masters/FX-rates check in `final.sh`.
 The submitted LIVE file and its leaderboard result are kept in the frozen folder under `BEST_RESULTS/` (not in git:

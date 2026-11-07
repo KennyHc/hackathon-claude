@@ -50,30 +50,58 @@
  },
  {
   "step": 8,
+  "label": "Remittance FX + exception fixes",
+  "score": 96.46,
+  "phase": "val",
+  "note": "Holdout 96.59; currency-less advices, PARTIAL/SBC refinements"
+ },
+ {
+  "step": 9,
+  "label": "+ cn_bundles matcher",
+  "score": 96.73,
+  "phase": "val",
+  "note": "Cited invoices + their credit notes, unique completion"
+ },
+ {
+  "step": 10,
   "label": "Untouched holdout",
-  "score": 96.5,
+  "score": 96.84,
   "phase": "hold",
   "note": "Jan\u2013Jun 2024, never tuned on"
  },
  {
-  "step": 9,
+  "step": 11,
   "label": "LIVE v1 (leaderboard)",
   "score": 93.73,
   "phase": "live",
   "note": "Older file, uploaded 12:38"
  },
  {
-  "step": 10,
+  "step": 12,
   "label": "LIVE v2 (leaderboard)",
   "score": 95.58,
   "phase": "live",
   "note": "Second-wave matchers, uploaded 13:14"
  },
  {
-  "step": 11,
+  "step": 13,
   "label": "LIVE v3 (leaderboard)",
   "score": 95.62,
   "phase": "live",
   "note": "Threshold 0.97, uploaded 14:18"
+ },
+ {
+  "step": 14,
+  "label": "LIVE v4 (leaderboard)",
+  "score": 96.05,
+  "phase": "live",
+  "note": "Remittance FX + exception fixes, uploaded 15:57"
+ },
+ {
+  "step": 15,
+  "label": "LIVE v5 (leaderboard)",
+  "score": 96.34,
+  "phase": "live",
+  "note": "+ cn_bundles, uploaded 16:38"
  }
 ]

@@ -19,4 +19,7 @@ assert (g["doc"], g["gross"], g["ded"], g["reason"], g["paid"]) == \
 g = R.ROW_RE.match(R._norm_row("R2025-0045 03/05/2026 1 234,56 1 234,56")).groupdict()
 assert g["doc"] == "R2025-0045" and g["gross"] == "1234,56", g          # a document number starting with R is kept
 assert "12500,00 ZAR" in R._norm_amounts("payment of R 12 500,00 ZAR on 05/03/2026 ")
+g = R.ROW_RE.match(R._norm_row("KWI-26-0308068 2026-03-05 R 5 100,69 R 5 100,69")).groupdict()   # ISO date row (Kenny)
+assert (g["doc"], g["gross"], g["paid"]) == ("KWI-26-0308068", "5100,69", "5100,69"), g
+assert R._norm_row("A2025-01-0001 05/03/2026 1 234,56").startswith("A2025-01-0001 05/03/2026 1234,56")
 print("ok: ZA amount formats")
