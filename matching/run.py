@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import inspect
 import os
 import sys
 import time
@@ -25,6 +26,17 @@ from matching.lib import data, evalutil  # noqa: E402
 
 ORDER = ["batches", "ap", "remittance", "refs"]   # matcher modules under matching/matchers/, in priority order
 COLS = ["bank_txn_id", "item_id", "amount", "exception", "confidence", "method"]
+# Per-matcher confidence gate. Structural matchers (batches, ap, remittance) are kept whole: their low-confidence methods
+# still measured >= 98% precise. refs' weak tiers (risky subset sums, withholding/charges guesses) sit below 0.65.
+GATES = {"refs": 0.65}
+
+
+def _p_items(phase: str):
+    p = os.path.join(ROOT, "classification", "out", phase, "line_labels.parquet")
+    if not os.path.exists(p):
+        return None
+    lab = pd.read_parquet(p, columns=["bank_txn_id", "p_items"])
+    return lab.set_index("bank_txn_id").p_items
 
 
 def run(phase: str, min_conf: float = 0.0, only: list[str] | None = None, exceptions: bool = False, quiet: bool = False) -> pd.DataFrame:
@@ -39,7 +51,13 @@ def run(phase: str, min_conf: float = 0.0, only: list[str] | None = None, except
             continue
         try:
             t1 = time.time()
-            df = mod.match(phase, set(claimed))
+            params = inspect.signature(mod.match).parameters
+            kw = {}
+            if "prior" in params:      # items already settled by earlier matchers, so a later one does not reuse them
+                kw["prior"] = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=COLS)
+            if "p_items" in params:
+                kw["p_items"] = _p_items(phase)
+            df = mod.match(phase, set(claimed), **kw)
             if df is None or df.empty:
                 stats.append((name, "ok", 0, 0, f"{time.time() - t1:.0f}s"))
                 continue
@@ -47,8 +65,9 @@ def run(phase: str, min_conf: float = 0.0, only: list[str] | None = None, except
                 if c not in df:
                     df[c] = None
             df = df[~df.bank_txn_id.isin(claimed)]
-            if min_conf > 0:
-                df = df[df.confidence.fillna(1.0) >= min_conf]
+            gate = max(min_conf, GATES.get(name, 0.0))
+            if gate > 0:
+                df = df[df.confidence.fillna(1.0) >= gate]
             claimed |= set(df.bank_txn_id)
             parts.append(df[COLS])
             stats.append((name, "ok", df.bank_txn_id.nunique(), len(df), f"{time.time() - t1:.0f}s"))

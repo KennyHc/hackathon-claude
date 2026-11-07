@@ -316,7 +316,7 @@ def _solve_pool(idx, cents0, docs, pos, typ, issue, cash, toks, text, c, tier, i
         r = _short([p for p in H if typ[idx[p]] == "ARI"], idx, cents0, issue, cash, items, bd)
         if r is not None:
             sel, amts, excs, how = r
-            out = pack(sel, "ref_short_" + how, 0.9 if how != "charges" else 0.75)
+            out = pack(sel, "ref_short_" + how, 0.9 if how.startswith("discount") else 0.6)
             out["amts"], out["excs"] = amts, excs
             return out
     # --- 1c. N:M — all quoted invoices paid, one of them by exactly half (the other half comes on another line)
@@ -361,7 +361,8 @@ def _solve_pool(idx, cents0, docs, pos, typ, issue, cash, toks, text, c, tier, i
     if len(can) == 1:
         sel, fixed = _month_fix(can[0], idx, cents0, typ, issue, text, None)
         rk = _risk(n, len(sel), cash)
-        return pack(sel, "party_subset" + ("_month" if fixed else "") + _tier(rk), _conf(rk, 0.97))
+        conf = _conf(rk, 0.97) if rk < 0.03 else 0.45  # unique but risky: measured ~73 % on val -> below the ledger/gate
+        return pack(sel, "party_subset" + ("_month" if fixed else "") + _tier(rk), conf)
     if len(can) > 1:
         can.sort(key=lambda s: (sum(s), len(s)))
         best, second = can[0], can[1]
