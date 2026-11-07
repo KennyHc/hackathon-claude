@@ -27,6 +27,26 @@ def cents(x) -> int:
     return int(round(float(x) * 100))
 
 
+def fee_grid(cut: str, min_count: int = 2) -> set:
+    """{(currency, cents)}: intermediary-bank fees deducted on SHORT_BANK_CHARGES lines of TRAIN booked before `cut`
+    (labels, before the cut only: CLAUDE.md 2b).  The fees are a few fixed EUR amounts converted at a fixed rate per currency
+    (10/15/20/25/35/45 EUR; USD x1.185, CAD x1.48, AUD x1.58): the grid learned before 2025 covers 100 % of 2025.
+    Single-item lines only (fee = item amount - cash); a value must be seen min_count times."""
+    try:
+        g = data.golden("train")
+        s = g[g.exception == "SHORT_BANK_CHARGES"]
+        s = s[s.groupby("bank_txn_id").item_id.transform("size") == 1]
+        b = data.bank("train").set_index("bank_txn_id")
+        bd = pd.to_datetime(s.bank_txn_id.map(b.booking_date))
+        s = s[bd < pd.Timestamp(cut)]
+        ccy = s.bank_txn_id.map(b.currency)
+        fee = ((s.amount - s.bank_txn_id.map(b.amount)) * 100).round().astype("Int64")
+        vc = pd.Series(list(zip(ccy, fee))).value_counts()
+        return {(c, int(f)) for (c, f), n in vc.items() if n >= min_count and f is not pd.NA and f > 0}
+    except Exception:  # no train labels available: the fee rule simply never fires
+        return set()
+
+
 def risk(n: int, k: int, cash: int) -> float:
     """#subsets of size <= k of n items / #possible cent amounts (~cash): expected spurious exact sums."""
     k = max(k, 1)

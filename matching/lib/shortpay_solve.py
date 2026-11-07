@@ -21,6 +21,20 @@ CHG_PCT = 0.03         # POLICIES says <= 2 %; the scorer only needs the full am
 CHG_EUR = 60.0
 
 
+OVER_PCTS = (0.01, 0.10)  # every single-invoice overpayment in train is +1 %, +10 % (to the cent) or a whole-unit extra
+
+
+def _over_pct(op: int, cash: int) -> bool:
+    """cash is exactly the open amount +1 % or +10 % (cents, rounding either way)."""
+    return any(abs(int(round(op * (1 + p))) - cash) <= 1 for p in OVER_PCTS)
+
+
+def _is_fee(st, i, d: int) -> bool:
+    """shortfall d (cents) is one of the intermediary-bank fees seen in train before the cut (st.fees: {(ccy, cents)})."""
+    fees = getattr(st, "fees", None)
+    return bool(fees) and (st.cur[i], int(d)) in fees
+
+
 def _pack(st, sel, method, conf, amts=None, excs=None):
     sel = list(sel)
     return {"idx": sel, "amts": list(amts) if amts is not None else [int(st.c[i]) for i in sel],
@@ -161,6 +175,8 @@ def solve_short(st, pool, cash, hits, bd, country, eur, prefix=""):
             # customers overpay by a round amount far more often than by coincidence (train < 2025): tier on it
             if (cash - op) % 100 == 0:
                 return _pack(st, [i], prefix + "ref_over_round", 0.9)
+            if _over_pct(op, cash):  # val: 78/78 right (other non-round quoted overpayments 72 %)
+                return _pack(st, [i], prefix + "ref_over_pct", 0.9)
             return _pack(st, [i], prefix + "ref_over", 0.6)
         if eur is not None and country not in SEPA and 0 < op - cash <= CHG_PCT * op and eur(op - cash) <= CHG_EUR + 0.01:
             return _pack(st, [i], prefix + "ref_chg", 0.9)
@@ -223,15 +239,26 @@ def solve_short(st, pool, cash, hits, bd, country, eur, prefix=""):
     near = []
     for i in inv:
         op = int(st.c[i])
-        if op < cash <= op * (1 + OVER_MAX):
+        if op < cash <= op * (1 + OVER_MAX) + 1:
             near.append((i, "over", cash - op))
         elif (eur is not None and country not in SEPA and st.c[i] == st.full[i] and 0 < op - cash <= CHG_PCT * op
               and eur(op - cash) <= CHG_EUR + 0.01):
             near.append((i, "chg", op - cash))
+    # the difference itself is evidence: a learned bank fee, or exactly +1 % / +10 %.  Several near invoices but exactly one
+    # with such a difference -> that one (the others are coincidences).
+    strong = [(i, k, d) for i, k, d in near
+              if (k == "chg" and _is_fee(st, i, d)) or (k == "over" and not prefix and _over_pct(int(st.c[i]), cash))]
+    # (FX path excluded for overpayments: the instructed amount is not the cash; fx_over_* measured 0/19 on val)
+    if len({i for i, _, _ in strong}) == 1:
+        i, kind, d = strong[0]
+        tag = "" if len(near) == 1 else "_pick"
+        if kind == "chg":  # val: 81/81 right in the fee grid (2.6 % outside it)
+            return _pack(st, [i], prefix + "chg_1_fee" + tag, 0.9)
+        return _pack(st, [i], prefix + "over_1_pct" + tag, 0.9)  # val: 65/65 right
     if len(near) == 1:
         i, kind, d = near[0]
         rk = n * d / max(cash, 1)
-        if kind == "chg":  # unquoted charges measured 49 % on val (milestone 1): never emitted
+        if kind == "chg":  # unquoted charges off the fee grid: 2.6 % on val, never emitted
             return _pack(st, [i], prefix + "chg_1", 0.3)
         if d % 100 != 0:
             return _pack(st, [i], prefix + "over_1_odd", 0.3)

@@ -57,6 +57,7 @@ def match(phase: str, claimed: set | None = None, prior: pd.DataFrame | None = N
     bank = data.bank(phase)
     b = bank[~bank.bank_txn_id.isin(claimed)].sort_values(["booking_date", "bank_txn_id"])
     st = sc.ARState(phase, prior)
+    st.fees = sc.fee_grid(cut)  # learned bank-fee amounts (train labels before the cut)
     px = partylib.PartyIndex(phase, cut=cut)
     from integration.lib import fx
     if verbose:

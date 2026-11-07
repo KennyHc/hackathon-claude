@@ -14,12 +14,16 @@ numbers in section 1 were measured end to end with the team's `integration/run.p
 | + AP payment runs | 64.66 | 0.810 (0.9998 / 0.680) | 0.479 | 0.491 |
 | + AR references | 82.89 | 0.910 (0.9986 / 0.836) | 0.886 | 0.539 |
 | + shortpay (FX, withholding/discount, over/under-payments) + duplicates (`8de49b7`) | 90.66 | 0.926 (0.9986 / 0.863) | 0.919 | 0.840 |
-| **+ pdf_cases (instalments, retentions, advances, replaced invoices) (current)** | **91.37** | **0.928 (0.9989 / 0.866)** | **0.932** | **0.852** |
+| + pdf_cases (instalments, retentions, advances, replaced invoices) | 91.37 | 0.928 (0.9989 / 0.866) | 0.932 | 0.852 |
+| **+ shortpay fee grid + overpayment +1 %/+10 % + near-invoice tie-break (current)** | **92.94** | **0.928 (0.9989 / 0.866)** | **0.933** | **0.929** |
 
-Points of the current run: alloc 46.38 · txn 27.95 · exc 17.03. pdf_cases: ar_instalment 0.64 -> 0.93 line acc, ar_retention
-0.005 -> off the loss list, PARTIAL recall 0.66 -> 0.81. Still losing most: SHORT_BANK_CHARGES (1.0 pt, recall 0.33),
-OVERPAYMENT (0.73, recall 0.47), ar_ref_noise (0.68), UNIDENTIFIED (0.27), PARTIAL (0.25), ar_1toN_credit_note (0.22),
-ar_n_to_m (0.19). (Commit `cb19bc9` says "val 90.66" in its message; that number is `8de49b7`'s, the pdf_cases code it added
+Points of the current run: alloc 46.38 · txn 27.98 · exc 18.58. pdf_cases: ar_instalment 0.64 -> 0.93 line acc, ar_retention
+0.005 -> off the loss list, PARTIAL recall 0.66 -> 0.81. Fee grid / overpayment shapes (see s2): SHORT_BANK_CHARGES recall
+0.33 -> 0.99 (precision 1.00), OVERPAYMENT recall 0.47 -> 0.85 (precision 0.99); new methods chg_1_fee(_pick),
+ref_over_pct, over_1_pct(_pick) all 100 % pair-precise on val.
+Still losing most: ar_ref_noise (0.68 txn pts), UNIDENTIFIED (0.27 exc pts, recall 0.79), PARTIAL (0.25, recall 0.81),
+ar_1toN_credit_note (0.22), SHORT_DISPUTE (0.20, recall 0.82), FX_DIFFERENCE (0.19, recall 0.83), ar_n_to_m (0.19),
+OVERPAYMENT (0.17), ar_partial (0.16). (Commit `cb19bc9` says "val 90.66" in its message; that number is `8de49b7`'s, the pdf_cases code it added
 measured 91.37.)
 **LIVE (official leaderboard): 82.53** for the same code (commit 686146c): alloc F1 90.6% (P 99.9%, R 82.8%), txn accuracy
 88.6%, exception macro-F1 53.4%, amount-weighted accuracy 90.1%. Val predicted 82.89: **val tracks LIVE within 0.4 points**,
@@ -48,6 +52,13 @@ Matchers, in priority order (a line claimed by an earlier matcher is never touch
   predicted the category of 27,246 test lines (>= 2024-07) with **100% precision, 95% recall** (classification's area).
 - Look-alike traps are real: the generic text `SEPA-UEBERWEISUNG EREF+NOTPROVIDED SVWZ+PAYMENT` appears on 148 sample
   lines of which only 4 are UNIDENTIFIED. Never match on text or amount alone.
+- **Bank charges are a fixed fee grid.** Every SHORT_BANK_CHARGES deduction in TRAIN is one of 6 EUR fees
+  {10, 15, 20, 25, 35, 45} converted at a fixed rate per currency (USD x1.185, CAD x1.48, AUD x1.58): 24 (currency, amount)
+  values. The grid learned before 2025 covers 100 % of 2025. An unquoted shortfall that is on the grid is a charge
+  (val 113/113); off the grid it almost never is (2.6 %). `shortpay_core.fee_grid(cut)` learns it from labels before the cut.
+- **Overpayments have three shapes.** All 2,838 single-invoice OVERPAYMENT lines of TRAIN are exactly +1 %, exactly +10 %
+  (to the cent) or a whole-unit extra (5 / 10 / 100 …). +1 % / +10 % is near-certain evidence even without a quoted
+  reference (val 153/153); a non-round, non-percentage excess is mostly a coincidence (over_1_odd 4.9 %).
 
 ## 3. Deterministic rules that work (and the traps behind them)
 
@@ -132,7 +143,22 @@ miss because their run file is in the previous phase (`ap.match(..., use_prior=T
 - `integration/make_val.py` crashes at the very end writing `data/val/README.txt` (cp1252 can't encode `→`); the data is
   complete. `integration/run.py` fails to print its score on Windows (path error); run `integration/score.py` directly.
 - Memory: 5 parallel agents each loading TRAIN crashed the PC. Two agents at a time on `val`/`sample`, one python process
-  each (<1.5 GB), was stable. Full val pipeline: ~6 min; live: ~6 min.
+  each (<1.5 GB), was stable.
+- **Timings (7 matchers, one process alone):** val matching ~9 min (refs 326 s, ap 88 s, shortpay 48 s, batches 37 s,
+  duplicates 22 s, pdf_cases 14 s, remittance 7 s); integration ~25 s. Two runs at once roughly double both.
+- **First run on a new phase pays PDF text extraction once:** pdf_cases took 721 s on the first LIVE run (14 s on val),
+  then `matching/out/cache/<phase>/pdf_text.parquet` is reused. **FINAL will pay this too** (~12 min) on top of ~9 min of
+  matching + ~70 s of classification: budget ~25 min from 18:00.
+- **Matcher cache (`run.py`, `871b5fd`):** each matcher's output is stored in `matching/out/<phase>/cache/` under a chained
+  fingerprint (its source, every earlier matcher, `matching/lib` + `integration/lib`, data file stats, classifier labels,
+  gates). Unchanged matchers load in 0 s; changing one re-runs it and everything after it. Any edit in `matching/lib` re-runs
+  everything (it can't know which matcher uses which helper). `--no-cache` forces a full run. Verified on sample: cached
+  output identical to a fresh run (values and dtypes), 86 s -> 19 s.
+- **Run-to-run variation:** the same code gave 91.37 and 91.35 on val (55 SHORT_DISCOUNT rows differ): some matcher depends
+  on an ordering that is not fully fixed. Small; worth pinning down before trusting differences under ~0.05.
+- **One agent per folder at a time.** A Claude desktop session left running kept launching val runs in parallel (same
+  output file, three heavy processes) and one of its unfinished changes got committed by the other agent. Check
+  `tasklist | grep python` before a long run.
 
 ## 7. How to reproduce
 
@@ -144,7 +170,10 @@ miss because their run file is in the previous phase (`ap.match(..., use_prior=T
 ```
 Same with `--phase live` for the submission file. Code map: `matching/lib/data.py` (loaders + parquet cache),
 `matching/lib/evalutil.py` (per-segment precision/recall), `matching/run.py` (orchestrator, `ORDER`, `GATES`),
-`matching/matchers/{batches,ap,remittance,refs}.py`, `matching/AGENT_BRIEF.md` (rules given to the sub-agents).
+`matching/matchers/{batches,ap,remittance,pdf_cases,refs,shortpay,duplicates}.py`, `matching/AGENT_BRIEF.md` (rules given
+to the sub-agents). Diagnostics (val golden, never fed to matchers): `matching/tests/shortpay/weak_precision.py` (precision of
+every shortpay method incl. the ones below the gate, and what the wrong lines really are),
+`matching/tests/shortpay/diag_over_chg.py` (why a golden OVERPAYMENT / SHORT_BANK_CHARGES line was not claimed).
 
 ## 8. Suggested next steps, by points
 
