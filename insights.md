@@ -5,8 +5,9 @@ number behind it, and why it matters or what we did about it. Numbers come from 
 `integration/out/*.log`), the agents' reports, the code and the LIVE leaderboard response. Where a number is uncertain,
 the text says so.
 
-**Where we stand (17:00):** LIVE **96.34** (v5, our best, frozen as tag `best-live-96.34`), validation
-**96.73**, untouched holdout **96.84**. Sections 10–12 cover the afternoon round, teammates' cross-checks and what is left.
+**Where we stand (17:40):** LIVE **96.34** (v5), validation **96.73**, untouched holdout **96.84**. The FINAL version is tag
+`final-v5-robust`: v5 plus robustness guards, byte-identical on LIVE and validation and re-confirmed at 96.34 on the
+leaderboard. Sections 10–13 cover the afternoon round, teammates' cross-checks, what is left and the robustness round.
 
 **Words used throughout**
 - **Bank line**: one row of a bank statement (a payment in or out).
@@ -693,3 +694,49 @@ invoice was short-paid, so the deducted invoice can't be known. We accept that l
 One honest cycle (build with cross-window training, validation and holdout runs, a LIVE build and upload) takes about
 70 minutes, more than was left before the code freeze. A learned invoice chooser is also the part most exposed to drift,
 and FINAL is a single shot, so it belongs after the competition, not in the submitted pipeline.
+
+---
+
+## 13. Robustness round for FINAL (17:00–17:40)
+
+> **TL;DR:** six agents tested how the pipeline holds up on a new date range and new settings; nothing was overfitted,
+> but five silent-failure risks were fixed in a version that is byte-identical on LIVE and validation (LIVE 96.34 again).
+
+### 13.1 What the six agents checked, and what they found
+
+| Question | Finding | Action |
+|---|---|---|
+| Do the learned parts go stale over 6–12 months? | No. A classifier trained 9–15 months before the test scores like one trained 3–9 months before (AUC 0.9988 vs 0.9989, category accuracy 0.9998 vs 0.9997, UNIDENTIFIED F1 0.905 vs 0.900). No account, entity or IBAN features; digits are collapsed, so no date or id can go stale. | None |
+| How do we do on a company never seen before (ZA01)? | Hiding everything learned about PL01 or MA01: the true payer is still a candidate for 99.1 % / 95.5 % of receipts (from 100 % / 96.7 %); categories of unclaimed lines don't change at all. Only the UNIDENTIFIED flag slips (worth < 0.01 points). | None before FINAL |
+| Are the masters and the announced FINAL changes handled? | A partial `masters_final` file would silently drop every other customer, IBAN, mandate and rate (payer matching −0.7 pp); renamed customers lose their old name (−7 % of their lines). Customers changing bank cost nothing. | Fixed (13.2) |
+| Which rules were fitted to the TRAIN answers? | Few: the 14-day silent-discount grace, overpayment shape and size cap, duplicate lag, coincidence guards. All behave the same on the untouched 2024 window. Only the overpayment 35 % cap is a clear fit (rejects 4 val / 1 hold true overpayments). | Cap: after FINAL |
+| What depends on the date range? | Nothing hard-codes 2024/2025; every window is relative to the booking date; FINAL reads LIVE's folder for January. Stale FX rates matter little: 97 % of cross-currency rows use the bank's own original amount. | None |
+| What would fail silently on FINAL-shaped inputs? | Advice rows dropped on small layout changes (e.g. `KWI-25-0308068`, ISO dates: 0–1 of 4 rows); a missing side-file folder starves its matcher quietly; `final.sh` missed "FAILED" fallbacks and 0-line matchers and could reuse an old shared PDF cache. | Fixed (13.2) |
+
+### 13.2 What shipped (tag `final-v5-robust`, commit `6f6b7b5`)
+1. **Masters merged by key** (`ingestion/lib.py`): `masters_final` rows replace base rows with the same key instead of
+   replacing whole files; former names and IBANs are kept and indexed by the payer resolver (`matching/parties.py`).
+   `.csv.gz` masters are read too, and other files are reported instead of ignored.
+2. **Remittance parser hardening** (`matching/remittance_parse.py`): accepts `PREFIX-` / `PREFIX/` numbers and ISO dates,
+   and prints coverage per advice format with a warning when a layout looks new.
+3. **Side-file guards** (`matching/ap_helpers.py`, `matching/batch_helpers.py`): file counts per folder, a warning when the
+   phase's folder is empty, and the payment-run month read with a regex.
+4. **`final.sh` and `drift.py`**: fresh PDF text extraction, a sanity block after ingestion (lines and open items per
+   entity, missing FX), a wider error grep, small entities such as ZA01 always shown in drift, advice parse coverage.
+
+Check: full LIVE (717,870 rows) and validation (706,266 rows) submissions byte-identical to v5, validation 96.73, no
+warning fired; the LIVE upload scored 96.34 again. These fixes can only help, or change nothing, on FINAL: their value
+appears only if FINAL's inputs differ from LIVE's in the ways above.
+
+### 13.3 After FINAL
+- Drop the overpayment size cap for round excesses (+0.01–0.02, unmeasured end to end).
+- Parse South African number formats in advices ("1 234,56", "R 5,100.69") and match CSV headers by name.
+- A stricter UNIDENTIFIED threshold for companies with no history.
+- Bucket classifier amounts in EUR instead of local currency (ZAR amounts are ~20× EUR).
+- Two small date fixes (December "service January" wrap; previous-folder payment runs in `refs`).
+
+### 13.4 Lesson: parallel agents need a memory budget
+Six agents running data-heavy analyses at once exhausted the machine's memory and it rebooted (17:11). The temporary
+folder was wiped; the repo, the frozen FINAL folder and the data were intact. After the restart every Python run went
+through a gate (at most 2 heavy processes, only with ≥ 7 GB free) with a watchdog that kills the largest agent process
+below 3 GB, and full-pipeline runs were banned for the agents. Nothing crashed again.
