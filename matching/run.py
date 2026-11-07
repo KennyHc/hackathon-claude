@@ -30,6 +30,9 @@ COLS = ["bank_txn_id", "item_id", "amount", "exception", "confidence", "method"]
 # Per-matcher confidence gate. Structural matchers (batches, ap, remittance) are kept whole: their low-confidence methods
 # still measured >= 98% precise. refs' weak tiers (risky subset sums, withholding/charges guesses) sit below 0.65.
 GATES = {"refs": 0.65}
+# Methods kept despite the gate: 93-97% pair precise on val, and an unclaimed line is wrong anyway (it becomes
+# UNIDENTIFIED / no match), so keeping them gains ~1,300 correct lines for ~80 wrong ones on val.
+GATE_EXEMPT = {"ref_fill", "ref_half", "party_discount_late"}
 
 
 def _p_items(phase: str):
@@ -68,7 +71,7 @@ def run(phase: str, min_conf: float = 0.0, only: list[str] | None = None, except
             df = df[~df.bank_txn_id.isin(claimed)]
             gate = max(min_conf, GATES.get(name, 0.0))
             if gate > 0:
-                df = df[df.confidence.fillna(1.0) >= gate]
+                df = df[(df.confidence.fillna(1.0) >= gate) | df.method.isin(GATE_EXEMPT)]
             claimed |= set(df.bank_txn_id)
             parts.append(df[COLS])
             stats.append((name, "ok", df.bank_txn_id.nunique(), len(df), f"{time.time() - t1:.0f}s"))

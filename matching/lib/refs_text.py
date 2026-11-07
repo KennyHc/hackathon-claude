@@ -227,3 +227,37 @@ def service_month(s):
     """Month number (1..12) named in a bank text ('SERVICIOS MAYO', 'MANT. MAY 25'), else None. Whole words only; ambiguous -> None."""
     found = {_MONTH_OF[t] for t in norm(s).split() if t in _MONTH_OF}
     return found.pop() if len(found) == 1 else None
+
+
+# ---------------------------------------------------------------- truncated numbers ("RE2401184", "FV24-03 032", "0214")
+_PTOK = re.compile(r"[A-Za-z]*\d[A-Za-z0-9]*(?:-[A-Za-z0-9]+)*")
+
+
+def prefix_tokens(s) -> list[str]:
+    """Short alphanumeric tokens with >= 3 digits (or letters+digits >= 4 chars) that may be a CUT document number."""
+    s = strip_accents(_s(s)).upper()
+    out, seen = [], set()
+    for m in _PTOK.finditer(s):
+        t = re.sub(r"[^A-Z0-9]", "", m.group(0))
+        nd = sum(ch.isdigit() for ch in t)
+        if nd >= 3 and len(t) <= 16 and t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
+
+
+def prefix_match(t: str, doc) -> bool:
+    """Is token `t` the beginning of document `doc` as customers print it: the full number, its digits, the sequence after the
+    last hyphen, or its last-6-digit tail (e.g. 'RE2401184' / '0322619' / '032' / '1262' for FA240126xxx)."""
+    k = doc_keys(doc)
+    if not k["full"]:
+        return False
+    if t[0].isalpha():
+        return len(t) >= 4 and k["full"].startswith(t)
+    if len(t) >= 3 and (k["digits"].startswith(t) and len(t) >= 5):
+        return True
+    parts = norm(_s(doc)).split()
+    last = digits(parts[-1]) if parts else ""
+    if len(parts) > 1 and last.startswith(t) and len(t) >= 3:
+        return True
+    return len(t) >= 4 and k["tail6"].startswith(t)

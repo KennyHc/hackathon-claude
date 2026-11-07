@@ -88,7 +88,8 @@ def _load_items(phase: str):
 
 
 def match(phase: str, claimed: set | None = None, cut: str | None = None, verbose: bool = False, max_lines: int | None = None,
-          prior: pd.DataFrame | None = None, p_items: pd.Series | None = None, p_min: float = 0.1) -> pd.DataFrame:
+          prior: pd.DataFrame | None = None, p_items: pd.Series | None = None, p_min: float = 0.1,
+          diag: dict | None = None) -> pd.DataFrame:
     """prior: allocations already made by higher-priority matchers (their items' amounts are consumed before we start);
     p_items: classification's P(line settles items) by bank_txn_id; lines below p_min are skipped."""
     t0 = time.time()
@@ -156,15 +157,22 @@ def match(phase: str, claimed: set | None = None, cut: str | None = None, verbos
                 cands.append(partylib.Cand(p, 0.6, "ref", "doc"))
         if not cands:
             stats["no_party"] += 1
+            if diag is not None:
+                diag[r.bank_txn_id] = ("no_party", [], [])
             continue
         cands = sorted(cands, key=lambda c: -c.score)[:30]
         results = []
+        trace = [] if diag is not None else None
         for c in cands:
-            res = _solve_party(c, px, by_party, items, cents0, docs, pos, cur, issue, typ, bd, r.currency, cash, toks, text, ent, r.entity)
+            res = _solve_party(c, px, by_party, items, cents0, docs, pos, cur, issue, typ, bd, r.currency, cash, toks, text, ent, r.entity, trace)
             if res is not None and not any(x in res["method"] for x in DROP):
                 results.append((c, res))
+        if diag is not None:
+            diag[r.bank_txn_id] = ("pending", [c.customer_id for c in cands], trace)
         if not results:
             stats["no_solution"] += 1
+            if diag is not None:
+                diag[r.bank_txn_id] = ("no_solution", [c.customer_id for c in cands], trace)
             continue
         results.sort(key=lambda x: -(x[1]["conf"] * (0.5 + 0.5 * x[0].score)))
         best_c, best = results[0]
@@ -175,8 +183,12 @@ def match(phase: str, claimed: set | None = None, cut: str | None = None, verbos
                 o = others[0]
                 if o[1]["conf"] * (0.5 + 0.5 * o[0].score) > 0.85 * best["conf"] * (0.5 + 0.5 * best_c.score):
                     stats["ambiguous_payers"] += 1
+                    if diag is not None:
+                        diag[r.bank_txn_id] = ("ambiguous_payers", [c.customer_id for c in cands], trace)
                     continue
         stats["claimed"] += 1
+        if diag is not None:
+            diag[r.bank_txn_id] = ("claimed", [c.customer_id for c in cands], trace)
         stats["m_" + best["method"]] += 1
         for i, amt, exc in zip(best["idx"], best["amts"], best["excs"]):
             rows.append((r.bank_txn_id, item_id[i], amt / 100.0, exc, best["conf"], best["method"]))
@@ -215,7 +227,7 @@ def _canonical(sols, idx, cents0, typ, issue):
     return [v[1] for v in best.values()]
 
 
-def _solve_party(c, px, by_party, items, cents0, docs, pos, cur, issue, typ, bd, currency, cash, toks, text, ent, entity):
+def _solve_party(c, px, by_party, items, cents0, docs, pos, cur, issue, typ, bd, currency, cash, toks, text, ent, entity, trace=None):
     pid = c.customer_id
     tiers = [("own", [pid])]
     grp = px.group_members(pid)
@@ -226,6 +238,8 @@ def _solve_party(c, px, by_party, items, cents0, docs, pos, cur, issue, typ, bd,
         if not idx:
             continue
         res = _solve_pool(idx, cents0, docs, pos, typ, issue, cash, toks, text, c, tier, items, bd)
+        if trace is not None:
+            trace.append((pid, tier, len(idx), res["method"] if res else None))
         if res is not None and (tier == "own" or res["method"].startswith("ref_exact")):
             return res
     return None
@@ -326,7 +340,7 @@ def _solve_pool(idx, cents0, docs, pos, typ, issue, cash, toks, text, c, tier, i
         js = [p for p in Hi if abs((cash - (S - cents0[idx[p]])) - cents0[idx[p]] / 2) <= 1 and cash < S]
         if len(js) == 1:
             j = js[0]
-            out = pack(Hi, "ref_half", 0.8)
+            out = pack(Hi, "ref_half", 0.64)  # 95 % on val
             out["amts"] = [cents0[idx[p]] if p != j else cash - (S - cents0[idx[j]]) for p in Hi]
             out["excs"] = [None if p != j else "PARTIAL" for p in Hi]
             return out
@@ -341,7 +355,7 @@ def _solve_pool(idx, cents0, docs, pos, typ, issue, cash, toks, text, c, tier, i
         can = pick(sols)
         if len(can) == 1:
             rk = _risk(n - len(F), len(can[0]) - len(F), cash)
-            return pack(can[0], "ref_fill" + _tier(rk), _conf(rk, 0.95))
+            return pack(can[0], "ref_fill" + _tier(rk), _conf(rk, 0.64))  # 96.6 % on val: below the 97 % gate
         if len(F) == 1 and typ[idx[F[0]]] == "ARI":
             op = cents0[idx[F[0]]]
             up = text.upper()
@@ -350,28 +364,80 @@ def _solve_pool(idx, cents0, docs, pos, typ, issue, cash, toks, text, c, tier, i
                 r["amts"] = [cash]
                 r["excs"] = ["PARTIAL"]
                 return r
-        if len(can) > 1:
-            can.sort(key=lambda s: sum(s))
-            return pack(can[0], "ref_fill_oldest", 0.3)
+        # several completions: no claim here (oldest-completion measured ~50 %); fall through to the prefix / discount rules
+    # --- 2b. truncated / partial numbers listed in the text (camt 140-char cut, N43 38-char records): every token that is a
+    #         PREFIX of some open document is a cover constraint; solve on the union of the matching documents only.
+    ptoks = rt.prefix_tokens(text)
+    if ptoks:
+        M = {}
+        for t in ptoks:
+            m = [p for p in range(n) if rt.prefix_match(t, docs[idx[p]])]
+            if m:
+                M[t] = m
+        C = sorted({p for m in M.values() for p in m})
+        if M and 0 < len(C) <= rs.MAXN and len(C) < n:
+            sols = rs.subset_solutions([sv[p] for p in C], cash, limit=200)
+            sols = [tuple(C[q] for q in s_) for s_ in sols]
+            sols = [s_ for s_ in sols if all(set(m) & set(s_) for m in M.values())]
+            can = pick(sols)
+            if len(can) == 1:
+                rk = _risk(len(C), len(can[0]), cash)
+                return pack(can[0], "ref_prefix" + _tier(rk), _conf(rk, 0.95))
     # --- 3. payer's items only
     rest = _reduce(list(range(n)), typ, idx)
     sols = rs.subset_solutions([sv[p] for p in rest], cash, limit=200)
     sols = [tuple(rest[q] for q in s) for s in sols]
     can = pick(sols)
+    exact = None
     if len(can) == 1:
         sel, fixed = _month_fix(can[0], idx, cents0, typ, issue, text, None)
         rk = _risk(n, len(sel), cash)
         conf = _conf(rk, 0.97) if rk < 0.03 else 0.45  # unique but risky: measured ~73 % on val -> below the ledger/gate
-        return pack(sel, "party_subset" + ("_month" if fixed else "") + _tier(rk), conf)
-    if len(can) > 1:
+        exact = pack(sel, "party_subset" + ("_month" if fixed else "") + _tier(rk), conf)
+        if rk < 0.03:
+            return exact
+    elif len(can) > 1:
         can.sort(key=lambda s: (sum(s), len(s)))
         best, second = can[0], can[1]
         if sum(best) < sum(second):
             k = len(can)
             rk = _risk(n, len(best), cash) * k
             sel, fixed = _month_fix(best, idx, cents0, typ, issue, text, None)
-            return pack(sel, "party_oldest" + ("_month" if fixed else "") + _tier(rk), _conf(rk, 0.85))
-    return None
+            exact = pack(sel, "party_oldest" + ("_month" if fixed else "") + _tier(rk), _conf(rk, 0.85))
+            if rk < 0.03:
+                return exact
+    # --- 3b. early-payment discount taken without a usable reference: invoices with discount terms, still fully open,
+    #         counted at total - pct*total (POLICIES s3).  On time -> full amount (engine sets SHORT_DISCOUNT); late -> PARTIAL at
+    #         the discounted cash.  Only a unique, low-risk solution that uses >= 1 discounted invoice is accepted.
+    pct = items.disc_pct.values
+    full = items.full_cents.values
+    dv = list(sv)
+    disc = {}
+    for p, i in enumerate(idx):
+        if typ[i] == "ARI" and pct[i] > 0 and cents0[i] == full[i]:
+            dv[p] = full[i] - int(round(full[i] * pct[i] / 100))
+            disc[p] = dv[p]
+    if disc:
+        sols = rs.subset_solutions([dv[p] for p in rest], cash, limit=200)
+        sols = [tuple(rest[q] for q in s_) for s_ in sols]
+        sols = [s_ for s_ in sols if any(p in disc for p in s_)]
+        can = pick(sols)
+        if len(can) == 1:
+            sel = list(can[0])
+            rk = _risk(n, len(sel), cash)
+            if rk < 0.03:
+                days = items.disc_days.values
+                amts, excs, late = [], [], False
+                for p in sel:
+                    i = idx[p]
+                    if p in disc and not (bd <= issue[i] + np.timedelta64(int(items.disc_days.values[i]) + 3, "D")):
+                        amts.append(disc[p]); excs.append("PARTIAL"); late = True
+                    else:
+                        amts.append(cents0[i]); excs.append(None)
+                out = pack(sel, "party_discount" + ("_late" if late else ""), 0.64 if late else 0.9)  # _late 93 % on val
+                out["amts"], out["excs"] = amts, excs
+                return out
+    return exact
 
 
 WHT_RATES = (0.0125, 0.015, 0.10)  # POLICIES s3 SHORT_WITHHOLDING
