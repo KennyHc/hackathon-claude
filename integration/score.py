@@ -69,7 +69,8 @@ def line_correct(sub: pd.DataFrame, gold: pd.DataFrame) -> pd.Series:
     noitem_ok &= ~gn.index.isin(set(si.bank_txn_id))
     # an item golden line is wrong if the submission has a no-item row for it
     item_ok = item_ok & ~item_ok.index.isin(set(sn.index))
-    return pd.concat([item_ok, noitem_ok])
+    res = pd.concat([item_ok, noitem_ok])
+    return res.groupby(level=0).all()   # a line can appear in both (mixed golden / submission rows)
 
 
 def exception_table(sub: pd.DataFrame, gold: pd.DataFrame) -> pd.DataFrame:

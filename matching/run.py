@@ -29,6 +29,7 @@ ORDER = [
     "refs",              # invoice numbers in the bank text (#10)
     "subset_sum",        # payer's open items summing to the amount (#11)
     "same_amount",       # same-amount invoices: month in text / FIFO (#12)
+    "short_payments",    # one invoice short by bank charges / withholding, or a plausible overpayment (#22)
     "ap_refunds",        # supplier refunds of their credit notes (APC), rejected outgoing transfers (#19)
     "duplicates",        # payments of items already settled -> DUPLICATE_PAYMENT (#25)
 ]
