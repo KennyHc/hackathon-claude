@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA = os.path.join(ROOT, "data")
+DATA = os.environ.get("BANKREC_DATA", os.path.join(ROOT, "data"))  # mock FINAL dry runs
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 

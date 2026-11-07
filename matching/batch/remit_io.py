@@ -66,83 +66,133 @@ def _doc_row(doc, date, gross, ded, reason, paid, order=""):
             "paid": p, "your_order": "" if order is None else str(order).strip()}
 
 
-def parse_csv(text):
-    sep = ";" if text.split("\n", 1)[0].count(";") > text.split("\n", 1)[0].count(",") else ","
-    rows = list(csv.reader(io.StringIO(text), delimiter=sep))
-    head = {"payment_ref": "", "payment_date": "", "currency": "", "total": float("nan")}
-    docs, cols = [], None
-    for r in rows:
-        if not r or not any(c.strip() for c in r):
+import unicodedata
+
+SYN = {   # canonical field → header synonyms (normalised: lower, no accents, alnum only)
+    "document": ["document", "documento", "doc", "docno", "documentno", "invoice", "invoiceno", "invoicenumber",
+                 "ourinvoice", "yourinvoice", "factura", "nfactura", "numfactura", "facture", "nfacture", "rechnung",
+                 "rechnungsnr", "rechnungsnummer", "fattura", "nfattura", "numero", "number", "ref", "reference",
+                 "referencia", "beleg", "belegnr", "fatura", "faktura", "nrfaktury"],
+    "voucher": ["voucher", "voucherno", "ourref", "bono", "comprobante", "pieceno", "piece", "buchungsnr", "asiento"],
+    "doc_date": ["docdate", "date", "fecha", "fechadoc", "fechafactura", "invdate", "invoicedate", "datum",
+                 "rechnungsdatum", "datefacture", "data", "datafattura", "datadoc", "datafatura"],
+    "gross": ["gross", "amount", "bruto", "importe", "importebruto", "brutto", "betrag", "montant", "montantbrut",
+              "brut", "importo", "lordo", "valor", "valorbruto", "kwota", "total", "invoiceamount", "originalamount"],
+    "deduction": ["discountordeduction", "deduction", "deductions", "discount", "dto", "dtoded", "descuento",
+                  "deduccion", "abzug", "skonto", "abzuege", "deduction", "escompte", "remise", "retenue", "sconto",
+                  "detrazione", "desconto", "deducao", "potracenie", "adjustment", "ajuste"],
+    "reason": ["reason", "motivo", "grund", "motif", "causale", "razao", "powod", "comment", "comentario", "remark"],
+    "paid": ["paid", "netpaid", "amountpaid", "pagado", "importepagado", "neto", "net", "bezahlt", "gezahlt",
+             "zahlbetrag", "paye", "montantpaye", "netpaye", "pagato", "importopagato", "pago", "pagamento", "pago",
+             "valorpago", "zaplacono", "payment", "paidamount"],
+    "your_order": ["yourorder", "order", "po", "ponumber", "purchaseorder", "pedido", "supedido", "bestellung",
+                   "bestellnr", "commande", "ordine", "encomenda", "zamowienie", "orderno"],
+}
+_SYN_IDX = {v: k for k, vs in SYN.items() for v in vs}
+HEAD_KEYS = {"payment_ref": ["paymentref", "payref", "ref", "reference", "referencia", "paymentadvice", "avisodepago",
+                             "remittance", "referenz", "zahlungsreferenz", "riferimento", "avis", "aviso"],
+             "payment_date": ["paymentdate", "fechapago", "fecha", "date", "datum", "zahlungsdatum", "datepaiement",
+                              "datapagamento", "valuedate"],
+             "currency": ["currency", "moneda", "divisa", "wahrung", "waehrung", "devise", "valuta", "moeda"]}
+
+
+def _key(v):
+    s = unicodedata.normalize("NFKD", str(v if v is not None else "")).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def _map_header(vals):
+    """{column index: canonical field} if the row looks like a document-table header, else None."""
+    m = {}
+    for i, v in enumerate(vals):
+        k = _key(v)
+        f = _SYN_IDX.get(k)
+        if f is None:
+            for syn, ff in _SYN_IDX.items():       # prefix match ('importe (eur)', 'paid amount eur')
+                if len(syn) >= 4 and k.startswith(syn):
+                    f = ff
+                    break
+        if f and f not in m.values():
+            m[i] = f
+    fields = set(m.values())
+    if ("document" in fields or "voucher" in fields) and len(fields & {"gross", "paid", "deduction", "doc_date"}) >= 2:
+        if "document" not in fields:                 # only a voucher column: use it as the document
+            m = {i: ("document" if f == "voucher" else f) for i, f in m.items()}
+        return m
+    return None
+
+
+def _is_total(vals):
+    return any(_key(v).startswith(("total", "suma", "summe", "somme", "totale", "gesamt"))
+               for v in vals if isinstance(v, str))
+
+
+def parse_table(rows):
+    """Generic advice table (csv rows or xlsx rows): header key/values, then a document table in any column order with
+    EN/ES/FR/DE/IT/PT headers. Garbage rows (no document, no amount) are skipped and counted."""
+    head = {"payment_ref": "", "payment_date": "", "currency": "", "total": float("nan"), "bad_rows": 0}
+    docs, cmap = [], None
+    for vals in rows:
+        vals = list(vals)
+        if not any(v is not None and str(v).strip() for v in vals):
             continue
-        k0 = r[0].strip().lower()
-        if cols is None and k0 in ("payment_ref", "ref", "referencia", "reference"):
-            kv = {r[i].strip().lower(): r[i + 1].strip() for i in range(0, len(r) - 1, 2)}
-            head["payment_ref"] = kv.get("payment_ref", kv.get(k0, ""))
-            head["payment_date"] = _iso(kv.get("payment_date", ""))
-            head["currency"] = kv.get("currency", "")
-            continue
-        if cols is None and k0 in ("document", "documento", "doc", "invoice", "factura"):
-            cols = [c.strip().lower() for c in r]
-            continue
-        if cols is not None:
-            if k0.startswith("total"):
-                pv = [c for c in r[1:] if c.strip()]
-                if pv:
-                    head["total"] = _amt(pv[-1])
+        if cmap is None:
+            m = _map_header(vals)
+            if m:
+                cmap = m
                 continue
-            d = dict(zip(cols, r))
-            docs.append(_doc_row(d.get(cols[0]), d.get("doc_date", d.get("date")), d.get("gross"),
-                                 d.get("discount_or_deduction", d.get("deduction")), d.get("reason"),
-                                 d.get("paid"), d.get("your_order")))
+            # key/value pairs (csv: payment_ref,X,payment_date,Y,currency,Z) or label row (xlsx: Payment advice,X,date)
+            ks = [_key(v) for v in vals]
+            for i, k in enumerate(ks[:-1]):
+                nxt = vals[i + 1]
+                if nxt is None or not str(nxt).strip():
+                    continue
+                for f, syns in HEAD_KEYS.items():
+                    if k in syns and not head[f]:
+                        head[f] = _iso(nxt) if f == "payment_date" else str(nxt).strip()
+            if any(k in HEAD_KEYS["payment_ref"] for k in ks[:1]):   # label row: 'Payment advice', ref, date, ...
+                rest = [v for v in vals[1:] if v is not None and str(v).strip()]
+                if rest and not head["payment_ref"]:
+                    head["payment_ref"] = str(rest[0]).strip()
+                for v in rest[1:]:
+                    if not head["payment_date"] and _iso(v):
+                        head["payment_date"] = _iso(v)
+            for v in vals:
+                if isinstance(v, str) and re.fullmatch(r"[A-Z]{3}", v.strip()) and not head["currency"]:
+                    head["currency"] = v.strip()
+            continue
+        if _is_total(vals):
+            nums = [v for v in vals if v is not None and str(v).strip() and _amt(v) == _amt(v)]
+            if nums:
+                head["total"] = _amt(nums[-1])
+            continue
+        d = {f: (vals[i] if i < len(vals) else None) for i, f in cmap.items()}
+        doc = d.get("document")
+        g, p = _amt(d.get("gross")), _amt(d.get("paid"))
+        if doc is None or not str(doc).strip() or (g != g and p != p):
+            head["bad_rows"] += 1
+            continue
+        docs.append(_doc_row(doc, d.get("doc_date"), d.get("gross"), d.get("deduction"), d.get("reason"),
+                             d.get("paid"), d.get("your_order")))
     return head, docs
+
+
+def parse_csv(text):
+    first = text.split("\n", 1)[0]
+    sep = max([";", ",", "\t", "|"], key=first.count)
+    return parse_table(csv.reader(io.StringIO(text), delimiter=sep))
 
 
 def parse_xlsx(path):
     import openpyxl
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    head = {"payment_ref": "", "payment_date": "", "currency": "", "total": float("nan")}
-    docs = []
+    head, docs = None, []
     for ws in wb.worksheets:
-        cols = None
-        for row in ws.iter_rows(values_only=True):
-            vals = list(row)
-            if not any(v is not None and str(v).strip() for v in vals):
-                continue
-            s0 = str(vals[0]).strip().lower() if vals[0] is not None else ""
-            if cols is None:
-                low = [str(v).strip().lower() if v is not None else "" for v in vals]
-                if s0 in ("document", "documento", "doc", "invoice", "factura", "rechnung", "facture", "fattura",
-                          "invoice no", "invoice number", "our invoice", "voucher") or ("gross" in low or "paid" in low
-                                                                         or "net paid" in low):
-                    cols = low
-                    continue
-                rest = [v for v in vals[1:] if v is not None and str(v).strip()]
-                if rest and not head["payment_ref"] and ("advice" in s0 or "ref" in s0 or "pago" in s0
-                                                         or "payment" in s0 or "aviso" in s0):
-                    head["payment_ref"] = str(rest[0]).strip()
-                    if len(rest) > 1:
-                        head["payment_date"] = _iso(rest[1])
-                    for v in rest[2:]:
-                        if isinstance(v, str) and re.fullmatch(r"[A-Z]{3}", v.strip()):
-                            head["currency"] = v.strip()
-                continue
-            if s0.startswith("total"):
-                nums = [v for v in vals[1:] if v is not None and str(v).strip()]
-                if nums:
-                    head["total"] = _amt(nums[-1])
-                continue
-            d = dict(zip(cols, vals))
-            gk = next((c for c in cols if c in ("gross", "bruto", "amount", "importe", "brutto")), None)
-            pk = next((c for c in cols if c in ("paid", "pagado", "net", "bezahlt", "payé", "pagato")
-                       or "paid" in c), None)
-            dk = next((c for c in cols if "deduc" in c or "discount" in c or "dto" in c), None)
-            rk = next((c for c in cols if "reason" in c or "motivo" in c), None)
-            ok = next((c for c in cols if "order" in c or "pedido" in c or "po" == c), None)
-            datek = next((c for c in cols if "date" in c or "fecha" in c), None)
-            dockey = "invoice" if "invoice" in cols and cols[0] != "invoice" else cols[0]
-            docs.append(_doc_row(d.get(dockey), d.get(datek), d.get(gk), d.get(dk), d.get(rk), d.get(pk), d.get(ok)))
+        h, d = parse_table(ws.iter_rows(values_only=True))
+        if d and head is None:
+            head, docs = h, d
     wb.close()
-    return head, docs
+    return head or {"payment_ref": "", "payment_date": "", "currency": "", "total": float("nan")}, docs
 
 
 def _head_from_text(lines, us):
@@ -270,7 +320,7 @@ def _index(phase, since_days):
 
 def parse_remittances(phase, since_days=45, cache=True, workers=8):
     od = os.path.join(ROOT, "matching", "out", phase)
-    hp, dp = os.path.join(od, "k1_remit_heads.parquet"), os.path.join(od, "k1_remit_docs.parquet")
+    hp, dp = os.path.join(od, "k1_remit_heads_r2.parquet"), os.path.join(od, "k1_remit_docs_r2.parquet")
     ixf = os.path.join(DATA, phase, "remittance_advices", "index.csv")
     if (cache and os.path.exists(hp) and os.path.exists(dp)
             and (not os.path.exists(ixf) or os.path.getmtime(hp) > os.path.getmtime(ixf))):
@@ -288,7 +338,8 @@ def parse_remittances(phase, since_days=45, cache=True, workers=8):
                       "received_date": r.received_date, "format": r.format, **{k: h.get(k, "") for k in
                                                                                ("payment_ref", "payment_date",
                                                                                 "currency")},
-                      "total": h.get("total", float("nan")), "error": h.get("error", "")})
+                      "total": h.get("total", float("nan")), "error": h.get("error", ""),
+                      "bad_rows": h.get("bad_rows", 0)})
         for d in ds:
             docs.append({"file": r.file, **d})
     H = pd.DataFrame(heads)

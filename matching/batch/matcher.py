@@ -10,7 +10,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from matching.batch import apdd, cards_cheques, dd, pr  # noqa: E402
+from matching.batch import apdd, aprefund, cards_cheques, dd, pr  # noqa: E402
 from matching.batch.common import OUT_COLS, out_frame  # noqa: E402
 
 try:
@@ -18,7 +18,10 @@ try:
 except Exception:  # parser not landed yet
     remit = None
 
-SUBMATCHERS = [("pr", pr), ("dd", dd), ("cards_cheques", cards_cheques), ("remit", remit), ("apdd", apdd)]
+# K1_OFF=name1,name2 disables sub-matchers (A/B on val); new ones are listed in K1_NEW_DEFAULT_OFF until validated
+SUBMATCHERS = [("pr", pr), ("dd", dd), ("cards_cheques", cards_cheques), ("remit", remit), ("apdd", apdd),
+               ("aprefund", aprefund)]
+K1_OFF = set(filter(None, os.environ.get("K1_OFF", "").split(",")))
 
 
 def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.DataFrame, **ctx) -> pd.DataFrame:
@@ -26,17 +29,19 @@ def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.Data
     taken = set(claimed.bank_txn_id) if claimed is not None and len(claimed) else set()
     out = []
     verbose = ctx.get("verbose", True)
+    used_items = set()
     for name, mod in SUBMATCHERS:
-        if mod is None:
+        if mod is None or name in K1_OFF:
             continue
         t0 = time.time()
         L = lines[~lines.bank_txn_id.isin(taken)]
-        rows = mod.match(L, items, {"phase": phase, **ctx})
+        rows = mod.match(L, items, {"phase": phase, "used_items": used_items, **ctx})
         df = out_frame(rows)
         df = df[~df.bank_txn_id.isin(taken)]
         # a line must not list the same item twice
         df = df[~df.bank_txn_id.isin(df[df.duplicated(["bank_txn_id", "item_id"])].bank_txn_id)]
         taken |= set(df.bank_txn_id)
+        used_items |= set(df.item_id[df.exception != "RETURNED"])
         out.append(df)
         if verbose:
             print(f"  [batch/{name}] {df.bank_txn_id.nunique():,} lines, {len(df):,} rows, {time.time() - t0:.1f}s",

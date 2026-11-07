@@ -1,5 +1,6 @@
 """Direct-debit batches (our collections): batch credit → all receipts of the batch; R-transactions (returns) →
 the receipt with the mandate + amount → its item, RETURNED (amount = receipt amount)."""
+import os
 import re
 from collections import defaultdict
 
@@ -8,7 +9,8 @@ import pandas as pd
 from matching.batch.common import load_detail
 
 BATCH_RE = re.compile(r"(?<!\d)(\d{11})(?!\d)")
-MANDATE_RE = re.compile(r"VTM-[A-Z]{2}-\d{4,8}")
+DD_REPRES = os.environ.get("DD_REPRES", "1") == "1"
+MANDATE_RE = re.compile(r"\b[A-Z]{2,5}-[A-Z]{2}-\d{4,10}\b")   # VTM-ES-0006513; tolerant of other prefixes
 
 
 def _digits(s):
@@ -67,7 +69,8 @@ def _full_ar_docs(phase):
     import os
     from matching.batch.common import DATA
     out = {}
-    for ph in dict.fromkeys(["train", "live", phase]):
+    prev = {"final": ["train", "live"], "live": ["train"], "val": ["train"]}.get(phase, [])
+    for ph in dict.fromkeys(prev + [phase]):   # never a later phase (no leakage: val must not read live)
         f = os.path.join(DATA, ph, "ar_invoices.csv.gz")
         if os.path.exists(f):
             df = pd.read_csv(f, dtype=str, keep_default_na=False, usecols=["item_id", "entity", "document_number"])
@@ -94,6 +97,19 @@ def match(lines, items, ctx=None):
     for r in dd[["batch_id", "collection_date", "account_id", "mandate_id", "amt", "item_id",
                  "remittance_info"]].itertuples(index=False):
         by_mand[r.mandate_id].append(r)
+
+    def _it(x):
+        return x.item_id or full_doc.get((x.account_id[:4], x.remittance_info), "")
+    # re-presentations (re_presentation=Y) tell which earlier collection came back
+    rep_item = defaultdict(list)
+    rep_mand = defaultdict(list)
+    if DD_REPRES and "re_presentation" in dd.columns:
+        for x in dd[dd.re_presentation == "Y"][["batch_id", "collection_date", "account_id", "mandate_id", "amt",
+                                                 "item_id", "remittance_info"]].itertuples(index=False):
+            i = _it(x)
+            if i:
+                rep_item[i].append(x.collection_date)
+                rep_mand[x.mandate_id].append((x, i))
     rows = []
     for r in lines.itertuples(index=False):
         amt = float(r.amount)
@@ -117,11 +133,13 @@ def match(lines, items, ctx=None):
                                  "dd_batch" if unres == 0 else "dd_batch_part"))
                 break
         elif amt < 0:
-            mm = MANDATE_RE.search(blob)
+            mm = [m for m in MANDATE_RE.findall(blob) if m in by_mand]
+            if not mm:   # any token that is a known mandate id of our DD files
+                mm = [t for t in re.findall(r"[A-Z0-9][A-Z0-9/\-]{7,34}", blob) if t in by_mand]
             if not mm:
                 continue
             lim = (pd.Timestamp(r.booking_date) - pd.Timedelta(days=2)).strftime("%Y-%m-%d")
-            cands = [x for x in by_mand.get(mm.group(0), []) if x.collection_date <= lim
+            cands = [x for x in by_mand.get(mm[0], []) if x.collection_date <= lim
                      and abs(x.amt + amt) <= 0.01]
             bids = set(BATCH_RE.findall(blob))
             if bids:
@@ -130,7 +148,19 @@ def match(lines, items, ctx=None):
             if not cands:
                 continue
             x = max(cands, key=lambda x: x.collection_date)
-            it = x.item_id or full_doc.get((x.account_id[:4], x.remittance_info), "")
+            it = _it(x)
+            if DD_REPRES:
+                hi = (pd.Timestamp(r.booking_date) + pd.Timedelta(days=45)).strftime("%Y-%m-%d")
+                rp = [c for c in cands if _it(c) and any(r.booking_date < d <= hi for d in rep_item[_it(c)])]
+                if rp:
+                    x = max(rp, key=lambda x: x.collection_date)
+                    it = _it(x)
+                elif not it:   # unresolved original: the later re-presentation of the same document names the item
+                    dg = _digits(x.remittance_info)[-6:]
+                    nx = {i for c, i in rep_mand.get(mm[0], []) if r.booking_date < c.collection_date <= hi
+                          and abs(c.amt + amt) <= 0.01 and len(dg) >= 5 and dg in _digits(c.remittance_info + i)}
+                    if len(nx) == 1:
+                        it = nx.pop()
             if it:
                 rows.append((r.bank_txn_id, it, x.amt, "RETURNED", 0.9, "dd_return"))
     return rows

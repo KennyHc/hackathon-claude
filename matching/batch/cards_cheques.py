@@ -28,13 +28,16 @@ def _ar_index(items):
 
 
 def match_cards(lines, items, phase):
-    cs = load_detail(phase, "card_settlements")
+    cs = load_detail(phase, "card_settlements", lookback_months=6)   # chargebacks reverse orders up to ~6 months old
     if cs.empty:
         return []
     by_doc, _ = _ar_index(items)
     cs["ent"] = cs.account_id.str[:4]
     cs["item_id"] = [(lambda c: c[0].item_id if len(c) == 1 else "")(by_doc.get((e, o), []))
                      for e, o in zip(cs.ent, cs.order_number)]
+    from matching.batch.dd import _full_ar_docs
+    full = _full_ar_docs(phase)                       # orders already closed at phase start (chargebacks only)
+    cs["item_id_any"] = [it or full.get((e, o), "") for it, e, o in zip(cs.item_id, cs.ent, cs.order_number)]
     cs["g"], cs["n"] = cs.gross.astype(float), cs.net.astype(float)
     S = {}
     by_acc_net = defaultdict(list)
@@ -42,7 +45,8 @@ def match_cards(lines, items, phase):
         S[sid] = d
         by_acc_net[(sid[0], round(d.n.sum(), 2))].append(sid)
     by_card = defaultdict(list)
-    for r in cs[["merchant_id", "card", "g", "item_id", "settlement_date", "account_id"]].itertuples(index=False):
+    for r in cs[["merchant_id", "card", "g", "item_id_any", "settlement_date", "account_id"]].rename(
+            columns={"item_id_any": "item_id"}).itertuples(index=False):
         by_card[(r.merchant_id, r.card[-4:], round(r.g, 2))].append(r)
     rows, used = [], set()
     for r in lines.itertuples(index=False):
@@ -68,7 +72,7 @@ def match_cards(lines, items, phase):
             used.add(cands[0])
             for it, a in zip(D.item_id, D.g):
                 rows.append((r.bank_txn_id, it, a, "", 0.95, "card_settle"))
-        elif amt < 0 and "CHARGEBACK" in blob.upper() or (amt < 0 and "RETROCESSION" in blob.upper()):
+        elif amt < 0 and re.search(r"CHARGE\s?BACK|RETROCES|CONTRACARGO|STORNO|IMPAYE CB|RUECKBELASTUNG", blob.upper()):
             cm, mm = CARD_RE.search(blob), MID_RE.findall(blob)
             if not cm:
                 continue

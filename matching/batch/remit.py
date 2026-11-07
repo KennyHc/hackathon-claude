@@ -8,6 +8,9 @@ import pandas as pd
 
 from matching.batch.remit_io import parse_remittances
 
+import os
+REMIT_PARTIAL = os.environ.get("REMIT_PARTIAL", "reconcile")   # reconcile | share | off
+
 DISC_RE = re.compile(r"DISC|DTO|DESC|SKONTO|ESCOMPTE|SCONTO|PRONTO|REMISE|RABAT|EARLY", re.I)
 WHT_RE = re.compile(r"^RET|WITHH|RETEN|IRPF|ISR|IRRF|TDS", re.I)
 
@@ -144,11 +147,29 @@ def match(lines, items, ctx=None):
         lim = (pd.Timestamp(item_issue[it]) + pd.Timedelta(days=days + 3)).strftime("%Y-%m-%d")
         return bd <= lim and abs(round(g - g * pct / 100.0, 2) - paid) <= 0.02
 
+    bamt = dict(zip(lines.bank_txn_id, lines.amount.astype(float)))
+    stats = {"dup": 0, "unres": 0, "kept_partial": 0}
     rows = []
     for f, bt, ccy, conf, meth in L.itertuples(index=False):
         d = docs_by_file[f]
-        if (d.item_id == "").any() or d.item_id.duplicated().any():
+        if d.item_id.duplicated().any() and (d.item_id[d.item_id.duplicated()] != "").any():
+            stats["dup"] += 1
             continue
+        bad = d.item_id == ""
+        if bad.any():
+            # keep the resolved rows only when what is left still reconciles with the bank amount (the unresolved rows
+            # carry no cash: garbage / blank lines), or (REMIT_PARTIAL=share) they are <= 10 % of the cash
+            signed = np.where(d.gross < 0, -d.gross.abs(), d.paid)
+            rest, cash = float(signed[~bad.values].sum()), float(bamt.get(bt, 0.0))
+            ok = REMIT_PARTIAL != "off" and abs(rest - cash) <= max(0.01, 0.0005 * cash)
+            if not ok and REMIT_PARTIAL == "share":
+                ok = abs(float(signed[bad.values].sum())) <= 0.10 * cash and bad.mean() <= 0.10
+            if not ok:
+                stats["unres"] += 1
+                continue
+            stats["kept_partial"] += 1
+            d = d[~bad]
+            meth = meth + "_part"
         bd = bdate.get(bt, "")
         for it, g, ded, reason, paid in zip(d.item_id, d.gross, d.deduction, d.reason, d.paid):
             g = abs(g)
@@ -174,4 +195,6 @@ def match(lines, items, ctx=None):
             if item_ccy.get(it, ccy) != ccy and exc == "":
                 exc = "FX_DIFFERENCE"
             rows.append((bt, it, amt, exc, conf, meth))
+    print(f"    [remit] advices linked {len(L):,}; dropped dup {stats['dup']}, unresolved {stats['unres']}; "
+          f"kept partial {stats['kept_partial']} (REMIT_PARTIAL={REMIT_PARTIAL})", flush=True)
     return rows

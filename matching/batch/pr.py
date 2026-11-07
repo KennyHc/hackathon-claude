@@ -9,6 +9,9 @@ import pandas as pd
 
 from matching.batch.common import PAYFACTORY, item_index, load_detail, parse_amount
 
+import os
+PR_CONF_RANGE = os.environ.get("PR_CONF_RANGE", "1") == "1"
+PR_DUP = os.environ.get("PR_DUP", "1") == "1"   # duplicate supplier payments (e2e '…D' / re-sent transfer)
 RUN_RE = re.compile(r"((?:PR|CF)\d{12})(?:-(\d{1,4}))?")
 OCMT_RE = re.compile(r"/OCMT/([A-Z]{3})([\d.,]+)")
 
@@ -74,6 +77,7 @@ def build_transfers(pr):
 def match(lines, items, ctx=None):
     """Returns list of output rows (bank_txn_id,item_id,amount,exception,confidence,method)."""
     phase = (ctx or {}).get("phase")
+    _PHASE[0] = phase or ""
     pr = load_detail(phase, "payment_runs")
     if pr.empty:
         return []
@@ -91,21 +95,26 @@ def match(lines, items, ctx=None):
     item_ccy = dict(zip(items.item_id, items.currency))
     item_due = dict(zip(items.item_id, items.due_date))
     item_open = dict(zip(items.item_id, items.open_amount))
+    item_total = dict(zip(items.item_id, items.total_amount))
 
     rows = []
     used = set()
 
-    def emit(btid, trs, method, conf, line_ccy):
+    def emit(btid, trs, method, conf, line_ccy, dup=False):
         out = []
         for t in trs:
             for it, a, _ in t.docs:
                 if not it:
                     return False
                 if item_ccy.get(it, t.ccy) != t.ccy:   # document listed in another currency: full open amount
-                    a = item_open.get(it, a)
+                    a = item_total.get(it, a) if dup else item_open.get(it, a)
                 out.append((it, a))
         if len({it for it, _ in out}) != len(out):
             return False
+        if dup:   # the same transfer paid again (e2e '…D' or a re-sent truncated e2e): DUPLICATE_PAYMENT, no ledger effect
+            for it, a in out:
+                rows.append((btid, it, a, "DUPLICATE_PAYMENT", conf, method))
+            return True
         for it, a in out:
             exc = "FX_DIFFERENCE" if item_ccy.get(it, line_ccy) != line_ccy and not it.startswith("APC") else ""
             if not it.startswith("APC") and a < item_open.get(it, a) - 0.01 and not exc:
@@ -142,6 +151,14 @@ def match(lines, items, ctx=None):
             if len(cands) == 1:
                 emit(r.bank_txn_id, cands, "pr_e2e", 0.99, r.currency)
                 continue
+            if PR_DUP and re.fullmatch(r"(?:PR|CF)\d{12}-\d{4}D", r.end_to_end_id):
+                base = r.end_to_end_id[:-1]
+                t = by_acc_e2e.get((r.account_id, base))
+                cands = [t] if t is not None else by_ent_e2e.get((ent, base), [])
+                cands = [t for t in cands if _amount_ok(t, amt, r)]
+                if len(cands) == 1:
+                    emit(r.bank_txn_id, cands, "pr_dup_e2e", 0.9, r.currency, dup=True)
+                continue
         blob = " ".join([r.end_to_end_id, r.ref1, r.ref2, r.text.replace(" | ", ""), r.remittance_info])
         m = RUN_RE.search(blob)
         if not m:
@@ -157,7 +174,7 @@ def match(lines, items, ctx=None):
             if abs(tot - amt) <= 0.01 or (n == len(R) and abs(tot - amt) <= 0.01 * amt):
                 emit(r.bank_txn_id, R, "pr_agg", 0.97, r.currency)
             else:
-                sub = _drop_one(R, amt)
+                sub = _drop_one(R, amt) if all(t.ccy == r.currency for t in R) else None
                 if sub is not None:
                     emit(r.bank_txn_id, sub, "pr_agg_sub", 0.85, r.currency)
             continue
@@ -168,6 +185,47 @@ def match(lines, items, ctx=None):
             cand = [t for t in R if max((item_due.get(it, "") for it, _, _ in t.docs), default="") == r.booking_date]
             if cand and abs(sum(t.amt for t in cand) - amt) <= 0.01 and (n is None or n == len(cand)):
                 emit(r.bank_txn_id, cand, "pr_conf_due", 0.95, r.currency)
+                continue
+            # maturity on a weekend / holiday → debited on the next business day: due in (booking - 5d, booking]
+            lo5 = (pd.Timestamp(r.booking_date) - pd.Timedelta(days=5)).strftime("%Y-%m-%d")
+            mat = {}
+            for t in R:
+                du = max((item_due.get(it, "") for it, _, _ in t.docs), default="")
+                if lo5 < du <= r.booking_date:
+                    mat.setdefault(du, []).append(t)
+            hits = [g for g in mat.values() if abs(sum(t.amt for t in g) - amt) <= 0.01 and (n is None or n == len(g))]
+            allw = [t for g in mat.values() for t in g]
+            if len(hits) != 1 and allw and abs(sum(t.amt for t in allw) - amt) <= 0.01 and (n is None or n == len(allw)):
+                hits = [allw]
+            if len(hits) != 1 and PR_CONF_RANGE and len(mat) > 1:
+                # weekend / holiday maturities pooled into one debit: a contiguous range of due dates
+                ds = sorted(mat)
+                rng = []
+                for i in range(len(ds)):
+                    for j in range(i + 1, len(ds)):
+                        grp = [t for d in ds[i:j + 1] for t in mat[d]]
+                        if abs(sum(t.amt for t in grp) - amt) <= 0.01 and (n is None or n == len(grp)):
+                            rng.append(grp)
+                if len(rng) == 1:
+                    hits = rng
+            if len(hits) != 1 and PR_CONF_RANGE and n:
+                # a maturity group with 1-2 extra transfers (wrongly resolved due date / paid in another debit)
+                rng = []
+                ds = sorted(mat)
+                pools = list(mat.values()) + [[t for d in ds[i:] for t in mat[d]] for i in range(len(ds) - 1)]
+                for grp in pools:
+                    k = len(grp) - n
+                    if k == 1:
+                        rng += [[t for t in grp if t is not x] for x in grp
+                                if abs(sum(t.amt for t in grp) - x.amt - amt) <= 0.01]
+                    elif k == 2 and len(grp) <= 60:
+                        tot = sum(t.amt for t in grp)
+                        rng += [[t for t in grp if t is not x and t is not y] for i, x in enumerate(grp)
+                                for y in grp[i + 1:] if abs(tot - x.amt - y.amt - amt) <= 0.01]
+                if len(rng) == 1:
+                    hits = rng
+            if len(hits) == 1:
+                emit(r.bank_txn_id, hits[0], "pr_conf_shift", 0.9, r.currency)
                 continue
             sub = _subset_n(R, amt, n)
             if sub is not None:
@@ -184,7 +242,16 @@ def match(lines, items, ctx=None):
             h2 = [t for t in hits if t.beneficiary.upper()[:20] in txt]
             if len(h2) == 1:
                 emit(r.bank_txn_id, h2, "pr_prefix_name", 0.9, r.currency)
+        elif PR_DUP:   # only an already-paid transfer fits, executed >= 7 days earlier: paid twice
+            lim7 = (pd.Timestamp(r.booking_date) - pd.Timedelta(days=7)).strftime("%Y-%m-%d")
+            h3 = [t for t in by_prefix.get((ent, pref), []) if t.key in used and t.account == r.account_id
+                  and _amount_ok(t, amt, r) and t.exec_date <= lim7]
+            if len(h3) == 1:
+                emit(r.bank_txn_id, h3, "pr_dup_prefix", 0.8, r.currency, dup=True)
     return rows
+
+
+_PHASE = [""]   # set by match(): FINAL uses masters_final fx rates
 
 
 def _in_ccy(a, frm, to, date):
@@ -192,7 +259,8 @@ def _in_ccy(a, frm, to, date):
         return a
     try:
         from integration.lib.fx import convert
-        return convert(a, frm, to, date)
+        from integration.lib.masters import masters_dir
+        return convert(a, frm, to, date, masters_dir=masters_dir(_PHASE[0]))
     except Exception:
         return float("nan")
 
