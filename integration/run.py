@@ -55,6 +55,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--phase", required=True)
     ap.add_argument("--p-items", type=float, default=0.5, help="B wins a line when C's p_items ≥ this")
+    ap.add_argument("--unid-p", type=float, default=0.9,
+                    help="a receipt nobody covers is UNIDENTIFIED when C's p_items < this (tune on val once B lands)")
     ap.add_argument("--no-c-exceptions", action="store_true", help="use only B's exceptions")
     ap.add_argument("--out", default=None)
     ap.add_argument("--b", default=None, help="override B's allocations.parquet path (testing)")
@@ -89,14 +91,23 @@ def main():
     rest = lines[~lines.bank_txn_id.isin(covered)][["bank_txn_id", "amount"]].copy()
     ccat = c.category.reindex(rest.bank_txn_id).values if len(c) else [None] * len(rest)
     cexc = c.exception.reindex(rest.bank_txn_id).values if len(c) else [None] * len(rest)
-    default = rest.amount.astype(float).gt(0).map({True: "UNIDENTIFIED", False: "BANK_FEES"})
-    rest["category"] = pd.Series(ccat, index=rest.index).where(lambda s: s.notna() & (s != ""), default)
-    rest["exception"] = pd.Series(cexc, index=rest.index).fillna("")
+    receipt = rest.amount.astype(float).gt(0)
+    ccat = pd.Series(ccat, index=rest.index)
+    has_c_cat = ccat.notna() & (ccat != "")
+    pc = pd.to_numeric(c.p_items, errors="coerce").reindex(rest.bank_txn_id).values if len(c) else [float("nan")] * len(rest)
+    pc = pd.Series(pc, index=rest.index)
+    c_says_items = rest.bank_txn_id.isin(c.index) & ~has_c_cat & (pc >= a.unid_p)  # C: settles items; B missed it
+    # Lines nobody explains score as wrong whatever we write, so the only thing that matters is not to emit a false
+    # UNIDENTIFIED exception (it costs UNIDENTIFIED precision). No C opinion at all → starter rule.
+    default = pd.Series("BANK_FEES", index=rest.index)
+    default[receipt & ~c_says_items] = "UNIDENTIFIED"
+    default[receipt & c_says_items] = "CUSTOMER_ADVANCE"
+    rest["category"] = ccat.where(has_c_cat, default)
+    rest["exception"] = ""
     rest.loc[rest.category == "UNIDENTIFIED", "exception"] = "UNIDENTIFIED"
-    rest.loc[rest.category != "UNIDENTIFIED", "exception"] = ""
     rest["item_id"], rest["amount"] = "", ""
-    log(f"no-item rows: {len(rest):,} (from C: {int(pd.Series(ccat).notna().sum()):,}, default: "
-        f"{int(pd.Series(ccat).isna().sum()):,})")
+    log(f"no-item rows: {len(rest):,} (from C: {int(has_c_cat.sum()):,}; C says items but B missed: "
+        f"{int(c_says_items.sum()):,}; no opinion: {int((~has_c_cat & ~c_says_items).sum()):,})")
 
     if len(items):
         items["amount"] = items.amount.astype(float).map(lambda x: f"{x:.2f}")
