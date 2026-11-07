@@ -40,7 +40,7 @@ def main():
     a = ap.parse_args()
     bank = pd.read_parquet(os.path.join(ROOT, "ingestion", "out", a.phase, "bank_lines.parquet"))
     try:
-        model = importlib.import_module("classification.categories")
+        model = importlib.import_module("classification.ensemble")   # p_items ensemble; falls back to the LR itself
         labels = model.label(bank, a.phase)
     except Exception:   # FINAL safety net: never leave integration without labels
         import traceback
