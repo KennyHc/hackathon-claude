@@ -19,6 +19,14 @@ step "data check ($DATA)"
 [ -f "$DATA/$P/bank_transactions.csv.gz" ] || { echo "$DATA/$P/bank_transactions.csv.gz missing"; exit 2; }
 [ "$P" = final ] && { ls "$DATA/final/masters_final" 2>/dev/null || echo "WARN: no $DATA/final/masters_final"; }
 
+# Phase caches (remittance parse, pdf clauses, stage outputs, party aliases, merged masters) are reused without a
+# freshness check. FRESH=1 (the default for final) deletes them so FINAL never runs on mock/stale caches.
+if [ "${FRESH:-$([ "$P" = final ] && echo 1 || echo 0)}" = 1 ]; then
+  step "purging $P caches"
+  rm -rf "matching/out/$P" "integration/out/masters_merged/$P"
+  rm -f matching/party/out/*_"$P"_*.parquet
+fi
+
 if [ "${SKIP_C:-0}" = 1 ] && [ -f "classification/out/$P/line_labels.parquet" ]; then
   step "classification: reusing classification/out/$P/line_labels.parquet"
 else
