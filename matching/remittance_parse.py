@@ -43,11 +43,16 @@ def num(s) -> float | None:
         return None
     if isinstance(s, (int, float)):
         return float(s)
-    s = str(s).strip().replace(" ", "").replace(" ", "")
+    s = re.sub(r"\s", "", str(s))      # every space kind: ' ', NBSP, thin / narrow NBSP (ZA: "1 234,56")
     if not s:
         return None
     neg = s.startswith("-") or (s.startswith("(") and s.endswith(")"))
     s = s.strip("-()")
+    # currency code or symbol glued to the number (ZA: "R 5,100.69", "ZAR -1 234,56", "5 100,69 ZAR")
+    m = re.fullmatch(r"([A-Za-z]{1,3}\.?)?(-)?(\d[\d.,]*)([A-Za-z]{1,3})?", s)
+    if m and (m.group(1) or m.group(4)):
+        neg = neg or bool(m.group(2))
+        s = m.group(3)
     m = re.search(r"[.,](\d{1,2})$", s)
     if m:
         intpart, dec = s[: m.start()], m.group(1)
@@ -59,6 +64,26 @@ def num(s) -> float | None:
     except ValueError:
         return None
     return -v if neg else v
+
+
+_SP = "[ \u00a0\u2007\u2009\u202f]"
+_THOUSANDS = re.compile(r"(?<![\d/.,])(-?\d{1,3})((?:" + _SP + r"\d{3})+)([.,]\d{2})(?!\d)")
+_CCY = re.compile(r"(?<![A-Za-z0-9])(?:ZAR|R)" + _SP + r"?(?=-?\d)")
+_DATE = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}")
+
+
+def _norm_amounts(s: str) -> str:
+    """Amounts written South-African style inside a text line: '1 234,56' (space / thin-space thousands) -> '1234,56',
+    'R 5,100.69' / 'ZAR 5 100,69' -> '5,100.69' / '5100,69'. Only touches digit groups that end in 2 decimals, and
+    only a currency R/ZAR that directly precedes a number."""
+    s = _CCY.sub("", s)
+    return _THOUSANDS.sub(lambda m: m.group(1) + re.sub(_SP, "", m.group(2)) + m.group(3), s)
+
+
+def _norm_row(l: str) -> str:
+    """Normalise the amounts of an advice row after its date only (the document number before it is left alone)."""
+    m = _DATE.search(l)
+    return l if not m else l[:m.end()] + _norm_amounts(l[m.end():])
 
 
 def pdate(s, order="dmy") -> str | None:
@@ -152,14 +177,14 @@ def parse_pdf_text(text: str) -> tuple[dict, list[dict]]:
         if m:
             head["payment_date"] = pdate(m.group(2))
             continue
-        m = re.match(r"^(Amount|Importe)\s{2,}(" + NUM + r")\s*([A-Z]{3})?$", l)
+        m = re.match(r"^(Amount|Importe)\s{2,}(" + NUM + r")\s*([A-Z]{3})?$", _norm_amounts(l))
         if m:
             head["stated_total"] = num(m.group(2))
             head["currency"] = m.group(3) or ""
             continue
         if l in ("AVISO DE PAGO",):
             head["layout"] = "pdf_es"
-        m = ROW_RE.match(l)
+        m = ROW_RE.match(_norm_row(l))
         if m:
             g = m.groupdict()
             if g["paid"] is None:          # no paid column -> gross is paid
@@ -182,17 +207,17 @@ def parse_txt(path: str) -> tuple[dict, list[dict]]:
         if m:
             head["payment_ref"] = m.group(1)
             continue
-        m = re.search(r"payment of (" + NUM + r") ([A-Z]{3}) on (\S+?)\s", l)
+        m = re.search(r"payment of (" + NUM + r") ([A-Z]{3}) on (\S+?)\s", _norm_amounts(l))
         if m:
             head.update(stated_total=num(m.group(1)), currency=m.group(2), payment_date=pdate(m.group(3), "mdy"))
             continue
-        m = re.search(r"importe de (" + NUM + r") ([A-Z]{3}) con fecha (\S+?)\s", l)
+        m = re.search(r"importe de (" + NUM + r") ([A-Z]{3}) con fecha (\S+?)\s", _norm_amounts(l))
         if m:
             head.update(stated_total=num(m.group(1)), currency=m.group(2), payment_date=pdate(m.group(3), "dmy"),
                         layout="txt_es")
             continue
         if raw.startswith("  "):
-            m = ROW_RE.match(l)
+            m = ROW_RE.match(_norm_row(l))
             if m:
                 g = m.groupdict()
                 gross = num(g["gross"])
