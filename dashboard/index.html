@@ -94,14 +94,14 @@
   <header class="mc-head" id="top">
     <div class="mc-eyebrow"><span class="mc-live"><i></i>Talky × Anthropic · Close the Books</span><span>Saturday 7 November 2026 · Madrid</span></div>
     <h1 class="mc-title">Close the Books Mission Control</h1>
-    <p class="mc-take">LIVE v3 scored <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v3" data-fmt="2">—</b>, <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=val_minus_live" data-fmt="2">—</b> points under validation and <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=hold_minus_live" data-fmt="2">—</b> under the untouched holdout. Precision holds (<b data-draw="num" data-source="runs" data-field="precision" data-where="run=LIVE v3" data-fmt="3">—</b> on LIVE vs <b data-draw="num" data-source="runs" data-field="precision" data-where="run=Validation" data-fmt="3">—</b>); the gap is recall (<b data-draw="num" data-source="runs" data-field="recall" data-where="run=LIVE v3" data-fmt="3">—</b> vs <b data-draw="num" data-source="runs" data-field="recall" data-where="run=Validation" data-fmt="3">—</b>): lines we leave unmatched, not wrong matches.</p>
+    <p class="mc-take">LIVE v5 scored <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v5" data-fmt="2">—</b>, <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=val_minus_live" data-fmt="2">—</b> points under validation and <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=hold_minus_live" data-fmt="2">—</b> under the untouched holdout. Precision holds (<b data-draw="num" data-source="runs" data-field="precision" data-where="run=LIVE v5" data-fmt="3">—</b> on LIVE vs <b data-draw="num" data-source="runs" data-field="precision" data-where="run=Validation" data-fmt="3">—</b>); the gap is recall (<b data-draw="num" data-source="runs" data-field="recall" data-where="run=LIVE v5" data-fmt="3">—</b> vs <b data-draw="num" data-source="runs" data-field="recall" data-where="run=Validation" data-fmt="3">—</b>): lines we leave unmatched, not wrong matches.</p>
   </header>
 
   <section class="mc-tiles" aria-label="Headline scores">
     <article class="mc-tile mc-hero mc-reveal">
-      <span class="mc-tlabel">LIVE leaderboard · v3 (best)</span>
-      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v3" data-fmt="2">—</span>
-      <span class="mc-sub"><b class="mc-up" data-draw="num" data-source="gaps" data-field="value" data-where="measure=v3_minus_v2" data-fmt="+2">—</b> vs v2 (<span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v2" data-fmt="2">—</span>) · v1 <span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v1" data-fmt="2">—</span> · Jul–Dec 2025</span>
+      <span class="mc-tlabel">LIVE leaderboard · v5 (best)</span>
+      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v5" data-fmt="2">—</span>
+      <span class="mc-sub"><b class="mc-up" data-draw="num" data-source="gaps" data-field="value" data-where="measure=v5_minus_v4" data-fmt="+2">—</b> vs v4 (<span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v4" data-fmt="2">—</span>) · v3 <span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v3" data-fmt="2">—</span> · Jul–Dec 2025</span>
     </article>
     <article class="mc-tile mc-reveal" style="--mc-tone: var(--cds-chart-axis)">
       <span class="mc-tlabel">Validation · tuned on</span>
@@ -151,7 +151,7 @@
     <p class="mc-lede mc-reveal">Each bubble is one case type (segment), sized by the points it is worth. On the diagonal, LIVE matches validation; below it, LIVE is worse. Hover a bubble for its numbers.</p>
     <div class="mc-grid">
       <div class="mc-card mc-reveal">
-        <h3>Line accuracy, validation vs LIVE v3</h3>
+        <h3>Line accuracy, validation vs LIVE v5</h3>
         <p class="mc-note">Shaded band: within 2 points of validation. Segments the leaderboard does not report are left out.</p>
         <div class="mc-chart" data-draw="scatter" data-source="segments" style="min-height: 340px"></div>
       </div>
@@ -166,7 +166,7 @@
           <h3>Every segment</h3>
           <input id="mc-seg-search" class="mc-search" type="search" placeholder="Filter segments" aria-label="Filter segments">
         </div>
-        <p class="mc-note">Sorted by the points each segment is worth. Click a column to sort. Red: LIVE v3 more than 2 points below validation.</p>
+        <p class="mc-note">Sorted by the points each segment is worth. Click a column to sort. Red: LIVE v5 more than 2 points below validation.</p>
         <div class="mc-tablebox">
           <table class="mc-table" data-source="segments" data-row-key="segment">
             <thead><tr>
@@ -175,7 +175,7 @@
               <th data-field="max_points" aria-sort="descending"><button class="mc-th" data-sort="max_points">Max points</button></th>
               <th data-field="accuracy_val" aria-sort="none"><button class="mc-th" data-sort="accuracy_val">Validation</button></th>
               <th data-field="accuracy_hold" aria-sort="none" class="mc-hide-narrow"><button class="mc-th" data-sort="accuracy_hold">Holdout</button></th>
-              <th data-field="accuracy_live" aria-sort="none"><button class="mc-th" data-sort="accuracy_live">LIVE v3</button></th>
+              <th data-field="accuracy_live" aria-sort="none"><button class="mc-th" data-sort="accuracy_live">LIVE v5</button></th>
               <th data-field="points_lost_val" aria-sort="none" class="mc-hide-narrow"><button class="mc-th" data-sort="points_lost_val">Points lost (val)</button></th>
             </tr></thead>
             <tbody data-draw="segtable"></tbody>
@@ -191,7 +191,7 @@
     <div class="mc-grid">
       <div class="mc-card mc-reveal">
         <h3>Matchers: lines claimed and precision</h3>
-        <p class="mc-note">Bar: lines claimed on validation. Right: share of those lines fully correct, validation then holdout.</p>
+        <p class="mc-note">Bar: lines claimed on validation. Right: share of those lines fully correct, validation then holdout. <code>cn_bundles</code> runs last and often claims only the invoices a line cites, so most of its lines stay incomplete by design: its pairs are 97–99&nbsp;% right, and those lines were all wrong before it ran.</p>
         <div class="mc-chart" data-draw="matchers" data-source="matchers" style="min-height: 380px"></div>
       </div>
       <div class="mc-card mc-reveal">
@@ -223,7 +223,7 @@
     const fmts = { '0': d3.format('.0f'), '2': d3.format('.2f'), '3': d3.format('.3f'), '+2': d3.format('+.2f'), 'int': d3.format(','), 'pct': d3.format('.1%') };
     const where = (s) => (s || '').split('&').filter(Boolean).map((p) => p.split('=').map(decodeURIComponent));
     const pick = (rows, s) => rows.find((r) => where(s).every(([k, v]) => String(r[k]) === v));
-    const runColor = { 'Validation': 0, 'Holdout': 1, 'LIVE v1': null, 'LIVE v2': null, 'LIVE v3': 2 };
+    const runColor = { 'Validation': 0, 'Holdout': 1, 'LIVE v1': null, 'LIVE v2': null, 'LIVE v3': null, 'LIVE v4': null, 'LIVE v5': 2 };
     const color = (run) => runColor[run] == null ? 'var(--cds-chart-muted)' : dash.colors[runColor[run]];
     const seen = new WeakSet();
     const first = (el) => { const f = !seen.has(el); seen.add(el); return f && motion; };
@@ -259,13 +259,13 @@
   dash.calc('gaps', {
     inputs: ['runs'],
     title: 'Score gaps between runs',
-    description: 'Differences between run scores: validation and holdout minus the latest LIVE upload (v3), and v3 minus v2.',
+    description: 'Differences between run scores: validation and holdout minus the latest LIVE upload (v5), and v5 minus v4.',
     fn: (runs) => {
       const s = (name) => runs.find((r) => r.run === name).score;
       return [
-        { measure: 'val_minus_live', value: +(s('Validation') - s('LIVE v3')).toFixed(2) },
-        { measure: 'hold_minus_live', value: +(s('Holdout') - s('LIVE v3')).toFixed(2) },
-        { measure: 'v3_minus_v2', value: +(s('LIVE v3') - s('LIVE v2')).toFixed(2) },
+        { measure: 'val_minus_live', value: +(s('Validation') - s('LIVE v5')).toFixed(2) },
+        { measure: 'hold_minus_live', value: +(s('Holdout') - s('LIVE v5')).toFixed(2) },
+        { measure: 'v5_minus_v4', value: +(s('LIVE v5') - s('LIVE v4')).toFixed(2) },
       ];
     },
   });
@@ -357,12 +357,12 @@
     g.append('line').attr('x1', (mm) => x(d3.min(d.data, (r) => r[mm[0]]))).attr('x2', (mm) => x(d3.max(d.data, (r) => r[mm[0]]))).style('stroke', 'var(--cds-chart-axis)').attr('stroke-width', 2).attr('stroke-linecap', 'round');
     const anim = mc.first(el);
     g.each(function (mm) {
-      const dots = d3.select(this).selectAll('circle').data(d.data).join('circle').attr('r', (r) => r.run === 'LIVE v3' ? 7 : 5.5)
+      const dots = d3.select(this).selectAll('circle').data(d.data).join('circle').attr('r', (r) => r.run === 'LIVE v5' ? 7 : 5.5)
         .style('fill', (r) => mc.color(r.run)).style('stroke', 'var(--color-panel)').attr('stroke-width', 2).style('cursor', 'default')
         .attr('cx', anim ? x(lo) : (r) => x(r[mm[0]]));
       if (anim) dots.transition().delay((r, i) => 120 + i * 90).duration(900).ease(d3.easeCubicOut).attr('cx', (r) => x(r[mm[0]]));
       dots.on('mousemove', (event, r) => { d3.select(event.currentTarget).attr('r', 9); tipper.show(event, [[mm[1]], [`${r.run}`, mc.fmts['3'](r[mm[0]])], [r.window]]); })
-        .on('mouseleave', (event, r) => { d3.select(event.currentTarget).attr('r', r.run === 'LIVE v3' ? 7 : 5.5); tipper.hide(); });
+        .on('mouseleave', (event, r) => { d3.select(event.currentTarget).attr('r', r.run === 'LIVE v5' ? 7 : 5.5); tipper.hide(); });
     });
   });
 </script>
@@ -401,7 +401,7 @@
 </script>
 
 <script>
-  // Segment scatter: validation accuracy (x) vs LIVE v3 accuracy (y), bubble size = max points.
+  // Segment scatter: validation accuracy (x) vs LIVE v5 accuracy (y), bubble size = max points.
   dash.draw('scatter', (el) => {
     const d = dash.data('segments');
     el.replaceChildren();
@@ -416,7 +416,7 @@
     svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5, '.0%').tickSize(-(H - m.t - m.b))).call(mc.axisText);
     svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5, '.0%').tickSize(-(W - m.l - m.r))).call(mc.axisText);
     svg.append('text').attr('class', 'cap').attr('x', W - m.r).attr('y', H - 4).attr('text-anchor', 'end').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Validation accuracy →');
-    svg.append('text').attr('class', 'cap').attr('x', m.l + 4).attr('y', m.t + 10).style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('↑ LIVE v3 accuracy');
+    svg.append('text').attr('class', 'cap').attr('x', m.l + 4).attr('y', m.t + 10).style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('↑ LIVE v5 accuracy');
     const band = d3.area().x((v) => x(v)).y0((v) => y(Math.max(lo, v - 0.02))).y1((v) => y(Math.min(1.005, v + 0.02)));
     svg.append('path').datum(d3.range(lo, 1.0051, 0.005)).attr('d', band).style('fill', 'var(--cds-chart-grid)').style('opacity', 0.9);
     svg.append('line').attr('x1', x(lo)).attr('y1', y(lo)).attr('x2', x(1.005)).attr('y2', y(1.005)).style('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 4');
@@ -433,7 +433,7 @@
       .style('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((q) => q.segment);
     mc.declutter(svg, ['text.cap', 'text.lab']);
     const tipper = mc.tip(el), p = mc.fmts.pct;
-    dots.on('mousemove', (event, q) => { d3.select(event.currentTarget).style('fill-opacity', 0.9).attr('stroke-width', 2.5); tipper.show(event, [[q.segment], ['Validation', p(q.accuracy_val)], ['Holdout', q.accuracy_hold == null ? '—' : p(q.accuracy_hold)], ['LIVE v3', p(q.accuracy_live)], ['Max points', q.max_points.toFixed(2)]]); })
+    dots.on('mousemove', (event, q) => { d3.select(event.currentTarget).style('fill-opacity', 0.9).attr('stroke-width', 2.5); tipper.show(event, [[q.segment], ['Validation', p(q.accuracy_val)], ['Holdout', q.accuracy_hold == null ? '—' : p(q.accuracy_hold)], ['LIVE v5', p(q.accuracy_live)], ['Max points', q.max_points.toFixed(2)]]); })
       .on('mouseleave', (event) => { d3.select(event.currentTarget).style('fill-opacity', 0.55).attr('stroke-width', 1.2); tipper.hide(); });
   });
 
@@ -533,9 +533,10 @@
     const bars = g.append('rect').attr('x', m.l).attr('height', y.bandwidth()).attr('rx', 3).style('fill', (q) => q.matcher === 'classifier' ? 'var(--cds-chart-muted)' : dash.colors[0]).style('cursor', 'default')
       .attr('width', anim ? 0 : (q) => x(q.lines_val) - m.l);
     if (anim) bars.transition().delay((q, i) => i * 60).duration(800).ease(d3.easeCubicOut).attr('width', (q) => x(q.lines_val) - m.l);
-    const tone = (v) => v < 0.95 ? 'var(--color-bad)' : v < 0.99 ? 'var(--color-warn)' : 'var(--color-fg)';
-    g.append('text').attr('x', W - 70).attr('y', y.bandwidth() / 2).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', (q) => tone(q.precision_val)).style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => mc.fmts.pct(q.precision_val));
-    g.append('text').attr('x', W - 4).attr('y', y.bandwidth() / 2).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', (q) => tone(q.precision_hold)).style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => mc.fmts.pct(q.precision_hold));
+    const tone0 = (v) => v < 0.95 ? 'var(--color-bad)' : v < 0.99 ? 'var(--color-warn)' : 'var(--color-fg)';
+    const muted = new Set(['classifier', 'cn_bundles']);
+    g.append('text').attr('x', W - 70).attr('y', y.bandwidth() / 2).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', (q) => muted.has(q.matcher) ? 'var(--color-fg-muted)' : tone0(q.precision_val)).style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => mc.fmts.pct(q.precision_val));
+    g.append('text').attr('x', W - 4).attr('y', y.bandwidth() / 2).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', (q) => muted.has(q.matcher) ? 'var(--color-fg-muted)' : tone0(q.precision_hold)).style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => mc.fmts.pct(q.precision_hold));
     const tipper = mc.tip(el);
     bars.on('mousemove', (event, q) => { d3.select(event.currentTarget).style('opacity', 0.8); tipper.show(event, [[`${q.order}. ${q.matcher}`], ['Lines (val)', mc.fmts.int(q.lines_val)], ['Lines (hold)', mc.fmts.int(q.lines_hold)], ['Precision (val)', mc.fmts.pct(q.precision_val)], ['Precision (hold)', mc.fmts.pct(q.precision_hold)]]); })
       .on('mouseleave', (event) => { d3.select(event.currentTarget).style('opacity', null); tipper.hide(); });

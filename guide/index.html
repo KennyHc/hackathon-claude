@@ -355,7 +355,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display
   <div class="stats" role="list">
     <div class="stat lead" role="listitem"><b data-count="96.41" data-dec="2">96.41</b><span>score on val (Jan–Jun 2025), honest run</span></div>
     <div class="stat" role="listitem"><b data-count="96.50" data-dec="2">96.50</b><span>score on an untouched holdout (Jan–Jun 2024)</span></div>
-    <div class="stat" role="listitem"><b data-count="95.62" data-dec="2">95.62</b><span>LIVE leaderboard, v3 (current best)</span></div>
+    <div class="stat" role="listitem"><b data-count="96.34" data-dec="2">96.34</b><span>LIVE leaderboard, v5 (current best)</span></div>
     <div class="stat" role="listitem"><b data-count="99.9" data-dec="1" data-suf="%">99.9%</b><span>precision of submitted invoice pairs</span></div>
     <div class="stat" role="listitem"><b data-count="88" data-dec="0" data-suf="%">88%</b><span>of lines decided by 11 rule-based matchers</span></div>
     <div class="stat" role="listitem"><b data-count="1" data-dec="0">1</b><span>small learned model (logistic regression)</span></div>
@@ -960,16 +960,16 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display
   </div>
   <figure class="panel rv">
     <h4>Holdout: a window no rule was tuned on</h4>
-    <p class="sub">Rules were written while looking at val, so val is a development set. Jan–Jun 2024 was never used for tuning. The holdout scores 0.09 higher than val.</p>
+    <p class="sub">Rules were written while looking at val, so val is a development set. Jan–Jun 2024 was never used for tuning. The holdout scores 0.11 higher than val.</p>
     <div class="scroll-x"><table class="cmp">
-      <thead><tr><th></th><th class="r">val · Jan–Jun 2025 · tuned on</th><th class="r">hold · Jan–Jun 2024 · untouched</th><th class="r">LIVE v3 · Jul–Dec 2025</th></tr></thead>
+      <thead><tr><th></th><th class="r">val · Jan–Jun 2025 · tuned on</th><th class="r">hold · Jan–Jun 2024 · untouched</th><th class="r">LIVE v5 · Jul–Dec 2025</th></tr></thead>
       <tbody>
-        <tr><td>Score</td><td class="r"><b>96.41</b></td><td class="r"><b>96.50</b></td><td class="r"><b>95.62</b></td></tr>
-        <tr><td>Allocation F1 (P / R)</td><td class="r">0.958 (0.999 / 0.920)</td><td class="r">0.960 (0.999 / 0.925)</td><td class="r">0.949 (0.998 / 0.904)</td></tr>
-        <tr><td>Transaction accuracy</td><td class="r">0.975</td><td class="r">0.976</td><td class="r">0.974</td></tr>
-        <tr><td>Exception macro-F1</td><td class="r">0.962</td><td class="r">0.959</td><td class="r">0.948</td></tr>
+        <tr><td>Score</td><td class="r"><b>96.73</b></td><td class="r"><b>96.84</b></td><td class="r"><b>96.34</b></td></tr>
+        <tr><td>Allocation F1 (P / R)</td><td class="r">0.962 (0.998 / 0.929)</td><td class="r">0.965 (0.998 / 0.933)</td><td class="r">0.956 (0.998 / 0.918)</td></tr>
+        <tr><td>Transaction accuracy</td><td class="r">0.977</td><td class="r">0.978</td><td class="r">0.975</td></tr>
+        <tr><td>Exception macro-F1</td><td class="r">0.965</td><td class="r">0.964</td><td class="r">0.964</td></tr>
       </tbody></table></div>
-    <figcaption>Scores are at the UNIDENTIFIED threshold 0.97. The val and hold parts below the score come from the run at 0.9 (96.36 and 96.46); the threshold only decides which unclaimed receipts are flagged UNIDENTIFIED. LIVE v3 parts: allocation F1 0.9487 (precision 0.9983, recall 0.9038), transaction accuracy 0.9741, exception macro-F1 0.9481. The same segments lose points in both local windows by about the same amounts.</figcaption>
+    <figcaption>All three columns are the same code (v5: UNIDENTIFIED threshold 0.97, remittance FX and exception fixes, the cn_bundles matcher). LIVE v5 parts: allocation F1 0.9562 (precision 0.9983, recall 0.9175), transaction accuracy 0.9753, exception macro-F1 0.9637. The same segments lose points in both local windows by about the same amounts.</figcaption>
   </figure>
   <div class="grid2">
     <div class="panel rv lift">
@@ -979,7 +979,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display
     </div>
     <div class="panel rv lift">
       <h4>90 % of the val gain showed up on LIVE</h4>
-      <p class="sub">The same code change (v1 → v2) gained about 2.06 points on val and 1.85 on LIVE. A rule set tuned to val quirks would not transfer like that. Every check is in <code>OVERFITTING_CHECKS.md</code> in the worktree.</p>
+      <p class="sub">The same code change (v1 → v2) gained about 2.06 points on val and 1.85 on LIVE. The afternoon round (v3 → v5) gained +0.32 on val, +0.34 on the holdout and +0.72 on LIVE (one fix had cases only in LIVE). A rule set tuned to val quirks would not transfer like that. Every check is in <code>OVERFITTING_CHECKS.md</code> in the worktree.</p>
       <div class="leak" id="gainbars"></div>
     </div>
   </div>
@@ -1009,12 +1009,12 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display
 <section id="progress">
   <div class="head rv">
     <span class="eyebrow"><b>8</b> · Score progression</span>
-    <h2>From 12.72 to 96.41</h2>
-    <p class="answer">The jump came from building every side-file matcher in parallel; the last six points came from exception rules and a second wave of targeted matchers. Moving the UNIDENTIFIED threshold to 0.97 added the final 0.05. On LIVE, the current code scores 95.62. The organisers' reference points: about 19 for a naive baseline and about 61 for well-worked rules.</p>
+    <h2>From 12.72 to 96.73</h2>
+    <p class="answer">The jump came from building every side-file matcher in parallel; the last six points came from exception rules and a second wave of targeted matchers. Moving the UNIDENTIFIED threshold to 0.97 added 0.05, and an afternoon round (remittance FX and exception fixes, then the cn_bundles matcher) another 0.32. On LIVE, the current code scores 96.34. The organisers' reference points: about 19 for a naive baseline and about 61 for well-worked rules.</p>
   </div>
   <figure class="panel rv chart" id="progchart">
     <div class="legend"><span><i style="background:var(--s1);border-radius:50%"></i>val (Jan–Jun 2025)</span><span><i style="background:var(--s3);border-radius:50%"></i>untouched holdout</span><span><i style="background:var(--s2);border-radius:50%"></i>LIVE leaderboard</span></div>
-    <div class="scroll-x"><svg viewBox="0 0 820 360" style="min-width:600px" role="img" aria-label="Score by milestone: baseline 12.72, first full pipeline 90.04, UNIDENTIFIED threshold 90.81, second-wave matchers 96.40, leak fixed 96.36, threshold 0.97 96.41; holdout 96.50; LIVE v1 93.73, v2 95.58, v3 95.62" id="progsvg"></svg></div>
+    <div class="scroll-x"><svg viewBox="0 0 820 360" style="min-width:600px" role="img" aria-label="Score by milestone: baseline 12.72, first full pipeline 90.04, UNIDENTIFIED threshold 90.81, second-wave matchers 96.40, leak fixed 96.36, threshold 0.97 96.41, remittance FX and exception fixes 96.46, cn_bundles 96.73; holdout 96.84; LIVE v1 93.73, v2 95.58, v3 95.62, v4 96.05, v5 96.34" id="progsvg"></svg></div>
     <div class="scroll-x" style="margin-top:6px"><svg viewBox="0 0 820 215" style="min-width:600px" role="img" aria-label="Zoom of the same scores between 89 and 97" id="zoomsvg"></svg></div>
     <figcaption>Top: the full 0–100 scale. Bottom: the same points zoomed to 89–97. Hover or focus a point for what moved it.</figcaption>
   </figure>
@@ -1162,8 +1162,8 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display
 
   function lk(id,rows){ var host=document.getElementById(id); rows.forEach(function(r){ var d=h('div','lk',host); h('span','',d,r[0]); var b=h('div','bar',d); var s=h('span','grow',b); s.style.width=(r[1]*100)+'%'; s.style.background=r[2]; h('span','v',d,r[3]); }); }
   lk('overp',[['inside pattern',310/314,'var(--ok)','310 / 314'],['outside pattern',0,'var(--bad)','0 / 55']]);
-  lk('livepr',[['precision · val',0.9986,'var(--s1)','0.9986'],['precision · LIVE v3',0.9983,'var(--s2)','0.9983'],['recall · val',0.920,'var(--s1)','0.920'],['recall · LIVE v3',0.9038,'var(--s2)','0.904']]);
-  lk('gainbars',[['val gain, v1→v2',1,'var(--s1)','≈ +2.06'],['LIVE gain, v1→v2',1.85/2.06,'var(--s2)','+1.85']]);
+  lk('livepr',[['precision · val',0.9984,'var(--s1)','0.9986'],['precision · LIVE v5',0.9983,'var(--s2)','0.9983'],['recall · val',0.929,'var(--s1)','0.929'],['recall · LIVE v5',0.9175,'var(--s2)','0.918']]);
+  lk('gainbars',[['val gain, v1→v2',1,'var(--s1)','≈ +2.06'],['LIVE gain, v1→v2',1.85/2.06,'var(--s2)','+1.85'],['val gain, v3→v5',0.32/2.06,'var(--s1)','+0.32'],['LIVE gain, v3→v5',0.72/2.06,'var(--s2)','+0.72']]);
   lk('leakbars',[['forward replay',1,'var(--s1)','274,712'],['backward (leaky)',252887/274712,'var(--s2)','252,887']]);
 
   var F1=[['PARTIAL',.963],['OVERPAYMENT',.992,.575],['SHORT_DISCOUNT',.982],['SHORT_BANK_CHARGES',.937,.368],['SHORT_WITHHOLDING',.983],['SHORT_DISPUTE',.918],['DUPLICATE_PAYMENT',.966,.110],['UNIDENTIFIED',.956,.614],['RETURNED',.994],['FX_DIFFERENCE',.924]];
@@ -1175,11 +1175,13 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display
   hbars('lostbars',LOST.map(function(l){return {name:l[0],sub:l[3],parts:[{v:l[1],c:'var(--s2)'}],label:l[1].toFixed(2),tip:[[null,'line accuracy '+l[2]],[null,l[3]]]};}),1.4,{unit:' points lost'});
 
   /* ---- 8. progression chart ---- */
-  var STEPS=[{x:70,v:12.72,n:['Our','baseline'],d:'Starter idea on our ingestion'},{x:160,v:90.04,n:['First full','pipeline'],d:'All side-file matchers, references, subset-sum, categories, exception rules (8 parallel matcher agents)'},
-    {x:250,v:90.81,n:['UNIDENTIFIED','p < 0.9'],d:'p_items < 0.9 and a bad fallback dropped'},{x:340,v:96.40,n:['Second-wave','matchers'],d:'Duplicates, refunds, refs, subset-sum, half-up rounding, short payments'},
-    {x:430,v:96.36,n:['Leak fixed','(honest val)'],d:'Start state rebuilt from payments before the window only'},{x:520,v:96.41,n:['Threshold','0.97'],d:'UNIDENTIFIED threshold 0.9 → 0.97, the best value in both windows'}];
-  var EXTRA=[{x:610,v:96.50,n:['Holdout','2024 H1'],d:'Untouched window, never tuned on (96.46 at the 0.9 threshold)',c:'h'}];
-  var LIVES=[{x:670,v:93.73,n:['LIVE','v1'],d:'First upload; an older file',c:'l'},{x:725,v:95.58,n:['LIVE','v2'],d:'Same code as the 96.36 val run',c:'l'},{x:780,v:95.62,n:['LIVE','v3'],d:'Threshold 0.97; current best',c:'l'}];
+  var STEPS=[{x:62,v:12.72,n:['Our','baseline'],d:'Starter idea on our ingestion'},{x:128,v:90.04,n:['Full','pipeline'],d:'All side-file matchers, references, subset-sum, categories, exception rules (8 parallel matcher agents)'},
+    {x:194,v:90.81,n:['UNID','p < 0.9'],d:'p_items < 0.9 and a bad fallback dropped'},{x:260,v:96.40,n:['Second','wave'],d:'Duplicates, refunds, refs, subset-sum, half-up rounding, short payments'},
+    {x:326,v:96.36,n:['Leak','fixed'],d:'Start state rebuilt from payments before the window only'},{x:392,v:96.41,n:['Thresh.','0.97'],d:'UNIDENTIFIED threshold 0.9 → 0.97, the best value in both windows'},
+    {x:458,v:96.46,n:['Remit FX','+ exc.'],d:'Currency-less advices read in their invoices\' currency, voucher discount grace, PARTIAL / bank-charge refinements, ZA01 fixes'},{x:524,v:96.73,n:['CN','bundles'],d:'cn_bundles: cited invoices + their own credit notes on unclaimed lines, unique completion or the cited part only'}];
+  var EXTRA=[{x:590,v:96.84,n:['Holdout','2024 H1'],d:'Untouched window, never tuned on (same v5 code)',c:'h'}];
+  var LIVES=[{x:636,v:93.73,n:['LIVE','v1'],d:'First upload; an older file',c:'l'},{x:674,v:95.58,n:['LIVE','v2'],d:'Second-wave matchers',c:'l'},{x:712,v:95.62,n:['LIVE','v3'],d:'Threshold 0.97',c:'l'},
+    {x:750,v:96.05,n:['LIVE','v4'],d:'Remittance FX + exception fixes',c:'l'},{x:788,v:96.34,n:['LIVE','v5'],d:'+ cn_bundles; current best',c:'l'}];
   function chart(svgId,y0,y1,top,bot,ticks,refs,labels){
     var svg=document.getElementById(svgId); var Y=function(v){return bot-(v-y0)*(bot-top)/(y1-y0);};
     ticks.forEach(function(t){ el('line',{class:'gl',x1:44,x2:808,y1:Y(t),y2:Y(t)},svg); el('text',{class:'ax',x:36,y:Y(t)+4,'text-anchor':'end'},svg,String(t)); });

@@ -5,6 +5,9 @@ number behind it, and why it matters or what we did about it. Numbers come from 
 `integration/out/*.log`), the agents' reports, the code and the LIVE leaderboard response. Where a number is uncertain,
 the text says so.
 
+**Where we stand (17:00):** LIVE **96.34** (v5, our best, frozen as tag `best-live-96.34`), validation
+**96.73**, untouched holdout **96.84**. Sections 10–12 cover the afternoon round, teammates' cross-checks and what is left.
+
 **Words used throughout**
 - **Bank line**: one row of a bank statement (a payment in or out).
 - **Item**: an open document a bank line can settle: customer invoice (`ARI`), customer credit note (`ARC`), supplier
@@ -23,15 +26,17 @@ the text says so.
 
 ---
 
-## Summary: the 7 most important insights
+## Summary: the 8 most important insights
+
+> **TL;DR:** rule-based matchers with one small model, 99.8 % precise, LIVE 96.34; what's left is genuinely ambiguous.
 
 (This file merges two independent write-ups of the same findings, one by a dedicated agent and one by the main
 session; every number was checked against the logs, the code or the LIVE response.)
 
 1. **Rules beat everything else here, and precision is the whole game.** Deterministic rule-based matchers decide 88 %
-   of bank lines; one small logistic regression labels the rest (lines that settle no invoice). The pipeline submits invoice pairs at **99.9 % precision** and scores **96.41** on val,
-   **96.50** on the untouched holdout, and **95.62** on the LIVE leaderboard with the current code (earlier uploads:
-   93.73 and 95.58). The organisers'
+   of bank lines; one small logistic regression labels the rest (lines that settle no invoice). The pipeline submits invoice pairs at **99.8 % precision** and scores **96.73** on val,
+   **96.84** on the untouched holdout, and **96.34** on the LIVE leaderboard with the current code (earlier uploads:
+   93.73, 95.58, 95.62 and 96.05). The organisers'
    reference points are about 19 for the naive baseline and about 61 for well-worked rules.
 2. **Side files are worth more than clever text matching.** Payment-run files, direct-debit batches, card and cheque
    files, remittance advices and PDF clauses resolve their cases at 99.6–100 % precision. One aggregated line can hold
@@ -45,16 +50,21 @@ session; every number was checked against the logs, the code or the LIVE respons
    window" went wrong three times. Each time it made local scores look better or worse than reality. The last one was a
    small leak (cost 0.04 points), now fixed.
 6. **No overfitting signal, but drift is untested locally.** Learned parts are time-split, matchers never read the
-   golden, and the holdout window that no rule was tuned on scores 96.46 vs 96.36 on val. Both windows sit inside
+   golden, and the holdout window that no rule was tuned on scores 96.84 vs 96.73 on val. Both windows sit inside
    TRAIN, though, so neither tests the announced drift (new bank format, new remittance layout, a new ZAR subsidiary in
    FINAL). Only LIVE and FINAL measure that (4.6).
 7. **What's left is genuinely ambiguous.** The remaining losses are mostly lines where several sets of invoices add up to
    the same amount, or disputed short-payments with no remittance advice anywhere. We chose to leave those unclaimed
    rather than guess, because a wrong claim costs more than a miss.
+8. **Late gains came from evidence the pipeline was mis-reading, not from new guessing.** The afternoon round (§10)
+   added +0.72 on LIVE: currency-less remittance advices read in their invoices' currency, two policy-backed exception
+   refinements, and a matcher that claims only the invoices a bank line actually cites. Precision never dropped.
 
 ---
 
 ## 1. The data and where the points are
+
+> **TL;DR:** 200k lines per half-year, but a few segments with huge multi-invoice lines hold most of the points.
 
 ### 1.1 The dataset at a glance
 - A fictional industrial group: **17 companies** (entities), about 50 bank accounts, **11 currencies** in TRAIN bank
@@ -100,6 +110,8 @@ of them wrong costs as much allocation F1 as missing 98 one-invoice payments.
 ---
 
 ## 2. How each source of evidence performs
+
+> **TL;DR:** side files (payment runs, batches, advices, PDFs) are 99.6–100 % precise; almost every remaining error is a line no matcher claimed.
 
 ### 2.1 Overview (val, honest run, final pipeline)
 Matchers run in a fixed order, most certain first. A line claimed by one matcher is never touched by a later one.
@@ -216,6 +228,8 @@ line error is a line no matcher claimed.**
 
 ## 3. Exception rules: the golden is very literal
 
+> **TL;DR:** copy POLICIES.md to the letter (full open amount, half-up rounding, truncated partials, overpayment shapes) and the rules are near-perfect.
+
 ### 3.1 Amount convention
 When an invoice is fully cleared with an explained shortfall (discount, withholding, bank charges, FX), the row's amount
 is the invoice's **full open amount**, not the cash received. For a real partial payment it is the cash applied. Getting
@@ -258,6 +272,8 @@ matcher's OVERPAYMENT rows outside that pattern, 0 of 55 were right, against 310
 ---
 
 ## 4. Leakage and overfitting checks
+
+> **TL;DR:** learned parts are time-split, the untouched holdout scores at or above validation, and LIVE gains tracked local gains; drift is the only untestable risk.
 
 ### 4.1 What learns from the answer key, and on what
 Only two components read the golden at run time, and both are cut by date:
@@ -308,6 +324,9 @@ set. To measure overfitting we added `hold` = Jan–Jun 2024, never used for tun
 The same segments lose points in both windows by about the same amounts. Largest exception gap: SHORT_BANK_CHARGES
 0.890 vs 0.937, on only 125 holdout cases. **No sign of overfitting.**
 
+With the final v5 code (§10) the gap still points the same way: val **96.73**, hold **96.84** (allocation F1 0.962 /
+0.965, precision 0.998 on both).
+
 ### 4.5 LIVE vs local
 - Teammate's earlier measurement (starter + classifier): val 13.08, LIVE 13.38. Local val tracked LIVE within about 0.3.
 - Our first LIVE upload (file `submission_v1.csv.gz`, 704,576 rows, built at 12:05; uploaded at 12:38, three minutes
@@ -325,6 +344,11 @@ The same segments lose points in both windows by about the same amounts. Largest
   (`integration/run.py`), which `OVERFITTING_CHECKS.md` found on a flat plateau (0.8–0.99 within 0.1 points) with its
   best value at 0.97 in both val and hold. Locally val 96.36 → 96.41 and hold 96.46 → 96.50; on LIVE exception
   macro-F1 0.947 → 0.9481 and transaction accuracy 0.9734 → 0.9741, i.e. the +0.04 predicted locally showed up on LIVE.
+- **LIVE v4** (uploaded 15:57) scored **96.05**: remittance FX for currency-less advices plus exception refinements
+  (§10.1). Locally only +0.05 val / +0.09 hold, because the remittance fix had no cases in TRAIN; on LIVE +0.43.
+- **LIVE v5** (uploaded 16:38) scored **96.34**, our best: v4 + the `cn_bundles` matcher. Locally +0.27 val / +0.25
+  hold; on LIVE +0.29. Allocation F1 0.9562 (precision 0.9983, recall 0.9175), transaction accuracy 0.9753, exception
+  macro-F1 0.9637.
 - On segments both runs share, LIVE v1 sits close to local: `ar_ref_noise` 94.8 % (LIVE) vs 96.1 % (val, newer code),
   `ar_short_dispute` 80.8 % vs 82.8 %, `ar_1toN_text` 94.1 % vs 94.8 %, and 100 % on the big supplier-payment segments.
 
@@ -345,6 +369,8 @@ against LIVE is the cheapest early warning.
 ---
 
 ## 5. Data quirks and traps
+
+> **TL;DR:** cancelled invoices, month-boundary side files, format switches and shared names are traps; a few cases are unrecoverable by design.
 
 1. **Invoices cancelled without a bank payment** vanish from the open list (4.2). On val, 2,114 items are cancelled by
    "cancels and replaces" or by a full credit note. The golden allocates to 39 of them, all inside cheque-deposit lines
@@ -368,6 +394,8 @@ against LIVE is the cheapest early warning.
 
 ## 6. Score progression (val unless noted)
 
+> **TL;DR:** 12.72 → 96.73 on validation and 93.73 → 96.34 on LIVE, every step checked on both local windows.
+
 | Step | Score | What moved it |
 |---|---|---|
 | Starter on the sample month | 11.28 | Organisers' starter script |
@@ -382,7 +410,11 @@ against LIVE is the cheapest early warning.
 | LIVE leaderboard, v1 file | **93.73** | First real out-of-sample score (4.5) |
 | LIVE leaderboard, v2 file | **95.58** | Second-wave code on LIVE (4.5) |
 | UNIDENTIFIED threshold 0.9 → 0.97 | **96.41** (hold **96.50**) | Flat plateau, best in both windows (B8, 9.5) |
-| LIVE leaderboard, v3 file | **95.62** | Current best (4.5) |
+| LIVE leaderboard, v3 file | **95.62** | (4.5) |
+| Remittance FX + exception refinements + ZA01 fixes | **96.46** (hold **96.59**) | §10.1 fixes 1–3 |
+| LIVE leaderboard, v4 file | **96.05** | +0.43: the remittance fix only had LIVE cases (§10.1) |
+| + `cn_bundles` matcher | **96.73** (hold **96.84**) | §10.1 fix 4 |
+| LIVE leaderboard, v5 file | **96.34** | Current best, frozen as `best-live-96.34` |
 
 Exception macro-F1 went from **0.716** in the first full run to **0.962**: DUPLICATE_PAYMENT 0.110 → 0.966,
 SHORT_BANK_CHARGES 0.368 → 0.937, OVERPAYMENT 0.575 → 0.992, UNIDENTIFIED 0.614 → 0.956.
@@ -390,6 +422,8 @@ SHORT_BANK_CHARGES 0.368 → 0.937, OVERPAYMENT 0.575 → 0.992, UNIDENTIFIED 0.
 ---
 
 ## 7. Where the remaining points go (val, honest run)
+
+> **TL;DR:** about 3 points remain in a handful of AR segments, mostly lines where several invoice sets fit the cash and the text doesn't say which.
 
 | Segment | Lines | Line accuracy | Points lost | Why | Ideas (untested) |
 |---|---|---|---|---|---|
@@ -404,9 +438,16 @@ SHORT_BANK_CHARGES 0.368 → 0.937, OVERPAYMENT 0.575 → 0.992, UNIDENTIFIED 0.
 Exceptions still below 0.93: `SHORT_DISPUTE` 0.918 (the missing advices) and `FX_DIFFERENCE` 0.924 (recall 0.858: FX rows
 on unclaimed lines).
 
+**Update with the v5 code (val / hold / LIVE line accuracy, val points lost):** `ar_ref_noise` 96.2 / 96.5 / 96.0 %
+(1.23), `ar_1toN_credit_note` 76.7 / 78.0 / 74.6 % (1.18), `ar_short_dispute` 82.9 / 85.6 / 81.2 % (0.98),
+`ar_1toN_text` 95.0 / 95.5 / 94.9 % (0.42), `ar_n_to_m` 72.6 / 70.5 / 69.3 % (0.25), `ar_fx` 87.7 / 88.4 / 87.9 % (0.17).
+§12 explains why most of this is out of reach for rules that read only the bank text.
+
 ---
 
 ## 8. Engineering lessons
+
+> **TL;DR:** claim only when sure, keep evidence labels, give parallel agents separate outputs, and build safety nets for the one FINAL shot.
 
 1. **Priority-ordered matchers that claim whole lines.** Each matcher only claims what it is sure of, and later
    matchers see earlier claims (open amounts are updated in booking order). Precision stays at 99.9 % because nothing
@@ -434,6 +475,8 @@ on unclaimed lines).
 ---
 
 ## 9. Improvements for FINAL (planned 7 Nov, 13:45)
+
+> **TL;DR:** protect the FINAL run first (PDF text, rehearsal, drift alarm, runbook), then add recall; every planned item is now done or measured and dropped.
 
 FINAL is 220k lines from Jan–Jun 2026, scored once. It brings drift we have never seen: a new South African company
 (ZA01, currency ZAR, invoice numbers "KWI…"), updated masters in `final/masters_final/`, renamed customers, changed bank
@@ -491,19 +534,162 @@ accounts and slower payers. So the plan puts **running correctly on new data** f
 | B1 | **Done.** PDF text extraction inside ingestion (`ingestion/pdftext.py`) | Without it FINAL loses all PDF evidence (9.2) | Protects several points | Low | 30 min |
 | B2 | **Done** (99.98 % identical to LIVE v2, all matchers ran). FINAL dress rehearsal on a fake `final` folder (LIVE data, copied masters as `masters_final`) | The FINAL code path has never run | Protects the one shot | Low | 45 min |
 | B3 | **Done.** Drift alarm `integration/drift.py`: share claimed per matcher, per entity and currency, FINAL vs LIVE, flag ±30 % | A silent failure (e.g. ZA01 with zero claims) shows up before we submit | Protects | None | 30 min |
-| B4 | Learn payer IBANs and names from our own confident LIVE matches (evidence matchers ≥ 99.9 % precise), for FINAL only | Customers renamed or changed banks after TRAIN | Small to medium on FINAL | Low (no labels used) | 1–2 h |
+| B4 | **Dropped (measured, no gain, §10.3).** Learn payer IBANs and names from our own confident LIVE matches (evidence matchers ≥ 99.9 % precise), for FINAL only | Customers renamed or changed banks after TRAIN | Small to medium on FINAL | Low (no labels used) | 1–2 h |
 | B5 | **Done.** FINAL runbook `integration/final.sh`: checksum, pdftext, ingestion, pipeline, validate, drift report, print the submit command | No improvisation under time pressure | Protects | None | 20 min |
-| B6 | Partial claims on unclaimed lines (9.4) | Free correct pairs | +0.1–0.15 | Low | 1 h |
-| B7 | Fix remittance advices the new "Voucher" layout misses | The layout is the norm in FINAL | Small on LIVE, larger on FINAL | Low | 1 h |
+| B6 | **Done in `cn_bundles` (§10.1).** Partial claims on unclaimed lines (9.4) | Free correct pairs | +0.1–0.15 | Low | 1 h |
+| B7 | **Done (§10.1, fix 1): 0 voucher advices left unclaimed on LIVE.** Fix remittance advices the new "Voucher" layout misses | The layout is the norm in FINAL | Small on LIVE, larger on FINAL | Low | 1 h |
 | B8 | **Done.** UNIDENTIFIED threshold 0.9 → 0.97, the best value on a flat plateau in both windows (`OVERFITTING_CHECKS.md`) | Robustness on new data | +0.05 val, +0.04 hold, +0.04 LIVE (95.62) | Low | Done |
-| B9 | Residual subset-sum after partial claims: claim a whole line only if exactly one completion exists | Targets credit-note bundles and noisy references | Uncertain | Medium | Stretch |
+| B9 | **Done in `cn_bundles` (§10.1).** Residual subset-sum after partial claims: claim a whole line only if exactly one completion exists | Targets credit-note bundles and noisy references | Uncertain | Medium | Stretch |
 
 ### 9.6 How we test each change
 - Every change runs on val **and** the holdout: neither may drop, and allocation precision must stay ≥ 0.998.
-- Then one LIVE upload per change (the limit is now 1 per 10 s), compared with the best so far (95.62). Only whole-pipeline variants go
+- Then one LIVE upload per change (the limit is now 1 per 10 s), compared with the best so far (now 96.34). Only whole-pipeline variants go
   to the leaderboard; we never probe individual lines, since the rules forbid trying to obtain LIVE or FINAL answers.
 
 ### 9.7 FINAL timetable
-- 18:00 download, verify SHA-256, extract to `data/final/` → run `integration/final.sh` (about 15 minutes with PDF
-  extraction) → read the drift report → submit with `--i-am-sure` by **19:00**, leaving 30 minutes of buffer before
+- 18:00 download, verify SHA-256, extract to `data/final/` → run `integration/final.sh` **from the frozen folder
+  `hackathon-claude-best`** (about 20–30 minutes with PDF extraction) → read the drift report → submit with `--i-am-sure` by **19:00**, leaving 30 minutes of buffer before
   submissions close at 19:30. A file with format errors doesn't use the shot, but a valid bad file does.
+
+---
+
+## 10. Afternoon round: from 95.62 to 96.34 on LIVE
+
+> **TL;DR:** four fixes found by four parallel agents added +0.32 on validation, +0.34 on the holdout and +0.72 on LIVE,
+> with precision unchanged at 0.998; every other idea they tested was measured and dropped.
+
+### 10.1 What shipped
+Each fix had to raise both validation and holdout with allocation precision ≥ 0.998, then beat the best LIVE score.
+
+| # | Fix | What it does | Val | Hold | LIVE |
+|---|---|---|---|---|---|
+| 1 | Remittance FX (`matching/matchers/remittance.py`) | Voucher and old XLSX advices carry no currency. When the advice's invoices are in another currency than the bank line, read the advice in that currency, and accept it when the bank's own original amount equals the advice total. Discounts listed on a voucher count as declared (3-day grace, not 14). | 0 lines changed | 0 lines changed | +22 lines, 3,003 rows; FX_DIFFERENCE rows 12,618 → 15,513 |
+| 2 | Exception refinements (`integration/refine.py`) | PARTIAL on `refs:explain` rows whose amount is exactly a usual fraction of the item (cut to the cent); SHORT_BANK_CHARGES at the full open amount when POLICIES explains a single-invoice shortfall as intermediary charges (non-SEPA payers such as GB, CH, PL). | +0.05 | +0.09 | (in v4) |
+| 3 | FINAL guards | ZA01: payer names after "EFT CREDIT", "KWI" no longer read as the Polish month April, "KWI" added to invoice prefixes. `final.sh` compares master row counts and warns when FX rates stop before June 2026. | 0 | 0 | 0 |
+| 4 | `cn_bundles` matcher (`matching/matchers/cn_bundles.py`, last in the order) | On lines no matcher claimed: claim the invoices the text cites (full number or a unique 6+ digit suffix), each netted with its own credit notes; claim the whole line only when exactly one completion of the remainder exists (coincidence guard 0.05); otherwise only the cited part. | +0.27 | +0.25 | +0.29 (1,177 lines) |
+
+- **LIVE v4** (fixes 1–3) scored **96.05** (+0.43). It gained far more on LIVE than locally because fix 1's case, a
+  currency-less advice paid in another currency, never occurs in TRAIN.
+- **LIVE v5** (v4 + fix 4) scored **96.34** (+0.29), close to the +0.27 / +0.25 measured locally.
+- `cn_bundles` shows only 14 % "lines fully right" in the matcher table because it often claims just the cited part of
+  a line. Its pairs are 97–99 % right, and all of its lines were wrong before it ran, so it cannot lower transaction
+  accuracy.
+
+### 10.2 What moved on LIVE (line accuracy, v3 → v4 → v5)
+
+| Segment | v3 | v4 | v5 |
+|---|---|---|---|
+| `ar_fx` | 84.5 % | 87.5 % | 87.9 % |
+| `ar_n_to_m` | 65.7 % | 69.2 % | 69.3 % |
+| `ar_short_bank_charges` | 88.4 % | 93.2 % | 93.2 % |
+| `ar_1toN_credit_note` | 73.3 % | 73.3 % | 74.6 % |
+| `ar_1toN_text` | 94.3 % | 94.3 % | 94.9 % |
+| `ar_third_party_parent` | 94.1 % | 94.1 % | 95.2 % |
+| `ar_short_dispute` | 80.8 % | 81.2 % | 81.2 % |
+
+Exception macro-F1 on LIVE went 0.9481 → 0.9631 → 0.9637; allocation recall 0.9038 → 0.9079 → 0.9175; precision
+stayed at 0.998.
+
+### 10.3 How we searched without overfitting, and what we dropped
+Four agents worked in parallel on separate questions (unclaimed multi-invoice lines, drift robustness, remittances,
+exceptions). Rules for all of them: matcher code never reads the golden; every constant comes from POLICIES or from an
+existing matcher; a change ships only if validation **and** holdout both rise and precision stays ≥ 0.998; one LIVE
+upload per version.
+
+| Idea | Measured | Why dropped |
+|---|---|---|
+| Learn payer IBANs and names from our own confident LIVE matches (B4) | +0 lines on val, +1 on hold, 0 on LIVE | The true payer is already a candidate for 95.4 % of unclaimed item receipts; aliases 6–12 months stale lose only 0.02 pp of coverage |
+| Amount-only subset search on unclaimed lines | 74 % / 69 % pair precision | Paid and unpaid invoices interleave; the cash fits many sets |
+| Date window around the cited invoices | Lower gain and precision than no window | The guard is misleading on a small pool |
+| "Pay everything overdue" or oldest-first | Exact on 0–3 % of lines | Payers don't pay in date order |
+| Second matching pass after removing claimed items | +0.06–0.08, but 81 % precision in the last month | Lowers overall precision |
+| Soft-consuming invoices cited by earlier unclaimed lines | +2 / +5 lines | Too small |
+| Wider subset-sum windows for slower payers | val −51, hold +9 true pairs | Bigger pools make solutions less unique |
+| Silent-discount grace 14 → 3 days (the written policy) | −0.02 on both windows | The golden accepts up to about 14 days; kept 14 |
+| Coincidence guard 0.3 instead of 0.05 for `cn_bundles` | +0.02–0.03 | Completion pair precision falls from 99 % to 96.7 % |
+
+### 10.4 FINAL risks found and handled
+- **Stale FX rates.** Every currency in `fx_rates.csv` ends on 2025-12-31. Rules that compare against the bank's original
+  amount are unaffected; the remittance matcher now falls back to it too, and `final.sh` warns if `masters_final` does
+  not extend the rates.
+- **The new South African company (ZA01).** LIVE has only 2 ZA01 lines and no ZA01 items, so nothing can be tested
+  before 18:00. The three one-line fixes above remove the known traps.
+- **Partial master files.** `lib.masters` replaces whole files with the `masters_final` copy; `final.sh` prints row
+  counts per file so a partial file shows up before submitting.
+
+### 10.5 What to expect on FINAL
+- **Accuracy decays within the window.** A receipt we leave unclaimed keeps its invoices "open" in our state although
+  they are paid. On val these ghost items grow from 0 to about 39k by month 6, and the median pool on an unclaimed receipt
+  grows from 32 to 55 invoices. Expect months 5–6 about 1–1.5 points below months 1–2; validation shows the same, so
+  it is already in our estimates. (LIVE showed almost no trend: claimed share 88.7 % → 88.0 %.)
+- **Slower payers.** Shifting every payment 30 days later costs 3–5 % of the subset and same-amount pairs, about
+  −0.1 to −0.15 points. No window cap is close to the data.
+- **What to read in the drift report:** ZA01's claimed share (other companies: 67–94 %), the matcher mix against LIVE
+  (alarm at ±30 %), and the FX_DIFFERENCE share.
+
+---
+
+## 11. Teammates' cross-checks
+
+> **TL;DR:** three teammates' write-ups and a priorities list confirmed our choices; we were ahead on every segment they
+> flagged, nothing was worth shipping before the freeze, and one test idea is worth keeping.
+
+### 11.1 Where their weak segments stand in ours (LIVE)
+
+| Segment | Luigi's branch | Ours (v5) |
+|---|---|---|
+| `ar_1toN_credit_note` | 63 % | **74.6 %** |
+| `ar_discount_late` | 61 % | **82.0 %** |
+| `ar_advance_deduction` | 68 % | **99.6 %** |
+| `ar_fx` | 77 % | **87.9 %** |
+| `ar_dd_represented_transfer` | 89 % | **98.0 %** |
+| Overall | 91.11 | **96.34** |
+
+(Matias's branch: validation 92.94, LIVE 82.53 for the code measured there.)
+
+### 11.2 Their ideas, checked against our pipeline
+
+| Idea | From | Our status |
+|---|---|---|
+| Hide one company's history to imitate a new one (PL01 test: allocation F1 0.882 without name/IBAN fallbacks, 0.955 with, 0.958 with full history) | Luigi | **Worth keeping.** Our payer resolver also falls back to master names, trade names and IBANs, but we never ran this test. At 18:00, watch ZA01's claimed share in the drift report. |
+| UNIDENTIFIED for unseen companies decided by evidence (no reference and no known payer) | Luigi | Not adopted: ZA01 is likely a few % of lines and the rule couldn't be validated before the freeze. |
+| Bank charges are a fixed fee grid / per-customer | Matias, Luigi | Already covered: SHORT_BANK_CHARGES F1 0.95 on val, `ar_short_bank_charges` 93.2 % on LIVE. |
+| Overpayments are +1 %, +10 % or a round amount | Matias | Already in (`overpayment_plausible`); `ar_overpayment` 99.1 % on LIVE. |
+| Credit notes only together with their invoice; cancelled items out of the pools | Matias | Covered by `cn_bundles` and the cancelled-items filter in subset-sum. |
+| Advice linked by amount when no reference matches; later payment of a disputed deduction | Matias | Covered; `ar_dispute_settlement` 99.6 % on LIVE. |
+| p(paid) model for short disputes, accepted at ≥ 65 % pair precision | Priorities list | Rejected: their date rules were 12–24 % precise, and it would give up our 0.998 precision on new data. |
+| `ref_partial`: cited invoices + unique completion | Nikita | Same idea as `cn_bundles`, already shipped; not merged, so the same lines aren't claimed twice. |
+| FINAL timing: PDF text extraction is paid once for a new folder | Matias | Agreed: plan on 20–30 minutes from 18:00. |
+
+---
+
+## 12. What's left, and what we would do next
+
+> **TL;DR:** the remaining AR losses are lines whose invoices are mostly not in the bank text, so no text rule can find
+> them; the next step is a learned "which invoices did this line pay" ranker trained across windows, after FINAL.
+
+### 12.1 Why the remaining multi-invoice lines fail
+Diagnosis by a teammate on the sample month (inside the val window, so for understanding only, not for tuning):
+- The bank's remittance field holds about 80–140 characters. Customers list the first invoice in full and the rest by
+  their last digits, and the field ends after 3–4 references, often in the middle of a number.
+- Unclaimed lines settle a median of 15.5 invoices, and **80 % of those invoices are not in the text at all**.
+- The payer has a median of 64 open invoices, so the uncited remainder either has hundreds of exact fits (median 194)
+  or lies outside the search pool. Filling the cash oldest-first is exact on 0 of 83 lines.
+- `cn_bundles` already claims the cited part; the uncited 80 % is the ceiling for any rule that reads only the text.
+
+### 12.2 Short disputes without an advice
+17 % of disputed short-payments have no advice anywhere. The bank text lists truncated numbers and nothing says which
+invoice was short-paid, so the deducted invoice can't be known. We accept that loss.
+
+### 12.3 The next step: a ranker for "which invoices did this line pay"
+- Score each of the payer's open invoices with p(paid on this line), then accept a set only when it sums exactly to the
+  remainder (these lines carry no deductions, so the check is strict).
+- To avoid overfitting, train the validation model on the holdout window and the holdout model on validation, and judge
+  each only on the window it didn't see.
+- The same ranker targets `ar_ref_noise`, `ar_1toN_credit_note` and `ar_1toN_text`, whose unclaimed lines fail for the
+  same reason. Tracking partial-payment state across matchers is the matching idea for `ar_n_to_m`.
+
+### 12.4 Why we didn't build it today
+One honest cycle (build with cross-window training, validation and holdout runs, a LIVE build and upload) takes about
+70 minutes, more than was left before the code freeze. A learned invoice chooser is also the part most exposed to drift,
+and FINAL is a single shot, so it belongs after the competition, not in the submitted pipeline.

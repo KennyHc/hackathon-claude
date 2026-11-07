@@ -2,7 +2,7 @@
 
 Live version (private until shared): https://claude.ai/artifact/3kyFbwq7iGgqbqfjwYS2c8
 
-Source of the metrics dashboard: score tiles (LIVE v2, validation, holdout, organisers' benchmark), today's deadline
+Source of the metrics dashboard: score tiles (latest LIVE upload, validation, holdout, organisers' benchmark), today's deadline
 clock, score components by run, score progression, validation-vs-LIVE accuracy per segment, points lost per segment,
 a sortable segment table, matcher precision and exception F1 (validation vs holdout).
 
