@@ -307,6 +307,17 @@ def load_or_build(ctx) -> pd.DataFrame:
     return df
 
 
+def cancelled_items(ctx) -> set[str]:
+    """item_ids never settled by bank (POLICIES §5.7): invoices cancelled by "anula y sustituye" / "cancels and
+    replaces", and credit notes that cancel an invoice in full (plus that invoice). Matchers should not allocate to
+    them; a payment citing a cancelled invoice settles its replacement (pdf_cases)."""
+    cl = load_or_build(ctx)
+    out = set(cl.ref_item_id[(cl.clause_type == "REPLACES") & (cl.ref_item_id != "")])
+    canc = cl[cl.clause_type == "CANCELS"]
+    out |= set(canc.item_id[canc.item_id != ""]) | set(canc.ref_item_id[canc.ref_item_id != ""])
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--phase", default="sample", choices=list(lib.PHASES))
