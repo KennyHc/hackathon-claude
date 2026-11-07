@@ -50,6 +50,8 @@ def main():
                 continue
             raise
         t = time.time()
+        # allocations made so far by earlier matchers (item_id -> used amount available via this frame)
+        ctx.allocations = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=ALLOC_COLS)
         try:
             df = mod.run(ctx)
         except Exception:
