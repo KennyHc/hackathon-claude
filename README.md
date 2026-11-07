@@ -12,7 +12,8 @@ scripts/setup.sh
 claude              # start Claude Code from the repo root
 ```
 
-`setup.sh` checks your GitHub login, shows which folder is yours and checks `data/`.
+`setup.sh` checks your GitHub login, shows which folder is yours, checks `data/` and creates the Python 3.12 environment in
+`.venv/` from `requirements.txt` (needs [uv](https://docs.astral.sh/uv/) or `python3.12`).
 
 ## How we work
 

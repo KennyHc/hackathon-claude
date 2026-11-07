@@ -1,0 +1,10 @@
+# Shared team environment: Python 3.12, created by scripts/setup.sh in .venv/
+# Want another package? Ask the repo admin on the board (scripts/board.sh need @ZhengJinFa168 "...").
+pandas==2.3.3
+numpy==2.5.4
+pyarrow==26.0.1
+scikit-learn==1.9.1
+scipy==1.18.1
+requests==2.34.2
+openpyxl==3.1.5
+pypdf==7.0.0

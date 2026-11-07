@@ -83,11 +83,13 @@ Commit only files in your folder. Small, frequent commits. Never force-push. Nev
 
 ## Conventions
 
-- Every piece has an entry point: `python <piece>/run.py --phase {sample,train,train_lite,live,final}` that reads
+- Every piece has an entry point: `.venv/bin/python <piece>/run.py --phase {sample,train,train_lite,live,final}` that reads
   `data/<phase>/` (and other pieces' `out/`) and writes `<piece>/out/<phase>/`. Others regenerate your outputs locally by
   running it; outputs are not shared through git.
 - Develop on `sample` (one month, seconds), check on `train_lite`, then `train` / `live`.
-- Paths are relative to the repo root. Python ≥ 3.10; pandas/polars + pyarrow for parquet.
+- Paths are relative to the repo root. **Run Python with `.venv/bin/python`** (Python 3.12, created by
+  `scripts/setup.sh` from `requirements.txt`: pandas 2.3, pyarrow, scikit-learn, openpyxl, pypdf…). Need another package?
+  Post a NEED to the admin; don't `pip install` into the shared requirements yourself.
 - Starter / reference scorer (always pass `--data data`):
-  `python docs/starter/starter.py --data data --phase sample --out integration/out/sample/starter.csv.gz` ·
-  `python docs/starter/score_train.py <sub.csv.gz> --data data [--sample]`.
+  `.venv/bin/python docs/starter/starter.py --data data --phase sample --out integration/out/sample/starter.csv.gz` ·
+  `.venv/bin/python docs/starter/score_train.py <sub.csv.gz> --data data [--sample]`.

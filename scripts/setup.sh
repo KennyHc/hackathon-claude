@@ -25,5 +25,17 @@ done
 [ $missing -eq 0 ] && echo "✓ data/ looks complete" \
   || echo "  → Put the extracted dataset folders into data/ (see README.md). They are gitignored."
 
+echo "… Python environment (.venv, Python 3.12, requirements.txt)"
+if command -v uv >/dev/null; then
+  [ -x .venv/bin/python ] || uv venv -q --python 3.12 .venv
+  uv pip install -q --python .venv/bin/python -r requirements.txt
+elif command -v python3.12 >/dev/null; then
+  [ -x .venv/bin/python ] || python3.12 -m venv .venv
+  .venv/bin/pip install -q -r requirements.txt
+else
+  echo "✗ Need uv (curl -LsSf https://astral.sh/uv/install.sh | sh) or python3.12 (brew install python@3.12)"; exit 1
+fi
+echo "✓ $(.venv/bin/python --version) ready: run code with .venv/bin/python (or: source .venv/bin/activate)"
+
 chmod +x scripts/*.sh
 echo "✓ Done. Start Claude Code from the repo root: claude"
