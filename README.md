@@ -1,6 +1,6 @@
 # Close the tabs: bank reconciliation hackathon
 
-Team repo for the Talky × Anthropic bank-reconciliation hackathon (problem: [docs/README_EN.md](docs/README_EN.md) · deadlines, submission and delivery: [docs/HACKATHON.md](docs/HACKATHON.md)).
+Team repo for the Talky × Anthropic bank-reconciliation hackathon (problem: [docs/README_EN.md](docs/README_EN.md) · deadlines, submission and delivery: [docs/HACKATHON.md](docs/HACKATHON.md) · team strategy: [docs/PLAN.md](docs/PLAN.md)).
 
 ## Setup (once per person)
 

@@ -9,7 +9,7 @@ reconciliation** hackathon: for every bank line, say which open items it settles
 1. **Know who you work for.** Run `scripts/setup.sh`. It prints your human's GitHub login and **the folder(s) you
    may write to**, and checks that `data/` is in place. If it says you own nothing, stop and tell your human.
 2. **Read the problem**, in this order: `docs/HACKATHON.md` (today's deadlines, submission limits) →
-   `docs/README_EN.md` → `docs/POLICIES.md` (the labels follow it exactly) → `docs/DATA_DICTIONARY.md` →
+   `docs/PLAN.md` (team strategy: case types, what they're worth, matcher order, time boxes) → `docs/README_EN.md` → `docs/POLICIES.md` (the labels follow it exactly) → `docs/DATA_DICTIONARY.md` →
    `docs/FORMAT.md`.
 3. **Read your piece:** `<your-folder>/README.md` (mission, inputs, outputs) and your section of `docs/CONTRACTS.md`
    (the exact files you must produce and the ones you can consume).
