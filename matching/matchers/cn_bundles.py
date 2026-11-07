@@ -2,14 +2,17 @@
 
 Runs LAST (only lines nobody claimed). Per incoming line, in booking order:
 1. candidate payers = parties hit by the line's document tokens (refs.Solver.global_parties) + payers named in the
-   text (refs.Solver.name_parties);
+   text (refs.Solver.name_parties) + PartyResolver (IBAN / name / learned aliases);
 2. units = each open invoice of the payer together with its own open credit notes (credit_note.related_document =
    the invoice: POLICIES §2, a netted credit note is a row at its full amount); a credit note whose invoice is not
    open stands alone (negative);
 3. fixed = units of items cited unambiguously (a complete number, or a cut number with exactly one candidate among
-   the payer's open items); tokens with several candidates must each be covered by some chosen unit;
-4. claim the whole line when the fixed units pay the cash exactly, or when exactly ONE set of the payer's other units
-   completes it and the expected number of coincidental completions (subset-sum density, as in subset_sum.py) is small;
+   the payer's open items); tokens with several candidates must each be covered by some chosen unit; a suffix hit
+   under another letter prefix (PF proforma vs CRN credit note) and fragments with < MIN_DIGITS significant digits
+   are not evidence;
+4. claim the whole line when the fixed units pay the cash exactly, or when the payer's other units, searched in
+   due-date stages around the booking date (as subset_sum), give exactly ONE completion in the first stage that has
+   any, with expected coincidental completions <= 0.05 (subset_sum.SPURIOUS_ALT);
 5. otherwise (PARTIAL_CLAIM) claim only the fixed units when they fit inside the cash: those pairs are right in ~all
    cases, and the line was going to be wrong anyway.
 Items any earlier matcher allocated (on any line) are never offered.
