@@ -41,7 +41,12 @@ def merge(phase: str) -> tuple[pd.DataFrame, pd.Series]:
 
     # exceptions: rules library first, matcher's guess otherwise
     if len(alloc):
-        rule = assign_exceptions(alloc, bank, items)
+        try:
+            rule = assign_exceptions(alloc, bank, items)
+        except Exception:   # FINAL safety net: keep the matchers' own exceptions
+            import traceback
+            print(f"[integration] assign_exceptions FAILED, keeping matcher exceptions\n{traceback.format_exc()}")
+            rule = pd.Series([None] * len(alloc), index=alloc.index, dtype=object)
         # matchers that decide exceptions from evidence (PDF clauses, advices, batch files) keep their own label
         keep = alloc.method.fillna("").str.match(r"^(pdf_cases|remittance|dd_batches|cards_cheques|payment_runs|refs:explain)") \
             | (alloc.exception.fillna("") != "")

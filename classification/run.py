@@ -42,9 +42,9 @@ def main():
     try:
         model = importlib.import_module("classification.categories")
         labels = model.label(bank, a.phase)
-    except ModuleNotFoundError as e:
-        if e.name != "classification.categories":
-            raise
+    except Exception:   # FINAL safety net: never leave integration without labels
+        import traceback
+        print(f"[classification] model FAILED, using baseline\n{traceback.format_exc()}")
         labels = baseline(bank)
     labels = labels[LABEL_COLS]
     od = lib.out_dir("classification", a.phase)
