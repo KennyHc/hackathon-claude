@@ -26,9 +26,10 @@ OUT_COLS = ["bank_txn_id", "item_id", "amount", "exception", "confidence", "meth
 WHT_COUNTRIES = {"MX", "BR", "MA"}
 WHT_RATES = (0.0125, 0.015, 0.10)
 MAX_SUBSET = 26          # candidates for meet-in-the-middle
-WINDOW = 28
+WINDOW = 30
 UNCITED_PARTIAL = False  # 55 % exact on val
-GROUP_FALLBACK = False   # measured 0 % exact on val (parents go through refs)
+GROUP_FALLBACK = False
+DUP_WITH_OPEN = True   # measured 0 % exact on val (parents go through refs)
 FACTORY = P.FACTORY
 
 _MONTHS = {}
@@ -107,6 +108,9 @@ def _best_subset(vals: np.ndarray, target: int, tol: int, prefix: bool = True):
     if n == 0:
         return None
     # FIFO prefix / all
+    single = np.nonzero(np.abs(vals - target) <= tol)[0]
+    if len(single):
+        return [int(single[0])]
     if prefix:
         cs = np.cumsum(vals)
         k = np.nonzero(np.abs(cs - target) <= tol)[0]
@@ -213,6 +217,9 @@ def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.Data
     # claimed events in booking order
     cl = claimed.copy() if claimed is not None and len(claimed) else pd.DataFrame(columns=OUT_COLS + ["booking_date"])
     if len(cl):
+        if "booking_date" not in cl:
+            cl["booking_date"] = ""  # unknown → applied before every line
+        cl["booking_date"] = cl.booking_date.fillna("")
         cl = cl[cl.item_id.fillna("") != ""]
         cl = cl.sort_values(["booking_date", "bank_txn_id"]).reset_index(drop=True)
     cl_dates = cl.booking_date.values if len(cl) else np.array([])
@@ -252,6 +259,8 @@ def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.Data
             if rows:
                 rows = [(k, c_, e, m + "_group") for k, c_, e, m in rows]
         sure = pur0 >= 0.9 and (len(cands) == 1 or cands[1][1] < rank0)
+        if not rows:
+            rows = _weak_cited(IT, [c_[0] for c_ in cands], r, amt)
         if not rows and sure:
             rows = _fit(IT, [p0], r, amt, d, weak=True)
         if not rows:
@@ -291,17 +300,6 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
     if len(c) == 0:
         return _duplicate(IT, parties, r, target, d, receipt) if weak else None
     if weak:
-        cited = _cited(IT, parties, r, receipt)
-        if len(cited) == 1:
-            k = cited[0]
-            o = int(IT.open[k])
-            if o > 0 and target < o:
-                return [(k, target, "PARTIAL", "party_cited_partial")]
-            if o > 0 and o < target <= 1.5 * o:
-                return [(k, o, "OVERPAYMENT", "party_cited_overpay")]
-            if o == 0 and IT.total[k] == target and k in IT.settled_on:
-                return [(k, target, "DUPLICATE_PAYMENT", "party_cited_duplicate")]
-            return None
         vals = IT.open[c] * IT.sign[c]
         if len(c) == 1 and vals[0] > 0:
             o = int(vals[0])
@@ -309,7 +307,7 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
                 return [(int(c[0]), target, "PARTIAL", "party_partial")]
             if o < target <= 1.1 * o:
                 return [(int(c[0]), o, "OVERPAYMENT", "party_overpay")]
-        return None
+        return _duplicate(IT, parties, r, target, d, receipt) if DUP_WITH_OPEN else None
     if len(parties) > 1:
         c = c[np.lexsort((IT.id[c], IT.issue[c]))]
     vals = IT.open[c] * IT.sign[c]
@@ -340,7 +338,9 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
     if len(cp) > 2:  # recent window: not stale, due soon; the most recent WINDOW of them
         age = (bd - IT.issue_dt[cp]).astype(np.int64)
         due = (IT.due_dt[cp] - bd).astype(np.int64)
-        w = np.nonzero((age <= 200) & (due <= 45))[0][-WINDOW:]
+        w = np.nonzero((age <= 400) & (due <= 16) & (due >= -300))[0]
+        if len(w) > WINDOW:  # keep the WINDOW latest by due date
+            w = np.sort(w[np.argsort(due[w], kind="stable")[-WINDOW:]])
         if 2 < len(w) < len(cp) or len(cp) > MAX_SUBSET:
             sel = _best_subset(vals[pos][w], target, 0, prefix=False)
             if sel is not None:
@@ -382,6 +382,24 @@ def _fit(IT: _Items, parties, r, amt: int, d: str, weak: bool = False):
                 fp = full[pos]
                 return [(int(cp[i]), int(IT.open[cp[i]]), "SHORT_WITHHOLDING" if fp[i] else "", "party_wht")
                         for i in sel]
+    return None
+
+
+def _weak_cited(IT, parties, r, amt):
+    """Exactly one item of the candidate payers is cited: partial / overpayment / duplicate on it."""
+    receipt = amt > 0
+    target = abs(amt)
+    cited = _cited(IT, parties, r, receipt)
+    if len(cited) != 1:
+        return None
+    k = cited[0]
+    o = int(IT.open[k])
+    if o > 0 and target < o:
+        return [(k, target, "PARTIAL", "party_cited_partial")]
+    if o > 0 and o < target <= 1.5 * o:
+        return [(k, o, "OVERPAYMENT", "party_cited_overpay")]
+    if o == 0 and IT.total[k] == target and k in IT.settled_on:
+        return [(k, target, "DUPLICATE_PAYMENT", "party_cited_duplicate")]
     return None
 
 
