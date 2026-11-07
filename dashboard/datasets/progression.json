@@ -117,5 +117,12 @@
   "score": 96.42,
   "phase": "live",
   "note": "+ sd_noadv ranker, uploaded 17:58"
+ },
+ {
+  "step": 18,
+  "label": "LIVE main (team best)",
+  "score": 96.46,
+  "phase": "live",
+  "note": "Teammate's new classifier + our sd_noadv, main 31d95ae (val 96.82)"
  }
 ]
