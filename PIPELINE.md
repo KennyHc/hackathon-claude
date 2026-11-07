@@ -9,7 +9,8 @@ checkout's data, read-only). Background: `docs/PLAN.md`, `docs/POLICIES.md` (the
 ```bash
 cd /Users/kenny/Documents/GitHub/hackathon-claude-kenny
 python3 ingestion/run.py --phase sample          # already done for sample/val/live; rerun only if ingestion changes
-python3 matching/run.py --phase sample --only <your_matcher>   # develop one matcher
+python3 matching/run.py --phase sample --only <your_matcher>   # develop one matcher -> allocations_only_<name>.parquet
+ALLOC_FILE=allocations_only_<your_matcher>.parquet python3 integration/run.py --phase sample   # merge just that
 python3 integration/run.py --phase sample --all  # matching (all, in ORDER) + classification + merge
 python3 integration/score.py --phase sample      # official score + segments by points lost + per-method precision
 python3 integration/score.py --phase sample --dump ar_ref_noise   # wrong lines of a segment -> CSV
@@ -40,3 +41,6 @@ read from `ctx.data_path(...)` (sample and val read `data/train/`). PDF text is 
 - Don't commit, don't push, don't touch the main checkout (`/Users/kenny/Documents/GitHub/hackathon-claude`).
 - Final report: what you built (files), per-segment accuracy before/after and your method's precision on `sample` and
   `val`, known gaps, and anything the lead must change in shared files.
+- **GPU:** this Mac has an Apple-silicon GPU. Any GPU-heavy work (neural models, large matrix ops) must use Apple
+  Metal: PyTorch with `device = "mps"` (`torch.backends.mps.is_available()` is True here), or MLX. Never CUDA.
+  pandas / numpy / scikit-learn stay on CPU (no Metal backend; they are not GPU-bound here).

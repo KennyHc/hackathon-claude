@@ -29,7 +29,6 @@ ORDER = [
     "refs",              # invoice numbers in the bank text (#10)
     "subset_sum",        # payer's open items summing to the amount (#11)
     "same_amount",       # same-amount invoices: month in text / FIFO (#12)
-    "ref_exact",         # baseline: exact amount + exact document number (kept as a safety net)
 ]
 
 
@@ -67,8 +66,10 @@ def main():
         print(f"[matching] {name}: {df.bank_txn_id.nunique():,} lines, {len(df):,} rows ({time.time() - t:.1f}s)")
     out = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=ALLOC_COLS)
     od = lib.out_dir("matching", a.phase)
-    out.to_parquet(os.path.join(od, "allocations.parquet"), index=False)
-    print(f"[matching] total {out.bank_txn_id.nunique():,} lines -> {od}/allocations.parquet")
+    # partial runs (--only) never overwrite the full pipeline's allocations: integration reads ALLOC_FILE
+    fn = os.environ.get("ALLOC_FILE") or ("allocations.parquet" if not a.only else f"allocations_only_{a.only.replace(',', '+')}.parquet")
+    out.to_parquet(os.path.join(od, fn), index=False)
+    print(f"[matching] total {out.bank_txn_id.nunique():,} lines -> {od}/{fn}")
 
 
 if __name__ == "__main__":

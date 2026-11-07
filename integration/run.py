@@ -24,12 +24,14 @@ from ingestion import lib  # noqa: E402
 
 P_MIN = 0.2      # classification must be fairly sure the line settles NO item to override a matcher
 CONF_OVERRIDE = 0.9
+UNID_P = float(os.environ.get("UNID_P", "0.9"))   # flag UNIDENTIFIED only when p_items is below this
 
 
 def merge(phase: str) -> tuple[pd.DataFrame, pd.Series]:
     bank = pd.read_parquet(os.path.join(ROOT, "ingestion", "out", phase, "bank_lines.parquet"))
     items = pd.read_parquet(os.path.join(ROOT, "ingestion", "out", phase, "open_items.parquet"))
-    alloc = pd.read_parquet(os.path.join(ROOT, "matching", "out", phase, "allocations.parquet"))
+    # ALLOC_FILE=allocations_only_<name>.parquet scores a partial `matching/run.py --only <name>` run
+    alloc = pd.read_parquet(os.path.join(ROOT, "matching", "out", phase, os.environ.get("ALLOC_FILE", "allocations.parquet")))
     labels = pd.read_parquet(os.path.join(ROOT, "classification", "out", phase, "line_labels.parquet")).set_index("bank_txn_id")
 
     # drop matcher lines that classification is confident settle no item
@@ -49,9 +51,13 @@ def merge(phase: str) -> tuple[pd.DataFrame, pd.Series]:
                               "exception": alloc.exception.fillna("")})
     claimed = set(alloc.bank_txn_id)
     rest = labels[~labels.index.isin(claimed)].reindex(bank.bank_txn_id[~bank.bank_txn_id.isin(claimed)])
+    exc = rest.exception.fillna("")
+    # an unclaimed receipt that probably DOES settle items (a matcher miss) is wrong either way; flagging it
+    # UNIDENTIFIED would only add a false positive to that exception's F1
+    exc = exc.where(~((exc == "UNIDENTIFIED") & (rest.p_items.fillna(0) >= UNID_P)), "")
     cat_rows = pd.DataFrame({"bank_txn_id": rest.index, "item_id": "", "amount": "",
                              "category": rest.category.fillna("UNIDENTIFIED").values,
-                             "exception": rest.exception.fillna("").values})
+                             "exception": exc.values})
     sub = pd.concat([item_rows, cat_rows], ignore_index=True)
     methods = pd.concat([alloc.drop_duplicates("bank_txn_id").set_index("bank_txn_id").method,
                          "cls:" + rest.method.fillna("baseline")])
