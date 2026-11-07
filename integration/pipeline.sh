@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Whole pipeline for one phase: classification → matching cascade → merge + exceptions → validate (→ score on val).
 #   integration/pipeline.sh val|live|final [extra args for integration/run.py, e.g. --p-items 0.3]
-# Env: SKIP_C=1 reuses classification/out/P/line_labels.parquet if present; STAGES=batch,refs,party (cascade order);
+# Env: SKIP_C=1 reuses classification/out/P/line_labels.parquet if present; STAGES=batch,refs,party,k4_sbc (cascade order);
 #      MATCH_ARGS="--fallback-files" extra args for matching/run.py.
 # Logs: integration/out/P/pipeline_<time>.log. Exit code ≠ 0 when the submission is not valid.
 set -uo pipefail
@@ -34,8 +34,8 @@ else
   $PY classification/run.py --phase "$P" || echo "WARN: classification failed; integration falls back to defaults"
 fi
 
-step "matching/run.py --phase $P --stages ${STAGES:-batch,refs,party} ${MATCH_ARGS:-}"
-$PY matching/run.py --phase "$P" --stages "${STAGES:-batch,refs,party}" ${MATCH_ARGS:-} \
+step "matching/run.py --phase $P --stages ${STAGES:-batch,refs,party,k4_sbc} ${MATCH_ARGS:-}"
+$PY matching/run.py --phase "$P" --stages "${STAGES:-batch,refs,party,k4_sbc}" ${MATCH_ARGS:-} \
   || echo "WARN: matching cascade failed; integration runs without allocations"
 
 step "integration/run.py --phase $P $*"

@@ -24,3 +24,19 @@ no over-allocation), UNIDENTIFIED (receipt with no open item), thresholds, FINAL
 - Stage interface drift (column names, dtypes) → `common.normalize_stage_output()` coerces and validates.
 - Runtime on live (≈ 200k lines): stages' cost dominates; the cascade itself is O(rows).
 - FINAL masters_final partial / different columns → per-file fallback + mock test.
+
+# Round 2 (14:30 → 16:45)
+Baseline val 90.00 (commit 6f6daf6). Every change behind a flag (default off) until full-pipeline val ≥ 90.00.
+1. Trust list (O4): per method, measure on val how often assign_exceptions / normalize_amounts change the matcher's
+   exception/amount and who is right vs golden; methods where the matcher is right ≥ 95 % → `TRUST_METHODS`
+   (keep exception and amount as given). Flag `--trust-methods`.
+2. SHORT_BANK_CHARGES: replace the country set with a learned table: per customer (and per country fallback) the
+   share of train-golden single-invoice short payments labelled SBC (val: history < 2025-01-01; live/final: all
+   train). SBC when shortfall ≤ 60 EUR & ≤ 2 % and (customer has SBC history, or its country's SBC rate ≥ x).
+   Also lines no stage claims: nothing (stages). Flag `--sbc-model`.
+3. New-entity UNIDENTIFIED: replace the blanket rule by evidence: invoice-like ref in text or payer known to that
+   entity (K3 `unid_evidence`, stub meanwhile) → CUSTOMER_ADVANCE, else UNIDENTIFIED; unseen entities only, test on
+   val as leave-one-entity-out if cheap.
+4. Diagnose ar_discount_late, ar_fx, DUPLICATE/OVERPAYMENT recall against golden on val.
+5. Leakage (masters snapshot / cross-phase item lookups) only if cheap.
+6. 16:30 timed dry run.

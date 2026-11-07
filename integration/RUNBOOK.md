@@ -52,3 +52,13 @@ After the mock run delete `integration/out/final/`, `matching/out/final/`, `clas
 `--overpay-max 0.1` (drop single-invoice lines with cash > 1.1 × amount) · `--b-exc-fallback 0` (exceptions from
 classification/exceptions.py only, matchers' RETURNED / DUPLICATE_PAYMENT / SHORT_DISPUTE passed through) ·
 `--unid-p 0.9` · `--p-items 0.5` · `--no-amount-fix`. matching/run.py: `--overclaim drop|dup`, `--conflict rows|line`.
+
+## Round 2 additions (14:50)
+- Cascade default stages: `batch,refs,party,k4_sbc`. `k4_sbc` (matching/common.py) claims leftover receipts of
+  customers with a SHORT_BANK_CHARGES history in the train golden (val: < 2025) paying one open invoice minus
+  ≤ 2 % / ≤ 60 EUR, payer evidenced by IBAN / name / reference. Drop it with `STAGES=batch,refs,party`.
+- integration/run.py: `--trust-methods default` (keep the matcher's exception + amount for dd_batch, dd_batch_part,
+  card_settle, late_discount, retention_release, party_discount_late, k4_sbc), `--overpay-max 0.35`,
+  `--unid-evidence new` (entities unseen in train, e.g. ZA01: leftover receipt → CUSTOMER_ADVANCE when K3's
+  `matching/party/unid.py` (or the local stub) finds an invoice-like reference or a known payer, else UNIDENTIFIED;
+  `all` cost −0.57 on val, `off` = classifier only).

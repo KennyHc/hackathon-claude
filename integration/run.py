@@ -62,11 +62,59 @@ def exceptions_from_c(alloc, lines, phase, fix_amounts=True):
     return exc
 
 
+def unid_evidence(lines, phase):
+    """bank_txn_id → True when there is evidence the line settles items. K3's matching/party/unid.py when present,
+    else a local stub: an invoice-like reference (≥ 5-digit document number of an item of that entity) or a payer
+    (IBAN or normalised name) known among that entity's customers."""
+    from integration.lib.ledger import load_items
+    items = load_items(phase)
+    try:
+        pdir = os.path.join(ROOT, "matching", "party")
+        if pdir not in sys.path:
+            sys.path.insert(0, pdir)  # K3's modules import each other by bare name (import matcher, party)
+        from matching.party.unid import unid_evidence as k3
+        r = k3(lines, items, phase)
+        if isinstance(r, pd.DataFrame):  # bank_txn_id, has_ref_like, payer_known, …
+            ev = r.has_ref_like.fillna(False).astype(bool) | r.payer_known.fillna(False).astype(bool)
+            out = dict(zip(r.bank_txn_id, ev))
+            log(f"unid evidence: K3 unid_evidence on {len(r):,} lines, {int(ev.sum()):,} with evidence")
+            return out
+        return dict(r) if isinstance(r, dict) else dict(zip(lines.bank_txn_id, pd.Series(r).astype(bool).values))
+    except ImportError:
+        pass
+    except Exception as e:  # noqa: BLE001
+        log(f"unid evidence: K3 unid_evidence failed ({e}); using the local stub")
+    import re
+    from integration.lib.masters import read_master
+    from matching.common import norm_name
+    cu = read_master("customers.csv", phase)
+    out = {}
+    for entity, L in lines.groupby("entity"):
+        it = items[items.entity == entity]
+        docs = {re.sub(r"\D", "", d).lstrip("0") for d in it.document_number if len(re.sub(r"\D", "", d)) >= 5}
+        c = cu[cu.entity == entity]
+        ibans = set(c.iban) - {""}
+        names = {n for n in (norm_name(x) for x in list(c.name) + list(c.get("trade_name", []))) if len(n) >= 5}
+        for r in L.itertuples(index=False):
+            txt = f"{r.text} {r.remittance_info} {r.ref1} {r.ref2}"
+            toks = {t.lstrip("0") for t in re.findall(r"\d{5,}", txt)}
+            # also digit runs inside alphanumeric refs (KWI25-000123 → 25000123)
+            toks |= {re.sub(r"\D", "", t).lstrip("0") for t in re.findall(r"[A-Z]{2,4}\d{2}-?\d{4,}", txt.upper())}
+            nm = norm_name(f"{r.counterparty_name} {r.text}")
+            out[r.bank_txn_id] = bool(toks & docs) or (r.counterparty_account in ibans) or \
+                any(n in nm for n in names)
+    return out
+
+
 def train_entities():
     from integration.scoring import txns_path
     return set(pd.read_csv(txns_path("train"), dtype=str, keep_default_na=False, usecols=["entity"]).entity)
 
 
+# matchers that know the exception AND the amount better than the ledger-based engine (val, 14:40: engine
+# overrides on these methods were wrong in 32/32 rows)
+TRUST_METHODS = {"dd_batch", "dd_batch_part", "card_settle", "late_discount", "retention_release",
+                 "party_discount_late", "k4_sbc"}
 KEEP_EMPTY_METHODS = {"instalment_last", "settlement"}
 
 
@@ -94,9 +142,13 @@ def main():
     ap.add_argument("--no-amount-fix", action="store_true", help="skip classification.exceptions.normalize_amounts")
     ap.add_argument("--b-exc-fallback", type=int, default=0,
                     help="1: where assign_exceptions says no exception, keep B's guess; 0: C decides alone")
-    ap.add_argument("--overpay-max", type=float, default=0.1,
+    ap.add_argument("--overpay-max", type=float, default=0.35,
                     help="> 0: drop B's line when it is one same-currency invoice and cash > amount·(1+this) "
                          "(such 'overpayments' are mostly wrong items)")
+    ap.add_argument("--trust-methods", default="default",
+                    help="'default' (TRUST_METHODS) or a comma list: keep the matcher's exception and amount there")
+    ap.add_argument("--unid-evidence", choices=["off", "new", "all"], default="new",
+                    help="leftover receipts: UNIDENTIFIED only without evidence of items (new = unseen entities)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--b", default=None, help="override B's allocations.parquet path (testing)")
     ap.add_argument("--c", default=None, help="override C's line_labels.parquet path (testing)")
@@ -121,6 +173,7 @@ def main():
             items = drop_wild_overpay(items, lines, a.phase, a.overpay_max)
         log(f"B keeps {len(keep):,}/{len(b_lines):,} of its lines ({len(items):,} rows)")
         if not a.no_c_exceptions:
+            b_amt = items["amount"].copy()
             b_exc = items["exception"] if "exception" in items else pd.Series(None, index=items.index)
             items["b_exc"] = b_exc.astype(object).where(b_exc.notna() & (b_exc.astype(str).str.strip() != ""), None)
             exc = exceptions_from_c(items, lines, a.phase, not a.no_amount_fix)
@@ -128,6 +181,13 @@ def main():
                 items["exception"] = exc.where(exc.notna(), items.get("exception")) if a.b_exc_fallback else exc
                 # matchers that KNOW the item is cleared (last instalment, dispute settlement): keep their "no
                 # exception" (the ledger misses earlier unmatched payments and would say PARTIAL)
+                if "method" in items and a.trust_methods:
+                    tm = set(TRUST_METHODS if a.trust_methods == "default" else a.trust_methods.split(","))
+                    t2 = items.method.astype(str).isin(tm)
+                    ch = int((t2 & (items.exception.fillna("") != items.b_exc.fillna(""))).sum())
+                    items.loc[t2, "exception"] = items.loc[t2, "b_exc"]
+                    items.loc[t2, "amount"] = b_amt[t2]
+                    log(f"exceptions: trusted the matcher on {int(t2.sum()):,} rows ({ch:,} exceptions restored)")
                 if "method" in items:
                     trust = items.method.astype(str).isin(KEEP_EMPTY_METHODS) & items.b_exc.isna()
                     items.loc[trust, "exception"] = None
@@ -147,15 +207,22 @@ def main():
     pc = pd.to_numeric(c.p_items, errors="coerce").reindex(rest.bank_txn_id).values if len(c) else [float("nan")] * len(rest)
     pc = pd.Series(pc, index=rest.index)
     c_says_items = rest.bank_txn_id.isin(c.index) & ~has_c_cat & (pc >= a.unid_p)  # C: settles items; B missed it
-    # entities never seen in train (FINAL: ZA01): C's p_items is not calibrated there → an unclaimed receipt is
-    # UNIDENTIFIED (mock FINAL: 20/20 unknown ZA01 deposits had p_items ≥ 0.9)
+    # entities never seen in train (FINAL: ZA01): C's p_items is not calibrated there. A leftover receipt there is
+    # UNIDENTIFIED only when nothing suggests it settles items (an invoice-like reference of that entity, or a payer
+    # known to that entity); otherwise CUSTOMER_ADVANCE (no exception). --unid-evidence all: everywhere.
     ent = rest.bank_txn_id.map(dict(zip(lines.bank_txn_id, lines.entity)))
-    new_ent = ~ent.isin(train_entities())
-    if new_ent.any():
-        log(f"{int((new_ent & receipt).sum()):,} unclaimed receipts on entities unseen in train "
-            f"({sorted(set(ent[new_ent]))}) → UNIDENTIFIED")
-        c_says_items &= ~new_ent
-        ccat = ccat.where(~(new_ent & receipt & ccat.isin(["CUSTOMER_ADVANCE"])), None)
+    scope = ~ent.isin(train_entities()) if a.unid_evidence == "new" else pd.Series(a.unid_evidence == "all",
+                                                                                     index=rest.index)
+    scope &= receipt & ~(has_c_cat & ~ccat.isin(["CUSTOMER_ADVANCE", "UNIDENTIFIED"]))
+    if scope.any():
+        sub_lines = lines[lines.bank_txn_id.isin(rest.bank_txn_id[scope])]
+        ev = unid_evidence(sub_lines, a.phase)
+        evid = rest.bank_txn_id.map(ev).fillna(False).astype(bool) & scope
+        log(f"unid evidence ({a.unid_evidence}): {int(scope.sum()):,} leftover receipts in scope "
+            f"({sorted(set(ent[scope]))[:8]}), {int(evid.sum()):,} with evidence → CUSTOMER_ADVANCE, "
+            f"{int((scope & ~evid).sum()):,} → UNIDENTIFIED")
+        c_says_items = (c_says_items & ~scope) | evid
+        ccat = ccat.where(~scope, None)
         has_c_cat = ccat.notna() & (ccat != "")
     # Lines nobody explains score as wrong whatever we write, so the only thing that matters is not to emit a false
     # UNIDENTIFIED exception (it costs UNIDENTIFIED precision). No C opinion at all → starter rule.

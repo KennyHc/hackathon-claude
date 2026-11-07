@@ -39,7 +39,9 @@ def item_details(phase: str, data_dir: str = DATA) -> pd.DataFrame:
     (open_items_at_start has only the 10 ITEM_COLS). AR: customer_name, payment_terms, customer_po, payment_method;
     AP: supplier_name, payment_terms, our_po, payment_method; CN: party_name, related_document, reason."""
     out = []
-    for ph in dict.fromkeys(_DETAIL_PHASES + [phase]):
+    # val/sample are cut from train: never look into live/final for them (no leakage from later phases)
+    phases = ["train", phase] if phase in ("val", "sample", "train", "train_lite") else _DETAIL_PHASES + [phase]
+    for ph in dict.fromkeys(phases):
         d = os.path.join(data_dir, ph)
         for name, m in [("ar_invoices", {"customer_name": "party_name", "payment_terms": "payment_terms",
                                          "customer_po": "po_number", "payment_method": "payment_method"}),

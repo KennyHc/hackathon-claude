@@ -525,7 +525,36 @@ def normalize_amounts(allocations: pd.DataFrame, bank_lines: pd.DataFrame, open_
         if tid not in bl.index:
             continue
         inv = [i for i in idx if iids[i][:3] in ("ARI", "API")]
-        if len(inv) != 1 or any(exc[i] in MATCHING_PASSTHROUGH for i in idx):
+        if any(exc[i] in MATCHING_PASSTHROUGH for i in idx):
+            continue
+        if len(inv) > 1:  # several invoices: one entered net of an in-terms discount → its full open amount
+            r = bl.loc[tid] if tid in bl.index else None
+            if r is None:
+                continue
+            for i in inv:
+                it = iids[i]
+                if it not in info.index or np.isnan(ob[i]):
+                    continue
+                row = info.loc[it]
+                if row["currency"] != r["currency"]:
+                    continue
+                party = row["party_id"]
+                meta = (_CACHED_CUSTOMERS if it.startswith("AR") else _CACHED_SUPPLIERS).get(party, ("", ""))
+                pt = (_CACHED_PAYMENT_TERMS or {}).get(row["payment_terms"] if pt_col and row["payment_terms"]
+                                                       else meta[1])
+                if not pt or not row["issue_date"]:
+                    continue
+                try:
+                    ok = datetime.date.fromisoformat(r["booking_date"]) <= (
+                        datetime.date.fromisoformat(row["issue_date"]) + datetime.timedelta(days=pt[1] + 3))
+                except ValueError:
+                    ok = False
+                tot = float(row["total_amount"] or 0)
+                disc = round(tot * pt[0] / 100.0, 2)
+                if ok and disc > 0.01 and abs(amounts.iloc[i] - (ob[i] - disc)) <= 0.011 and ob[i] - tot > -0.011:
+                    amounts.iloc[i] = round(ob[i], 2)
+            continue
+        if len(inv) != 1:
             continue
         i = inv[0]
         it = iids[i]

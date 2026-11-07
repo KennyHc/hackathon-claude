@@ -35,10 +35,10 @@ import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from matching.common import (ALLOC_COLS, DATA, NO_BALANCE, REOPENS, Balances, all_item_ids, load_items,  # noqa: E402
+from matching.common import (ALLOC_COLS, BUILTIN_STAGES, DATA, NO_BALANCE, REOPENS, Balances, all_item_ids, load_items,  # noqa: E402
                              load_line_labels, load_lines, masters_dir, normalize_stage_output, out_dir, tol)
 
-STAGES = ["batch", "refs", "party"]
+STAGES = ["batch", "refs", "party", "k4_sbc"]
 t0 = time.time()
 
 
@@ -57,6 +57,13 @@ def _alarm(signum, frame):
 def run_stage(stage, phase, lines_left, items, claimed, ctx, timeout, fallback_files, pkg="matching"):
     """Returns (DataFrame or None, status)."""
     t = time.time()
+    if stage in BUILTIN_STAGES:  # residual stages owned by the cascade (matching/common.py)
+        try:
+            return BUILTIN_STAGES[stage](phase, lines_left.copy(), items.copy(), claimed.copy(), **ctx), \
+                f"ok {time.time() - t:.1f}s"
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            return None, f"error: {type(e).__name__}: {e}"
     try:
         mod = importlib.import_module(f"{pkg}.{stage}.matcher")
     except ModuleNotFoundError as e:

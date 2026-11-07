@@ -9,7 +9,9 @@ they may import this module.
 from __future__ import annotations
 
 import os
+import re
 import sys
+import unicodedata
 from typing import Iterable, Optional
 
 import numpy as np
@@ -53,7 +55,8 @@ def load_items(phase: str, data_dir: str = DATA) -> pd.DataFrame:
 def all_item_ids(phase: str, data_dir: str = DATA) -> frozenset:
     """Every item id known in train/live/final/`phase` (incl. items closed before the phase starts)."""
     ids = set()
-    for ph in dict.fromkeys(["train", "live", "final", phase]):
+    later = [] if phase in ("val", "sample", "train", "train_lite") else ["live", "final"]  # no leakage into val
+    for ph in dict.fromkeys(["train"] + later + [phase]):
         for name in ("ar_invoices", "ap_invoices", "credit_notes", "open_items_at_start"):
             for ext in (".csv.gz", ".csv"):
                 f = os.path.join(data_dir, ph, name + ext)
@@ -161,3 +164,87 @@ def normalize_stage_output(df: Optional[pd.DataFrame], stage: str) -> pd.DataFra
 
 def stages_present(names: Iterable[str]) -> list:
     return [n for n in names if os.path.exists(os.path.join(ROOT, "matching", n, "matcher.py"))]
+
+
+# ---------------------------------------------------------------- built-in residual stage: SHORT_BANK_CHARGES
+# Bank charges (SHA/BEN) are a property of the payer, not of a country set: in the train golden 100 of 2,558
+# customers that ever short-paid within 2 % / 60 EUR are charged, almost always. Learn them from the golden
+# (val: booked < 2025-01-01; live/final: all of train) and claim leftover receipts of those customers that pay one
+# open invoice minus ≤ 2 % / ≤ 60 EUR, when the payer is evidenced by IBAN, name or the invoice reference.
+_LEGAL = re.compile(r"\b(LTD|LIMITED|INC|SA|SL|SLU|AG|GMBH|SP Z O O|SPZOO|SARL|SAS|EURL|PTY|LLC|CORP|CO|SPA|SRL|BV|NV|"
+                    r"THE|DE|LA|DA|DO)\b")
+
+
+def norm_name(s: str) -> str:
+    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode().upper()
+    s = _LEGAL.sub(" ", re.sub(r"[^A-Z0-9 ]", " ", s))
+    return " ".join(s.split())
+
+
+def sbc_customers(phase: str, data_dir: str = DATA, min_rate: float = 0.5) -> set:
+    """Customers whose short single-invoice payments (≤ 2 %) are labelled SHORT_BANK_CHARGES in the train golden."""
+    g = pd.read_csv(os.path.join(data_dir, "train", "golden_allocations.csv.gz"), dtype=str, keep_default_na=False,
+                    usecols=["bank_txn_id", "item_id", "amount", "exception"])
+    b = pd.read_csv(os.path.join(data_dir, "train", "bank_transactions.csv.gz"), dtype=str, keep_default_na=False,
+                    usecols=["bank_txn_id", "booking_date", "amount", "currency"])
+    ar = pd.read_csv(os.path.join(data_dir, "train", "ar_invoices.csv.gz"), dtype=str, keep_default_na=False,
+                     usecols=["item_id", "customer_id", "total_amount", "currency"])
+    if phase in ("val", "sample"):
+        b = b[b.booking_date < "2025-01-01"]
+    gi = g[g.item_id.str.startswith("ARI")]
+    n = g[g.item_id != ""].groupby("bank_txn_id").size()
+    x = gi[gi.bank_txn_id.isin(n[n == 1].index)].merge(b, on="bank_txn_id", suffixes=("", "_b")).merge(
+        ar, on="item_id", suffixes=("", "_i"))
+    x = x[x.currency == x.currency_i]
+    sh = x.total_amount.astype(float) - x.amount_b.astype(float)
+    x = x[(sh > 0.01) & (sh <= 0.02 * x.total_amount.astype(float))]
+    rate = x.groupby("customer_id").exception.apply(lambda e: (e == "SHORT_BANK_CHARGES").mean())
+    return set(rate[rate >= min_rate].index)
+
+
+def match_sbc(phase, lines, items, claimed, **ctx):
+    """Residual stage `k4_sbc` (see above). Rows: amount = full open balance, exception SHORT_BANK_CHARGES."""
+    from integration.lib import fx
+    from integration.lib.masters import read_master
+    from classification.exceptions import instalment_of
+    cust = sbc_customers(phase, ctx.get("data_dir", DATA))
+    cu = read_master("customers.csv", phase).set_index("customer_id")
+    bal = open_at(items, claimed)
+    it = items[items.item_id.str.startswith("ARI") & items.party_id.isin(cust)].copy()
+    it["open"] = it.item_id.map(bal)
+    it = it[it.open > 0.01]
+    u = lines[pd.to_numeric(lines.amount, errors="coerce") > 0].copy()
+    u["cash"] = u.amount.astype(float)
+    c = u.merge(it[["item_id", "entity", "currency", "open", "party_id", "issue_date", "document_number"]],
+                on=["entity", "currency"])
+    c["sh"] = c.open - c.cash
+    c = c[(c.sh > 0.01) & (c.sh <= 0.02 * c.open) & (c.issue_date <= c.booking_date)].copy()
+    if not len(c):
+        return empty_alloc()
+    c["eur"] = [fx.convert(a, cc, "EUR", d, masters_dir=ctx.get("masters_dir", fx.MASTERS))
+                for a, cc, d in zip(c.sh, c.currency, c.booking_date)]
+    c = c[c.eur <= 60.01].copy()
+    txt = c.text + " " + c.remittance_info
+    c = c[[instalment_of(t) is None for t in txt]].copy()
+    txt = (c.counterparty_name + " " + c.text + " " + c.remittance_info).map(norm_name)
+
+    def name_ok(a, p):
+        n = norm_name(cu.name.get(p, ""))
+        t = norm_name(cu.trade_name.get(p, "")) if "trade_name" in cu else ""
+        toks = [w for w in n.split() if len(w) > 2][:2]
+        return (bool(toks) and all(w in a for w in toks)) or (t != "" and t in a)
+    iban_ok = [ca != "" and ca == cu.iban.get(p, "") for ca, p in zip(c.counterparty_account, c.party_id)]
+    nm = [name_ok(a, p) for a, p in zip(txt, c.party_id)]
+    ref = [d != "" and len(re.sub(r"\D", "", d)) >= 5 and re.sub(r"\D", "", d)[-6:] in re.sub(r"\D", "", t)
+           for d, t in zip(c.document_number, c.text + c.remittance_info)]
+    c = c[np.array(iban_ok) | np.array(nm) | np.array(ref)]
+    n = c.groupby("bank_txn_id").size()
+    c = c[c.bank_txn_id.isin(n[n == 1].index)]
+    # an item claimed by two lines: keep the earliest
+    c = c.sort_values(["booking_date", "bank_txn_id"]).drop_duplicates("item_id")
+    return pd.DataFrame({"bank_txn_id": c.bank_txn_id.values, "item_id": c.item_id.values,
+                         "amount": c.open.round(2).values, "exception": "SHORT_BANK_CHARGES",
+                         "confidence": 0.8, "method": "k4_sbc"})
+
+
+BUILTIN_STAGES = {"k4_sbc": match_sbc}
