@@ -1,0 +1,6 @@
+# hackathon data (large, not for git)
+*.tar.gz
+*.zip
+data/
+sub_*.csv*
+.DS_Store
