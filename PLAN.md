@@ -212,6 +212,24 @@ Known changes in FINAL (Jan–Jun 2026):
 
 ---
 
+## 6b. Team of 4 — GitHub issues
+
+All work is tracked as issues in [KennyHc/hackathon-claude](https://github.com/KennyHc/hackathon-claude/issues).
+Start with the pinned **[#1 Tracking](https://github.com/KennyHc/hackathon-claude/issues/1)** (team table, timeline,
+workflow, score log). Filter by label to see your own list.
+
+| Person | Workstream | Issues |
+|---|---|---|
+| **A** | Platform & integration (`A · platform`) | #2 scaffold & contract · #3 loader · #4 ledger · #5 eval · #6 submission · #7 pipeline · #26 FINAL-proofing · #27 FINAL runbook |
+| **B** | Customer receipts (`B · receipts`) | #8 fuzzy references · #9 who paid · #10 explicit refs · #11 subset-sum · #12 same amount · #13 third-party payers |
+| **C** | Batches, remittances, supplier payments (`C · batches & AP`) | #14 direct debits · #15 cards & cheques · #16 supplier payments · #17 remittance parser · #18 remittance matcher · #19 AP specials |
+| **D** | Categories, exceptions, FX, PDFs (`D · exceptions & PDFs`) | #20 categories · #21 PDF clauses · #22 exception engine · #23 FX · #24 PDF cases · #25 duplicates/unidentified · #28 project deliverable |
+
+Milestones P0–P6 match the phases above. In the first 30 min, while A lands #2, B/C/D start with standalone pieces
+(#8, #17, #20, #21) that don't need the shared pipeline.
+
+---
+
 ## 7. Rules of the road
 
 - **Never** put the team token in code or commit it. `read -rs HK_TOKEN && export HK_TOKEN` in your own terminal.
