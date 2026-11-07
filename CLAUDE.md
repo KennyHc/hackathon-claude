@@ -24,12 +24,14 @@ reconciliation** hackathon: for every bank line, say which open items it settles
 
 | Folder | Piece | Owner | Produces (see `docs/CONTRACTS.md`) |
 |---|---|---|---|
-| `ingestion/` | A. Parse remittance advices, PDFs, DD/card/cheque/payment-run files; normalise bank lines and items | see `.github/CODEOWNERS` | `ingestion/out/<phase>/*.parquet` |
-| `matching/` | B. Bank line → items + amounts (+ exception on item rows) | see `.github/CODEOWNERS` | `matching/out/<phase>/allocations.parquet` |
-| `classification/` | C. Lines that settle no item (category, UNIDENTIFIED) + the POLICIES §3 exception-rules library | see `.github/CODEOWNERS` | `classification/out/<phase>/line_labels.parquet`, `classification/exceptions.py` |
-| `integration/` | D. Merge B + C, validate, score, **the one FINAL submission**; owns `docs/CONTRACTS.md` | see `.github/CODEOWNERS` | `integration/out/<phase>/submission.csv.gz` |
+| `ingestion/` | A. Parse remittance advices, PDFs, DD/card/cheque/payment-run files; normalise bank lines and items | Nikita | `ingestion/out/<phase>/*.parquet` |
+| `matching/` | B. Bank line → items + amounts (+ exception on item rows). **Shared by two owners**, who split it between themselves | @KennyHc + @Matikama0310 | `matching/out/<phase>/allocations.parquet` |
+| `classification/` | C. Lines that settle no item (category, UNIDENTIFIED) + the POLICIES §3 exception-rules library | @ZhengJinFa168 | `classification/out/<phase>/line_labels.parquet`, `classification/exceptions.py` |
+| `integration/` | D. Merge B + C, validate, score, **the one FINAL submission**; owns `docs/CONTRACTS.md` | @ZhengJinFa168 | `integration/out/<phase>/submission.csv.gz` |
+| `atlas/` | Visual data briefing | @KennyHc | `atlas/index.html` |
 
-`.github/CODEOWNERS` is the source of truth. Your human's GitHub login is in `.claude/me` (`scripts/setup.sh` creates it).
+Two owners in `matching/`: agree on the split on the board (e.g. one sub-folder each) so your agents don't edit the
+same files. `.github/CODEOWNERS` is the source of truth. Your human's GitHub login is in `.claude/me` (`scripts/setup.sh` creates it).
 Check any path with `python3 scripts/owners.py who <path>`.
 
 ## Hard rules

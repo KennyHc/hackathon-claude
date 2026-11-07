@@ -7,11 +7,14 @@
 # Repo admin: root files, .github/, .claude/, scripts/, docs/ (except CONTRACTS.md)
 *                     @ZhengJinFa168
 
+# A: Nikita (GitHub login to be filled in)
 /ingestion/           @OWNER_A
-/matching/            @OWNER_B
-/classification/      @OWNER_C
-/integration/         @OWNER_D
-/docs/CONTRACTS.md    @OWNER_D
+# B: Kenny + Matias, shared; they split the work between themselves
+/matching/            @KennyHc @Matikama0310
+# C+D: one owner
+/classification/      @ZhengJinFa168
+/integration/         @ZhengJinFa168
+/docs/CONTRACTS.md    @ZhengJinFa168
 
 # Dataset atlas (visual data briefing)
 /atlas/               @KennyHc
