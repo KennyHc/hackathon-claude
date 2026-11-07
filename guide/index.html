@@ -1,0 +1,1202 @@
+<title>Valtermia Reconciliation Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="How our team reconciles bank lines to invoices: the patterns in the data, the rule for each, and the evidence that the score holds up.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (max 1120px) on cool ledger-paper ground. Bank text is always shown as a mono "statement strip";
+   evidence families keep the same colour as in the Dataset Atlas (payments orange, batches amber, remittances aqua, PDFs green,
+   receipts blue, exceptions magenta, no-item violet). */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --ink:#0d1524; --ink-2:#4a5568; --muted:#6c768d; --line:#dfe4ec; --grid:#edf0f5;
+  --accent:#2f3fb8; --accent-soft:#e6e9fb; --hl:#fff1c2; --ok:#137a4b; --bad:#c2372f;
+  --f-receipts:#2a78d6; --f-payments:#eb6834; --f-remittances:#1baf7a; --f-batches:#eda100; --f-exceptions:#e87ba4; --f-pdf:#008300; --f-nonitem:#6250d6;
+  --s1:#2a78d6; --s2:#eb6834;
+  --display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --body:"Geist","Helvetica Neue","Segoe UI",system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --r:12px; --shadow:0 1px 2px rgba(13,21,36,.04),0 8px 24px -12px rgba(13,21,36,.14);
+  --shadow-up:0 2px 4px rgba(13,21,36,.05),0 18px 40px -16px rgba(13,21,36,.22);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a0e16; --surface:#121927; --ink:#e9edf4; --ink-2:#b3bccb; --muted:#8a94a8; --line:#253047; --grid:#1a2232;
+  --accent:#93a0ff; --accent-soft:#1f2747; --hl:#3d3412; --ok:#4cc38a; --bad:#f07a70;
+  --f-receipts:#3987e5; --f-payments:#d95926; --f-remittances:#199e70; --f-batches:#c98500; --f-exceptions:#d55181; --f-pdf:#2e9e2e; --f-nonitem:#9085e9;
+  --s1:#3987e5; --s2:#d95926;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6); --shadow-up:0 2px 4px rgba(0,0,0,.35),0 20px 44px -16px rgba(0,0,0,.75); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a0e16; --surface:#121927; --ink:#e9edf4; --ink-2:#b3bccb; --muted:#8a94a8; --line:#253047; --grid:#1a2232;
+  --accent:#93a0ff; --accent-soft:#1f2747; --hl:#3d3412; --ok:#4cc38a; --bad:#f07a70;
+  --f-receipts:#3987e5; --f-payments:#d95926; --f-remittances:#199e70; --f-batches:#c98500; --f-exceptions:#d55181; --f-pdf:#2e9e2e; --f-nonitem:#9085e9;
+  --s1:#3987e5; --s2:#d95926;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6); --shadow-up:0 2px 4px rgba(0,0,0,.35),0 20px 44px -16px rgba(0,0,0,.75); color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15.5px;line-height:1.58;-webkit-font-smoothing:antialiased;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 72px;overflow-x:hidden}
+.wrap{max-width:1120px;margin:0 auto}
+h1,h2,h3,h4{font-family:var(--display);font-weight:700;letter-spacing:-.02em;text-wrap:balance;margin:0;line-height:1.08}
+h1{font-size:clamp(36px,6vw,70px);font-variation-settings:"opsz" 96;max-width:15ch}
+h2{font-size:clamp(26px,3.4vw,40px);font-variation-settings:"opsz" 60}
+h3{font-size:clamp(19px,2vw,23px);letter-spacing:-.015em;font-weight:680;line-height:1.2}
+h4{font-size:15px;letter-spacing:-.005em;font-weight:650;line-height:1.3}
+p{margin:0;max-width:68ch}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--mono)} .num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .ink2{color:var(--ink-2)}
+code{font-family:var(--mono);font-size:.86em;background:var(--grid);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+strong{font-weight:600}
+
+/* progress */
+.progress{position:fixed;left:0;right:0;top:0;height:calc(3px + env(safe-area-inset-top,0px));z-index:20;pointer-events:none}
+.progress i{display:block;position:absolute;left:0;bottom:0;height:3px;width:100%;transform-origin:0 50%;transform:scaleX(var(--p,0));
+  background:linear-gradient(90deg,var(--f-payments),var(--f-batches),var(--f-remittances),var(--f-receipts),var(--f-nonitem))}
+
+/* header */
+header.hero{padding-block:64px 36px;display:grid;gap:22px;position:relative}
+.hero .lede{font-size:clamp(16.5px,1.7vw,20px);color:var(--ink-2);max-width:60ch}
+.hero .kicker{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;border:1px solid var(--line);
+  border-radius:999px;padding:3px 10px;background:var(--surface);color:var(--ink-2);white-space:nowrap}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-top:8px;box-shadow:var(--shadow)}
+.stat{background:var(--surface);padding:18px 16px 15px;display:grid;gap:3px;min-width:0;align-content:start}
+.stat b{font-family:var(--display);font-size:clamp(26px,2.8vw,36px);font-weight:720;letter-spacing:-.025em;font-variant-numeric:tabular-nums;line-height:1.05}
+.stat span{font-size:12.5px;color:var(--muted);line-height:1.35}
+.stat.lead b{color:var(--accent)}
+@media (max-width:900px){.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:480px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+nav.toc{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:6px}
+nav.toc a{font-size:13px;color:var(--ink-2);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:4px 11px;background:var(--surface);transition:border-color .2s,color .2s,transform .2s}
+nav.toc a:hover,nav.toc a:focus-visible{border-color:var(--accent);color:var(--accent);transform:translateY(-1px);outline:none}
+nav.toc a span{font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:5px}
+
+/* sections */
+section{padding-block:64px 8px;display:grid;gap:24px;scroll-margin-top:16px}
+section + section{border-top:1px solid var(--line)}
+.head{display:grid;gap:10px}
+.head .eyebrow b{color:var(--accent);font-weight:500}
+.answer{font-size:17.5px;color:var(--ink-2);max-width:70ch}
+.answer strong{color:var(--ink)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:22px;min-width:0}
+.panel > h3,.panel > h4{margin-bottom:6px}
+.panel .sub{font-size:13.5px;color:var(--muted);margin-bottom:16px;max-width:80ch}
+.lift{transition:transform .25s cubic-bezier(.2,.7,.3,1),box-shadow .25s,border-color .25s}
+.lift:hover{transform:translateY(-3px);box-shadow:var(--shadow-up);border-color:color-mix(in srgb,var(--accent) 30%,var(--line))}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.grid3,.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:700px){.grid2,.grid3,.grid4{grid-template-columns:minmax(0,1fr)}}
+.note{font-size:13px;color:var(--muted);max-width:90ch}
+.scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+figure{margin:0;min-width:0}
+figcaption{font-size:13px;color:var(--muted);margin-top:10px;max-width:80ch}
+svg text{font-family:var(--mono)}
+
+/* statement strip: how bank text is always shown */
+.strip{font-family:var(--mono);font-size:12.5px;line-height:1.5;background:var(--grid);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+  color:var(--ink);overflow-wrap:anywhere;position:relative}
+.strip .meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--muted);margin-bottom:4px;letter-spacing:.02em}
+.strip .amt{font-weight:500;color:var(--ink)}
+mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
+.strip + .strip{margin-top:8px}
+
+/* ---------- 1. worked example ---------- */
+.example .wirecol{align-self:stretch;min-height:220px}
+.example{display:grid;grid-template-columns:minmax(0,1.05fr) 90px minmax(0,1fr);align-items:center;gap:0}
+.bankcard{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow);padding:18px;display:grid;gap:12px;position:relative;z-index:1}
+.bc-top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.bc-amt{font-family:var(--display);font-size:clamp(26px,3vw,34px);font-weight:720;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.bc-amt small{font-size:.5em;color:var(--muted);font-weight:500;margin-left:4px}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:12.5px}
+.kv dt{color:var(--muted);font-family:var(--mono);font-size:11px;padding-top:2px}
+.kv dd{margin:0;font-family:var(--mono);overflow-wrap:anywhere}
+.wires{width:100%;height:100%;display:block;overflow:visible}
+.wires path{fill:none;stroke:var(--f-receipts);stroke-width:1.6;vector-effect:non-scaling-stroke}
+.wires path.cn{stroke:var(--f-exceptions);stroke-dasharray:4 4}
+.items{display:grid;gap:10px;position:relative;z-index:1}
+.item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;align-items:center;border:1px solid var(--line);background:var(--surface);
+  border-radius:10px;padding:11px 14px;box-shadow:var(--shadow)}
+.item .t{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;border-radius:4px;padding:2px 6px;background:var(--accent-soft);color:var(--accent)}
+.item .t.cn{background:color-mix(in srgb,var(--f-exceptions) 18%,var(--surface));color:var(--ink)}
+.item .doc{font-family:var(--mono);font-size:13px;min-width:0;overflow-wrap:anywhere}
+.item .doc small{display:block;font-size:11px;color:var(--muted);font-family:var(--body)}
+.item .v{font-family:var(--mono);font-size:13.5px;font-variant-numeric:tabular-nums;text-align:right}
+.item.sum{background:transparent;box-shadow:none;border-style:dashed}
+.item.sum .v{font-weight:600;color:var(--ok)}
+@media (max-width:760px){.example{grid-template-columns:minmax(0,1fr)}.example .wirecol{height:40px;min-height:0}.example .wirecol svg{display:none}
+  .example .wirecol::after{content:"";display:block;margin:4px auto 0;width:2px;height:28px;background:var(--f-receipts)}}
+.subtable{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+.subtable th{text-align:left;font-weight:500;color:var(--muted);font-size:11px;letter-spacing:.04em;border-bottom:1px solid var(--line);padding:6px 10px;white-space:nowrap}
+.subtable td{border-bottom:1px solid var(--grid);padding:6px 10px;white-space:nowrap}
+.subtable td.r,.subtable th.r{text-align:right}
+.subtable tr.hl td{background:color-mix(in srgb,var(--hl) 70%,transparent)}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;border-radius:4px;padding:1px 6px;border:1px solid var(--line);color:var(--ink-2);background:var(--surface);white-space:nowrap}
+.tag.x{border-color:color-mix(in srgb,var(--f-exceptions) 60%,var(--line));background:color-mix(in srgb,var(--f-exceptions) 14%,var(--surface));color:var(--ink)}
+.tag.c{border-color:color-mix(in srgb,var(--f-nonitem) 60%,var(--line));background:color-mix(in srgb,var(--f-nonitem) 14%,var(--surface));color:var(--ink)}
+.tag.ok{border-color:color-mix(in srgb,var(--ok) 50%,var(--line));color:var(--ok)}
+
+/* ---------- 2. score ---------- */
+.formula{display:grid;grid-template-columns:50fr 30fr 20fr;gap:4px;border-radius:10px;overflow:hidden}
+.formula > div{padding:16px 14px;display:grid;gap:4px;align-content:start;min-width:0;color:#fff;position:relative}
+.formula .w{font-family:var(--display);font-size:clamp(26px,3vw,38px);font-weight:750;letter-spacing:-.02em;line-height:1}
+.formula .n{font-weight:600;font-size:14px}
+.formula .d{font-size:12.5px;opacity:.92;line-height:1.4}
+.formula .fa{background:#2f3fb8} .formula .fb{background:#4b5bd0} .formula .fc{background:#7480e0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .formula .fa{background:#3a48b8}:root:not([data-theme="light"]) .formula .fb{background:#4f5cc4}:root:not([data-theme="light"]) .formula .fc{background:#6a74d0}}
+:root[data-theme="dark"] .formula .fa{background:#3a48b8}:root[data-theme="dark"] .formula .fb{background:#4f5cc4}:root[data-theme="dark"] .formula .fc{background:#6a74d0}
+@media (max-width:640px){.formula{grid-template-columns:minmax(0,1fr)}}
+.dots{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;max-width:260px}
+.dots i{aspect-ratio:1;border-radius:50%;background:var(--f-remittances);display:block;transition:transform .3s}
+.dots i.dis{background:var(--f-exceptions)}
+.one{display:flex;align-items:center;gap:10px}
+.one i{width:16px;height:16px;border-radius:50%;background:var(--f-receipts);display:block;flex:none}
+.vs{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:18px;align-items:center}
+.vs .eq{font-family:var(--display);font-size:28px;color:var(--muted)}
+@media (max-width:560px){.vs{grid-template-columns:minmax(0,1fr)}.vs .eq{text-align:center}}
+
+/* ---------- charts ---------- */
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--ink-2);margin-bottom:12px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.hbars{display:grid;gap:9px}
+.hb{display:grid;grid-template-columns:minmax(150px,230px) minmax(0,1fr) 54px;gap:12px;align-items:center;border-radius:6px;padding:2px 4px;cursor:default;outline:none}
+.hb:hover,.hb:focus-visible{background:var(--grid)}
+.hb .lab{font-family:var(--mono);font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb .lab small{display:block;font-family:var(--body);font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb .track{height:18px;display:flex;gap:2px;min-width:0}
+.hb .seg{height:100%;border-radius:0;transform-origin:0 50%;transition:transform 1s cubic-bezier(.2,.7,.2,1),filter .2s}
+.hb .seg:first-child{border-radius:4px 0 0 4px}
+.hb .seg:last-child{border-radius:0 4px 4px 0}
+.hb .seg:only-child{border-radius:4px}
+.hb:hover .seg{filter:brightness(1.08)}
+.hb .val{font-family:var(--mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+@media (max-width:620px){.hb{grid-template-columns:minmax(0,1fr) 48px}.hb .lab{grid-column:1/-1}.hb .track{grid-column:1}}
+.tip{position:fixed;z-index:30;pointer-events:none;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-up);border-radius:8px;
+  padding:8px 10px;font-size:12.5px;min-width:160px;max-width:260px;opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s}
+.tip.on{opacity:1;transform:none}
+.tip b{font-family:var(--mono);font-size:14px;display:block;font-variant-numeric:tabular-nums}
+.tip .r{display:flex;align-items:center;gap:6px;color:var(--ink-2);font-size:12px}
+.tip .r i{width:12px;height:2px;display:inline-block}
+.tip .h{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px}
+
+/* ---------- 4. architecture ---------- */
+.arch{display:grid;grid-template-columns:minmax(0,1fr);gap:0;position:relative}
+.stage{display:grid;grid-template-columns:44px minmax(0,1fr);gap:16px;position:relative}
+.stage .rail{position:relative;display:flex;justify-content:center}
+.stage .rail::before{content:"";position:absolute;top:0;bottom:0;width:2px;background:repeating-linear-gradient(180deg,var(--line) 0 6px,transparent 6px 12px);background-size:2px 12px;animation:flow 1s linear infinite}
+.stage:first-child .rail::before{top:22px}
+.stage:last-child .rail::before{bottom:calc(100% - 22px)}
+@keyframes flow{to{background-position:0 12px}}
+.stage .node{position:relative;z-index:1;width:30px;height:30px;margin-top:8px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);display:grid;place-items:center;
+  font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:500}
+.stage .body{padding-block:6px 22px;min-width:0}
+.stage .body > p{color:var(--ink-2);font-size:14.5px;margin-top:4px}
+.stage .packet{position:absolute;left:50%;top:0;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--accent);opacity:0;animation:packet 3.2s cubic-bezier(.5,0,.5,1) infinite}
+@keyframes packet{0%{top:0;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:100%;opacity:0}}
+.mlist{display:grid;gap:4px;margin-top:12px}
+.mrow{display:grid;grid-template-columns:22px minmax(120px,170px) minmax(0,1fr) 70px 64px;gap:10px;align-items:center;padding:5px 8px;border-radius:7px;font-size:13px;transition:background .2s}
+.mrow:hover{background:var(--grid)}
+.mrow .i{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right}
+.mrow .nm{font-family:var(--mono);font-size:12.5px;display:flex;gap:7px;align-items:center;min-width:0;white-space:nowrap}
+.mrow .nm i{width:9px;height:9px;border-radius:2px;flex:none}
+.mrow .bar{height:12px;background:var(--grid);border-radius:3px;position:relative;overflow:hidden;min-width:0}
+.mrow .bar span{position:absolute;inset:0 auto 0 0;border-radius:3px;transform-origin:0 50%;transition:transform 1.1s cubic-bezier(.2,.7,.2,1)}
+.mrow .n,.mrow .p{font-family:var(--mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.mrow .p{color:var(--ok)}
+.mrow.hdr{font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:.04em;padding-block:0}
+.mrow.hdr:hover{background:none}
+.mrow .what{display:block;font-family:var(--body);font-size:11.5px;color:var(--muted);white-space:normal}
+@media (max-width:700px){.mrow{grid-template-columns:18px minmax(0,1fr) 54px 46px;gap:4px 8px;padding-inline:4px}.mrow .bar{grid-column:2/-1;grid-row:2}.mrow .what{display:none}
+  .mrow .nm span{overflow:hidden;text-overflow:ellipsis}.mrow.hdr span:nth-child(3){display:none}
+  .stage{grid-template-columns:26px minmax(0,1fr);gap:10px}.stage .node{width:26px;height:26px;font-size:10px}.arch.panel{padding:16px 14px}}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+
+/* ---------- 5. chapters ---------- */
+.chapters{display:grid;gap:22px}
+.chap{--fam:var(--accent);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:26px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:26px;position:relative;overflow:hidden;scroll-margin-top:16px}
+.chap::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--fam);opacity:.9}
+.chap .no{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.chap .no b{color:var(--fam);font-weight:500;filter:saturate(1.1)}
+.chap .txt{display:grid;gap:12px;align-content:start;min-width:0}
+.chap .txt h3{margin-top:2px}
+.chap .txt p{font-size:14.8px;color:var(--ink-2)}
+.chap .txt ol{margin:0;padding-left:20px;display:grid;gap:5px;font-size:14.3px;color:var(--ink-2)}
+.chap .txt ol li::marker{font-family:var(--mono);color:var(--muted);font-size:12px}
+.chap .vis{display:grid;gap:12px;align-content:start;min-width:0}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.metrics div{background:var(--surface);padding:10px 12px;min-width:0}
+.metrics b{display:block;font-family:var(--display);font-size:22px;font-weight:720;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.metrics span{font-size:11.5px;color:var(--muted);line-height:1.3;display:block}
+.chap .more{font-size:13px;color:var(--muted)}
+.chap .more strong{color:var(--ink-2)}
+@media (max-width:860px){.chap{grid-template-columns:minmax(0,1fr);padding:20px 18px}}
+.sv{width:100%;height:auto;display:block;color:var(--ink-2)}
+.sv text{font-size:10.5px;fill:var(--ink-2)}
+.sv text.s{font-size:9.5px;fill:var(--muted)}
+.sv text.b{font-weight:500;fill:var(--ink)}
+.sv .bx{fill:var(--surface);stroke:var(--line);stroke-width:1}
+.sv .bxf{fill:color-mix(in srgb,var(--fam) 14%,var(--surface));stroke:color-mix(in srgb,var(--fam) 55%,var(--line));stroke-width:1}
+.sv .ff{fill:var(--fam)}
+.sv .fx{fill:var(--f-exceptions)}
+.sv .soft{fill:var(--grid)}
+.sv .k{fill:none;stroke:var(--muted);stroke-width:1.3}
+.sv .kf{fill:none;stroke:var(--fam);stroke-width:1.6}
+.sv .kx{fill:none;stroke:var(--f-exceptions);stroke-width:1.6;stroke-dasharray:4 3}
+.sv .okt{fill:var(--ok)}
+.ahp{fill:var(--muted)}
+.vis .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- 6. exceptions ---------- */
+.ex-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+@media (max-width:760px){.ex-cards{grid-template-columns:minmax(0,1fr)}}
+.calc{font-family:var(--mono);font-size:13px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;font-variant-numeric:tabular-nums}
+.calc .r{text-align:right}
+.calc .tot{border-top:1px solid var(--line);padding-top:4px;font-weight:600}
+.calc .hl{background:var(--hl);border-radius:3px;padding:0 3px}
+.calc .okc{color:var(--ok)}
+.dumb{display:grid;gap:12px}
+.db{display:grid;grid-template-columns:minmax(120px,170px) minmax(0,1fr) 92px;gap:12px;align-items:center;font-size:12.5px}
+.db .nm{font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db .ln{position:relative;height:22px}
+.db .ln::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:var(--grid)}
+.db .ln .seg{position:absolute;top:50%;height:3px;margin-top:-1.5px;background:var(--line);border-radius:2px}
+.db .ln .a,.db .ln .b{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid var(--surface)}
+.db .ln .a{background:var(--muted)}
+.db .ln .b{background:var(--ok);transition:left 1.2s cubic-bezier(.2,.7,.2,1)}
+.db .v{font-family:var(--mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+@media (max-width:560px){.db{grid-template-columns:minmax(0,1fr) 84px}.db .nm{grid-column:1/-1}}
+.f1grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+@media (max-width:760px){.f1grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.f1{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:6px;background:var(--surface);min-width:0}
+.f1 .c{font-family:var(--mono);font-size:10.5px;color:var(--muted);overflow-wrap:anywhere}
+.f1 b{font-family:var(--display);font-size:22px;font-weight:720;font-variant-numeric:tabular-nums;line-height:1}
+.f1 .m{height:5px;background:var(--grid);border-radius:3px;overflow:hidden}
+.f1 .m span{display:block;height:100%;background:var(--f-exceptions);transform-origin:0 50%;transition:transform 1.1s cubic-bezier(.2,.7,.2,1)}
+
+/* ---------- 7. trust ---------- */
+.cmp{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.cmp th,.cmp td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left}
+.cmp th{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.05em;color:var(--muted)}
+.cmp td.r,.cmp th.r{text-align:right}
+.cmp td b{font-family:var(--display);font-size:20px;font-weight:720}
+.leak{display:grid;gap:10px}
+.lk{display:grid;grid-template-columns:150px minmax(0,1fr) 80px;gap:12px;align-items:center;font-size:13px}
+.lk .bar{height:22px;background:var(--grid);border-radius:4px;position:relative;overflow:hidden}
+.lk .bar span{position:absolute;inset:0 auto 0 0;border-radius:4px;transform-origin:0 50%;transition:transform 1.1s cubic-bezier(.2,.7,.2,1)}
+.lk .v{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+@media (max-width:560px){.lk{grid-template-columns:minmax(0,1fr) 72px}.lk .bar{grid-column:1/-1;grid-row:2}}
+.risk{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.risk li{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;font-size:14px;color:var(--ink-2);padding:8px 0;border-bottom:1px solid var(--grid)}
+.risk li span{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+
+/* ---------- 8. progression ---------- */
+.chart svg{width:100%;height:auto;display:block}
+.chart .gl{stroke:var(--grid);stroke-width:1}
+.chart .ax{fill:var(--muted);font-size:11px}
+.chart .xl{fill:var(--ink-2);font-size:11px}
+.chart .ref{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 4}
+.chart .reft{fill:var(--muted);font-size:10.5px}
+.chart .ln{fill:none;stroke:var(--s1);stroke-width:2.2;stroke-linejoin:round}
+.chart .area{fill:color-mix(in srgb,var(--s1) 9%,transparent);stroke:none;transition:opacity 1.2s .6s}
+.chart .pt{fill:var(--s1);stroke:var(--surface);stroke-width:2;transition:opacity .4s,r .2s}
+.chart .pt.h{fill:var(--ok)} .chart .pt.l{fill:var(--s2)}
+.chart .vl{fill:var(--ink);font-size:12px;font-weight:500;transition:opacity .4s}
+.chart .hit{fill:transparent;cursor:default}
+.chart .hit:hover + .pt,.chart .hit:focus + .pt{r:8}
+.chart .sep{stroke:var(--line);stroke-width:1}
+
+/* ---------- 9. left + lessons ---------- */
+.lessons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;counter-reset:l}
+@media (max-width:700px){.lessons{grid-template-columns:minmax(0,1fr)}}
+.lesson{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--surface);display:grid;gap:6px;align-content:start;counter-increment:l}
+.lesson h4::before{content:counter(l,decimal-leading-zero);font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:8px;font-weight:400}
+.lesson p{font-size:14px;color:var(--ink-2)}
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display:grid;gap:8px;font-size:13px;color:var(--muted)}
+
+/* ---------- motion ---------- */
+.js-motion .rv{transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+.js-motion .rv.pre{opacity:0;transform:translateY(18px)}
+.dr{stroke-dasharray:1;stroke-dashoffset:0;transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1) .15s}
+.js-motion .pre .dr,.js-motion .dr.pre{stroke-dashoffset:1}
+.js-motion .pre .grow{transform:scaleX(0)!important}
+.js-motion .pre .fade{opacity:0}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  .stage .packet{display:none}
+}
+</style>
+
+<div class="progress" aria-hidden="true"><i id="prog"></i></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahp" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">
+    <span class="eyebrow">Talky × Anthropic · Close the Books · 7 Nov 2026</span>
+    <span class="pill"><span class="dot"></span>deterministic · no LLM at run time</span>
+  </div>
+  <h1>How we reconcile 200,000 bank lines</h1>
+  <p class="lede">For every bank line, our pipeline says which open invoices it settles and for how much, or what kind of movement it is, and flags anything that doesn't add up. This guide walks through the patterns we found in the data and the rule we built for each, with the numbers behind every claim.</p>
+  <div class="stats" role="list">
+    <div class="stat lead" role="listitem"><b data-count="96.36" data-dec="2">96.36</b><span>score on val (Jan–Jun 2025), honest run</span></div>
+    <div class="stat" role="listitem"><b data-count="96.46" data-dec="2">96.46</b><span>score on an untouched holdout (Jan–Jun 2024)</span></div>
+    <div class="stat" role="listitem"><b data-count="93.73" data-dec="2">93.73</b><span>LIVE leaderboard, first (older) file</span></div>
+    <div class="stat" role="listitem"><b data-count="99.9" data-dec="1" data-suf="%">99.9%</b><span>precision of submitted invoice pairs</span></div>
+    <div class="stat" role="listitem"><b data-count="88" data-dec="0" data-suf="%">88%</b><span>of lines decided by 11 rule-based matchers</span></div>
+    <div class="stat" role="listitem"><b data-count="1" data-dec="0">1</b><span>small learned model (logistic regression)</span></div>
+  </div>
+  <nav class="toc" aria-label="Chapters">
+    <a href="#task"><span>1</span>The task</a><a href="#score"><span>2</span>The score</a><a href="#points"><span>3</span>Where the points are</a>
+    <a href="#arch"><span>4</span>Architecture</a><a href="#patterns"><span>5</span>Patterns &amp; solutions</a><a href="#exceptions"><span>6</span>Exception rules</a>
+    <a href="#trust"><span>7</span>Why you can trust it</a><a href="#progress"><span>8</span>Score progression</a><a href="#left"><span>9</span>What's left</a>
+  </nav>
+</header>
+
+<!-- ======================= 1. TASK ======================= -->
+<section id="task">
+  <div class="head rv">
+    <span class="eyebrow"><b>1</b> · The task in one picture</span>
+    <h2>One bank line in, a set of settled invoices out</h2>
+    <p class="answer">A fictional industrial group (17 companies, about 50 bank accounts, 11 currencies) books money in and out. Each bank line either <strong>settles open items</strong> (customer and supplier invoices and credit notes, each for an exact amount) or is <strong>something else</strong> (bank fees, payroll, a cash-pool sweep…). When the amounts don't match, the row carries an <strong>exception</strong> that says why.</p>
+  </div>
+
+  <figure class="panel rv" aria-label="A real US01 receipt of 10,284.33 USD settles three invoices and nets one credit note.">
+    <div class="example">
+      <div class="bankcard lift">
+        <div class="bc-top">
+          <span class="eyebrow">Bank line · BT-2025-0062167</span>
+          <span class="tag">ar_1toN_credit_note</span>
+        </div>
+        <div class="bc-amt num">+10,284.33<small>USD</small></div>
+        <div class="strip"><div class="meta"><span>US01 · camt.053</span><span>booked 2025-03-03</span></div>ACH CREDIT POOL &amp; SPA CEDAR CCD PAYMENT ID:1471143108 RMR*IV*<mark>500037</mark>*PI*10284.33\</div>
+        <dl class="kv">
+          <dt>remittance</dt><dd>INV <mark>1052418337</mark> <mark>500557</mark> <mark>501933</mark> CN <mark>500037</mark></dd>
+          <dt>counterparty</dt><dd>Pool &amp; Spa Cedar Falls Park Inc.</dd>
+        </dl>
+      </div>
+      <div class="wirecol">
+        <svg class="wires" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <path class="dr" pathLength="1" d="M0,50 C55,50 45,10 100,10"/>
+          <path class="dr" pathLength="1" d="M0,50 C55,50 45,30 100,30"/>
+          <path class="dr" pathLength="1" d="M0,50 C55,50 45,53 100,53"/>
+          <path class="cn dr" pathLength="1" d="M0,50 C55,50 45,70 100,70"/>
+        </svg>
+      </div>
+      <div class="items">
+        <div class="item"><span class="t">ARI</span><span class="doc">1052418337<small>invoice · issued 2024-12-20 · cited in full</small></span><span class="v">4,236.02</span></div>
+        <div class="item"><span class="t">ARI</span><span class="doc">1052500557<small>invoice · cited as “500557”</small></span><span class="v">905.88</span></div>
+        <div class="item"><span class="t">ARI</span><span class="doc">1052501933<small>invoice · cited as “501933”</small></span><span class="v">5,595.37</span></div>
+        <div class="item"><span class="t cn">ARC</span><span class="doc">CM052500037<small>credit note on 1052500557 · nets out</small></span><span class="v">−452.94</span></div>
+        <div class="item sum"><span class="t" style="visibility:hidden">Σ</span><span class="doc">sum of the four items<small>equals the cash to the cent</small></span><span class="v">= 10,284.33 ✓</span></div>
+      </div>
+    </div>
+    <figcaption>A real receipt from the val window. The bank text truncates three of the four document numbers to their last six digits; our <code>refs</code> matcher recovers them by suffix within this customer's open items, and the set adds up exactly. The answer is four rows, one per item.</figcaption>
+  </figure>
+
+  <div class="grid2">
+    <div class="panel rv">
+      <h4>What we submit for that line</h4>
+      <p class="sub">One row per (bank line, item). The amount is in the item's currency and always positive.</p>
+      <div class="scroll-x">
+        <table class="subtable">
+          <thead><tr><th>bank_txn_id</th><th>item_id</th><th class="r">amount</th><th>category</th><th>exception</th></tr></thead>
+          <tbody>
+            <tr><td>BT-2025-0062167</td><td>ARI-2024-7987958</td><td class="r">4236.02</td><td></td><td></td></tr>
+            <tr><td>BT-2025-0062167</td><td>ARI-2025-6152817</td><td class="r">905.88</td><td></td><td></td></tr>
+            <tr><td>BT-2025-0062167</td><td>ARI-2025-3938449</td><td class="r">5595.37</td><td></td><td></td></tr>
+            <tr><td>BT-2025-0062167</td><td>ARC-2025-9829239</td><td class="r">452.94</td><td></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel rv">
+      <h4>The two other shapes an answer can take</h4>
+      <p class="sub">A line that settles nothing gets a category. A line whose cash differs from the invoice gets an exception.</p>
+      <div class="strip"><div class="meta"><span>ES00 · Norma 43</span><span class="amt">−22.15 EUR</span></div>ACCOUNT MAINTENANCE FEE</div>
+      <p class="note" style="margin:6px 0 12px">→ no item · category <span class="tag c">BANK_FEES</span></p>
+      <div class="strip"><div class="meta"><span>AU01 · camt.053</span><span class="amt">+838.55 AUD</span></div>DIRECT CREDIT AML LANDSCAPES PTY L</div>
+      <p class="note" style="margin-top:6px">→ INV24-0225969 for <b class="num">855.66</b> (the full invoice, not the cash) · <span class="tag x">SHORT_DISCOUNT</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 2. SCORE ======================= -->
+<section id="score">
+  <div class="head rv">
+    <span class="eyebrow"><b>2</b> · How the score works</span>
+    <h2>Pairs carry half the score, so big lines weigh the most</h2>
+    <p class="answer">Score = 100 × (0.5 · allocation F1 + 0.3 · transaction accuracy + 0.2 · exception macro-F1). An amount counts as right if it is within max(0.01, 0.5 %) of the answer.</p>
+  </div>
+  <div class="formula rv" role="img" aria-label="Score weights: 50 percent allocation F1, 30 percent transaction accuracy, 20 percent exception macro-F1">
+    <div class="fa"><span class="w">50</span><span class="n">Allocation F1</span><span class="d">Counted over (bank line, item) pairs. A batch with hundreds of rows weighs as much as hundreds of simple payments.</span></div>
+    <div class="fb"><span class="w">30</span><span class="n">Transaction accuracy</span><span class="d">Counted over lines. A line is right only if every row on it is right.</span></div>
+    <div class="fc"><span class="w">20</span><span class="n">Exception macro-F1</span><span class="d">The 10 codes averaged equally: each is worth up to 2 points.</span></div>
+  </div>
+  <div class="grid2">
+    <div class="panel rv lift">
+      <h4>One disputed short payment ≈ 98 ordinary payments</h4>
+      <p class="sub">An <code>ar_short_dispute</code> line settles about 98 invoices on average (1,067 lines hold 104,691 pairs). Getting one wrong costs as much allocation F1 as missing 98 one-invoice payments.</p>
+      <div class="vs">
+        <div><div class="dots" id="dots98" aria-hidden="true"></div><p class="note" style="margin-top:8px">1 line · 98 pairs</p></div>
+        <div class="eq">≈</div>
+        <div><div class="one"><i></i><span class="mono" style="font-size:13px">× 98 lines of 1 pair each</span></div><p class="note" style="margin-top:8px">a plain 1:1 payment, repeated 98 times</p></div>
+      </div>
+    </div>
+    <div class="panel rv lift">
+      <h4>Rare exceptions weigh as much as common ones</h4>
+      <p class="sub">Macro-F1 averages the codes, so the 400 overpayments in val count as much as the 15,624 early-payment discounts.</p>
+      <div class="hbars" id="excfreq"></div>
+      <p class="note" style="margin-top:10px">Rows per exception code in the val answer key. Each code is worth the same 2 points.</p>
+    </div>
+  </div>
+  <div class="panel rv">
+    <h4>What that means for strategy</h4>
+    <p class="ink2" style="font-size:14.5px">A wrong claim loses the pairs, the line and possibly an exception. An unclaimed line loses only the line. So every matcher claims a line only when it is sure, and we would rather leave a line for the classifier than guess. That is why submitted pairs run at 99.9 % precision.</p>
+  </div>
+</section>
+
+<!-- ======================= 3. POINTS ======================= -->
+<section id="points">
+  <div class="head rv">
+    <span class="eyebrow"><b>3</b> · Where the points are</span>
+    <h2>Ten segments hold more than half of the score</h2>
+    <p class="answer">The answer key tags each bank line with a case type (a <em>segment</em>, 71 of them in val). For each, we computed how many points it would add going from 0 % to 100 % right. This table set the order in which we built matchers.</p>
+  </div>
+  <figure class="panel rv">
+    <div class="legend"><span><i style="background:var(--s1)"></i>from lines (30 · lines / 199,987)</span><span><i style="background:var(--s2)"></i>from pairs (50 · pairs / 735,474)</span></div>
+    <div class="hbars" id="segbars"></div>
+    <figcaption>Maximum points per segment on val. <code>ar_short_dispute</code> is only 1,067 lines but almost all of its 7.28 points come from its 104,691 pairs. Hover or focus a bar for the counts.</figcaption>
+  </figure>
+</section>
+
+<!-- ======================= 4. ARCHITECTURE ======================= -->
+<section id="arch">
+  <div class="head rv">
+    <span class="eyebrow"><b>4</b> · Architecture</span>
+    <h2>Most certain evidence first, and each line claimed once</h2>
+    <p class="answer">Eleven matchers run in a fixed order. Each recognises one family of cases and <strong>claims whole lines</strong> it is sure about; a line claimed by one matcher is never touched by a later one. Open amounts are updated in booking order, so later matchers see what earlier ones consumed. What is left goes to the classifier.</p>
+  </div>
+
+  <div class="panel rv arch" id="archflow" aria-label="Pipeline: ingestion, eleven matchers, classifier, exception rules, integration">
+    <div class="stage"><div class="rail"><span class="node">in</span><span class="packet"></span></div>
+      <div class="body"><h4>Ingestion</h4><p>Parses each bank's statement format (camt.053, Norma 43, MT940…) into one bank-line table with direction, absolute amount, EUR amount, payer name and the document-like tokens in the text. Builds the open-item list (customer and supplier invoices and credit notes) and caches the text of the invoice PDFs (about 131k in TRAIN). Reads side files from the neighbouring period too.</p></div></div>
+    <div class="stage"><div class="rail"><span class="node">11</span><span class="packet" style="animation-delay:.8s"></span></div>
+      <div class="body"><h4>Matchers, in priority order</h4><p>199,987 val lines enter. Each bar shows the lines a matcher claims; precision is the share of those lines that are fully right.</p>
+        <div class="mlist" id="mlist">
+          <div class="mrow hdr"><span></span><span>matcher</span><span>lines claimed</span><span class="n">lines</span><span class="p" style="color:inherit">precision</span></div>
+        </div>
+      </div></div>
+    <div class="stage"><div class="rail"><span class="node" style="border-color:var(--f-nonitem);color:var(--f-nonitem)">c</span><span class="packet" style="animation-delay:1.6s;background:var(--f-nonitem)"></span></div>
+      <div class="body"><h4>Classifier for lines that settle nothing</h4><p>One logistic regression over 22 classes (ITEM + 21 categories) labels the 23,110 unclaimed lines. It also gives <code>p_items</code>, the probability a line settles invoices at all, which can veto a matcher's claim and decides UNIDENTIFIED.</p></div></div>
+    <div class="stage"><div class="rail"><span class="node" style="border-color:var(--f-exceptions);color:var(--f-exceptions)">x</span><span class="packet" style="animation-delay:2.4s;background:var(--f-exceptions)"></span></div>
+      <div class="body"><h4>Exception rules</h4><p>POLICIES §3 written as code: discounts, withholding, bank charges, FX, partials, overpayments. Labels set by evidence matchers (PDF clauses, advices, batch files, payment runs) are kept; the rules only fill in the rest.</p></div></div>
+    <div class="stage"><div class="rail"><span class="node">✓</span></div>
+      <div class="body"><h4>Integration</h4><p>Merges matcher rows and classifier labels, validates the file (every line present, format rules), scores it locally and writes <code>submission.csv.gz</code>. Safety nets: a crashing matcher is skipped, the classifier falls back to a baseline, and FINAL uploads need an explicit flag.</p></div></div>
+  </div>
+</section>
+
+<!-- ======================= 5. PATTERNS ======================= -->
+<section id="patterns">
+  <div class="head rv">
+    <span class="eyebrow"><b>5</b> · Patterns and solutions</span>
+    <h2>Twelve patterns, twelve rules</h2>
+    <p class="answer">Each chapter shows what the pattern looks like in the bank text (real lines from the synthetic val data), how we detect it, and how well it works on val. Chapters follow the order the pipeline runs in.</p>
+  </div>
+
+  <div class="chapters">
+
+  <!-- 5.1 payment runs -->
+  <article class="chap rv" id="p-runs" style="--fam:var(--f-payments)">
+    <div class="txt">
+      <span class="no"><b>5.1</b> matcher 1 · <code>payment_runs</code></span>
+      <h3>Supplier payment runs</h3>
+      <p>Our own companies pay suppliers through payment-run files. A run can be paid as one debit per beneficiary (transfers), one debit for the whole file (aggregated), or one debit per maturity date (confirming). One of these debits can hold hundreds of invoices.</p>
+      <ol>
+        <li>Link the debit to a unit of a run file: by end-to-end ID or run ID when the bank shows it (camt.053).</li>
+        <li>Otherwise (Norma 43, MT940): same account, amount, booking date shortly after execution, plus beneficiary name.</li>
+        <li>Every document in the unit becomes a row; items of ES01/ES02/PT01 paid by the ES00 payment factory stay with the subsidiary.</li>
+        <li>An end-to-end ID ending in “D” marks a duplicate transfer → <span class="tag x">DUPLICATE_PAYMENT</span>.</li>
+      </ol>
+      <p class="more"><strong>Segments at 100 %:</strong> ap_payment_multi, ap_payment_single, ap_paid_by_holding, ap_direct_debit, ap_partial, ap_credit_note_netted. ap_fx 99.8 %, ap_factored 99.2 %, ap_confirming 98.4 %. Rejected transfers: 168 of 171 claimed at 100 %.</p>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>AU01 · camt.053 · 2025-01-09</span><span class="amt">−12,278.07 AUD</span></div>SEPA-UEBERWEISUNG AN FILTERS HARRIS PTY LTD · FRAS 2024/00267 2024/00277 2024/00283 · e2e <mark>PR010025010992-0086</mark></div>
+      <svg class="sv" viewBox="0 0 340 170" role="img" aria-label="A payment-run file unit with three supplier invoices links to one bank debit by end-to-end ID">
+        <rect class="bxf" x="8" y="14" width="170" height="142" rx="8"/>
+        <text x="20" y="34" class="b">payment run file</text>
+        <text x="20" y="50" class="s">unit PR0100…-0086</text>
+        <rect class="bx" x="20" y="62" width="146" height="24" rx="5"/><text x="28" y="78">2024/00267</text><text x="158" y="78" text-anchor="end">703.25</text>
+        <rect class="bx" x="20" y="92" width="146" height="24" rx="5"/><text x="28" y="108">2024/00277</text><text x="158" y="108" text-anchor="end">6,125.08</text>
+        <rect class="bx" x="20" y="122" width="146" height="24" rx="5"/><text x="28" y="138">2024/00283</text><text x="158" y="138" text-anchor="end">5,449.74</text>
+        <path class="kf dr" pathLength="1" d="M178,85 L222,85" marker-end="url(#ah)"/>
+        <text x="200" y="76" text-anchor="middle" class="s">e2e ID</text>
+        <rect class="bx" x="226" y="62" width="106" height="46" rx="8"/>
+        <text x="279" y="81" text-anchor="middle" class="b">bank debit</text>
+        <text x="279" y="97" text-anchor="middle">−12,278.07</text>
+        <text x="279" y="132" text-anchor="middle" class="s">no ID? account + date</text>
+        <text x="279" y="145" text-anchor="middle" class="s">+ amount + name</text>
+      </svg>
+      <div class="metrics"><div><b>60,361</b><span>lines claimed</span></div><div><b>100.0%</b><span>precision</span></div><div><b>≈19.6</b><span>points in this area</span></div></div>
+    </div>
+  </article>
+
+  <!-- 5.2 dd -->
+  <article class="chap rv" id="p-dd" style="--fam:var(--f-batches)">
+    <div class="txt">
+      <span class="no"><b>5.2</b> matcher 2 · <code>dd_batches</code></span>
+      <h3>Direct-debit batches and returns</h3>
+      <p>We collect from many customers at once (SEPA, BACS, ACH, BECS) and the bank credits the batch total as one line. Weeks later some receipts bounce back as separate debits carrying the mandate reference.</p>
+      <ol>
+        <li><strong>Batch credit:</strong> same account, amount = batch total, date −2/+6 days. Every receipt in the batch file becomes a pair.</li>
+        <li><strong>Return:</strong> a debit with a mandate reference goes to the latest earlier receipt with that mandate and amount → <span class="tag x">RETURNED</span>.</li>
+        <li>The time window depends on the SEPA reason code: MD06 (“refund request”) 14–80 days, others 1–20.</li>
+        <li><strong>Re-presented:</strong> a customer whose debit bounced pays by transfer instead; each item keeps a timeline of collections and returns.</li>
+      </ol>
+      <p class="more"><strong>Line accuracy:</strong> ar_dd_batch 99.9 %, ar_dd_returned 99.5 %, ar_dd_represented_transfer 98.1 %. RETURNED F1 0.994.</p>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>DE01 · camt.053 · 2025-01-10</span><span class="amt">+7,829.66 EUR</span></div>SEPA-LASTSCHRIFT EINZUG <mark>02250110684</mark> 11 POSTEN</div>
+      <div class="strip"><div class="meta"><span>AU01 · camt.053 · 2025-01-02</span><span class="amt">−1,190.53 AUD</span></div>RUECKLASTSCHRIFT AM04 <mark>MREF+VTM-AU-0004336</mark></div>
+      <svg class="sv" viewBox="0 0 340 150" role="img" aria-label="Eleven receipts converge into one batch credit; a later return debit points back to one receipt, marked RETURNED">
+        <g id="ddr"></g>
+        <rect class="bx" x="214" y="40" width="118" height="44" rx="8"/>
+        <text x="273" y="58" text-anchor="middle" class="b">batch credit</text>
+        <text x="273" y="74" text-anchor="middle">11 receipts</text>
+        <path class="kx dr" pathLength="1" d="M214,125 C160,130 90,122 62,92" marker-end="url(#ah)"/>
+        <rect class="bx" x="214" y="110" width="118" height="30" rx="8"/>
+        <text x="273" y="129" text-anchor="middle" class="b">return debit</text>
+        <text x="130" y="146" text-anchor="middle" class="s">same mandate + amount → RETURNED</text>
+      </svg>
+      <div class="metrics"><div><b>5,984</b><span>lines claimed</span></div><div><b>99.6%</b><span>precision</span></div><div><b>94,025</b><span>pairs in ar_dd_batch</span></div></div>
+    </div>
+  </article>
+
+  <!-- 5.3 cards cheques -->
+  <article class="chap rv" id="p-cards" style="--fam:var(--f-batches)">
+    <div class="txt">
+      <span class="no"><b>5.3</b> matcher 3 · <code>cards_cheques</code></span>
+      <h3>Card settlements and cheque deposits</h3>
+      <p>The card acquirer pays out the day's web orders as one credit, net of its fee. Cheques arrive in deposits or US lockboxes, often with a truncated or missing stub reference.</p>
+      <ol>
+        <li><strong>Card settlement:</strong> credit on the settlement account = Σ net of the settlement file (merchant ID and date in the text).</li>
+        <li>Each order is cleared at its <strong>gross</strong> amount with no exception. The acquirer fee is contractual, not a short payment.</li>
+        <li><strong>Cheque deposit:</strong> credit = deposit total (deposit ID in the text); each cheque goes to its invoice by stub, drawer and amount.</li>
+        <li><strong>Chargebacks</strong> and <strong>returned cheques</strong> → <span class="tag x">RETURNED</span> on the original invoice.</li>
+      </ol>
+      <p class="more"><strong>Line accuracy:</strong> cards, cheques, chargebacks and returned cheques all 100 % on val.</p>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>AU01 · camt.053 · 2025-01-02</span><span class="amt">+2,004.91 AUD</span></div>CARD SETTLEMENT MID <mark>040654992</mark> 2024-12-30 5 TRX</div>
+      <svg class="sv" viewBox="0 0 340 140" role="img" aria-label="Five web orders worth 2,033.38 gross; minus the acquirer fee the bank receives 2,004.91 net">
+        <text x="8" y="16" class="s">5 web orders, cleared at gross</text>
+        <g id="cardbars"></g>
+        <text x="8" y="72" class="b">gross 2,033.38</text>
+        <rect class="soft" x="8" y="84" width="320" height="18" rx="4"/>
+        <rect class="ff grow" style="transform-origin:8px 0;transition:transform 1s" x="8" y="84" width="315.6" height="18" rx="4"/>
+        <rect class="fx" x="323.6" y="84" width="4.4" height="18"/>
+        <text x="8" y="120" class="b">net credit 2,004.91</text>
+        <text x="328" y="120" text-anchor="end" class="s">fee 28.47 · no exception</text>
+      </svg>
+      <div class="strip"><div class="meta"><span>US01 · camt.053 · 2025-03-17</span><span class="amt">+4,093.51 USD</span></div>LOCKBOX <mark>LBX25031707857</mark> DEPOSIT 6 ITEMS</div>
+      <div class="metrics"><div><b>3,304</b><span>lines claimed</span></div><div><b>100.0%</b><span>precision</span></div><div><b>21,557</b><span>pairs in card settlements</span></div></div>
+    </div>
+  </article>
+
+  <!-- 5.4 remittance -->
+  <article class="chap rv" id="p-rem" style="--fam:var(--f-remittances)">
+    <div class="txt">
+      <span class="no"><b>5.4</b> matcher 4 · <code>remittance</code></span>
+      <h3>Remittance advices</h3>
+      <p>Big customers pay dozens or hundreds of documents with one transfer and send an advice listing each invoice, what they paid and any deduction. This is where the biggest lines live: <code>ar_short_dispute</code> lines settle 98 invoices on average, up to 903.</p>
+      <ol>
+        <li>Parse four formats: CSV (<code>,</code> or <code>;</code>), PDF text in English and Spanish, email text, XLSX; US and European number formats.</li>
+        <li>Resolve each advice line to our item by number (also without prefix), else by amount and date inside the payer's group.</li>
+        <li>Link the receipt by payment reference, else by entity + amount = advice total around the payment date.</li>
+        <li>A deduction with a dispute reason → <span class="tag x">SHORT_DISPUTE</span> (amount = paid); “SETTLEMENT &lt;doc&gt;” later pays the remainder.</li>
+        <li>Read the neighbouring period's folder too: advices for late-June payments sit in the next period. That recovered about 10 % of 1:N lines.</li>
+      </ol>
+      <p class="more"><strong>Drift handled:</strong> from Aug/Sep 2025 one customer sends a new “Voucher” XLSX holding only the last 6 digits of our number. All 6,889 LIVE advices parse; 98.1 % add up to their stated total.</p>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>NL01 · camt.053 · 2025-01-10</span><span class="amt">+240,538.96 EUR</span></div>/TRTP/SEPA OVERBOEKING/NAME/POOL SUPPLY MYERS B.V./REMI/PMT ADVICE <mark>PAY-2025-000364</mark>/EREF/NOTPROVIDED</div>
+      <svg class="sv" viewBox="0 0 340 170" role="img" aria-label="An advice lists 97 invoices; 94 are paid in full and 3 carry a disputed deduction">
+        <rect class="bxf" x="8" y="8" width="180" height="154" rx="8"/>
+        <text x="20" y="27" class="b">advice PAY-2025-000364</text>
+        <text x="20" y="42" class="s">97 documents</text>
+        <g id="advgrid"></g>
+        <path class="kf dr" pathLength="1" d="M188,85 L224,85" marker-end="url(#ah)"/>
+        <rect class="bx" x="228" y="56" width="106" height="58" rx="8"/>
+        <text x="281" y="76" text-anchor="middle" class="b">97 rows</text>
+        <text x="281" y="92" text-anchor="middle">94 cleared</text>
+        <text x="281" y="106" text-anchor="middle" class="s">3 SHORT_DISPUTE</text>
+      </svg>
+      <div class="metrics"><div><b>7,862</b><span>lines claimed</span></div><div><b>100.0%</b><span>precision</span></div><div><b>0.918</b><span>SHORT_DISPUTE F1 at precision 1.0</span></div></div>
+      <p class="note">ar_1toN_remittance and ar_1to1_remittance 100 %. ar_short_dispute 82.8 %: 17 % of those lines have no advice anywhere (see chapter 9).</p>
+    </div>
+  </article>
+
+  <!-- 5.5 pdf -->
+  <article class="chap rv" id="p-pdf" style="--fam:var(--f-pdf)">
+    <div class="txt">
+      <span class="no"><b>5.5</b> matcher 5 · <code>pdf_cases</code></span>
+      <h3>Clauses printed in invoice PDFs</h3>
+      <p>Some invoices are paid in a way only the PDF explains: in instalments, minus a guarantee retention (released later), minus an advance already paid, or cancelled and replaced by another invoice. We surveyed all 131k TRAIN PDFs: clauses are only ever worded in Spanish or English, and clause dates are always dd/mm, even on US documents.</p>
+      <ol>
+        <li>Extract clauses and check them: instalments sum to the total, retention + net = total, advance + net = total.</li>
+        <li>Walk the bank lines in booking order, keeping a running open amount per clause item.</li>
+        <li>The cash must fit the clause to the cent. Which instalment: “k/n” in the text, else the only unpaid one of that amount, else the one whose due date passed most recently (right 99.9 % of the time).</li>
+        <li>Advance deductions stay <span class="tag x">PARTIAL</span> even when the cash equals the open amount; the generic rules may not override evidence labels.</li>
+      </ol>
+      <p class="more"><strong>Recall on val:</strong> instalments 99.2 %, retentions 98.5 %, releases 99.3 %, advance deductions 98.9 %, replaced invoices 90.5 %, credit notes paid out 100 %.</p>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>DE01 · camt.053 · 2025-03-10</span><span class="amt">+15,703.65 EUR</span></div>SEPA-UEBERWEISUNG EREF+PAY-2025-509037 SVWZ+<mark>RATE 1/3</mark> RE RE250100560</div>
+      <svg class="sv" viewBox="0 0 340 144" role="img" aria-label="Invoice of 47,110.95 in three instalments; the first instalment of 15,703.65 is paid and marked PARTIAL">
+        <text x="8" y="16" class="b">RE250100560 · 47,110.95 · clause: 3 instalments</text>
+        <rect class="ff grow" style="transform-origin:8px 0;transition:transform 1s .2s" x="8" y="28" width="104" height="24" rx="4"/>
+        <rect class="soft" x="116" y="28" width="104" height="24" rx="4"/>
+        <rect class="soft" x="224" y="28" width="104" height="24" rx="4"/>
+        <text x="60" y="44" text-anchor="middle" style="fill:#fff">1/3 paid</text>
+        <text x="168" y="44" text-anchor="middle">2/3</text>
+        <text x="276" y="44" text-anchor="middle">3/3</text>
+        <text x="8" y="72">15,703.65 = 47,110.95 ÷ 3 → PARTIAL</text>
+        <text x="8" y="98" class="b">RE240212402 · 15,414.83 · clause: 5 % retention</text>
+        <rect class="ff" x="8" y="106" width="304" height="14" rx="3"/><rect class="soft" x="314" y="106" width="14" height="14" rx="3"/>
+        <text x="8" y="138" class="s">paid 14,644.09 (95 %) → PARTIAL; 5 % released later</text>
+      </svg>
+      <div class="metrics"><div><b>6,336</b><span>lines claimed</span></div><div><b>99.9%</b><span>precision</span></div><div><b>41.5→98.4</b><span>ar_retention % on the sample month</span></div></div>
+    </div>
+  </article>
+
+  <!-- 5.6 refs -->
+  <article class="chap rv" id="p-refs" style="--fam:var(--f-receipts)">
+    <div class="txt">
+      <span class="no"><b>5.6</b> matcher 6 · <code>refs</code></span>
+      <h3>Invoice numbers in noisy bank text</h3>
+      <p>The largest segment, <code>ar_ref_noise</code> (42,462 lines, up to 12.7 points), is customers citing our invoices badly: prefixes dropped, numbers cut off by the bank's field width, one digit wrong, two digits swapped, or several numbers run together.</p>
+      <ol>
+        <li>Tokenise text and remittance info; re-join numbers split across Norma 43 <code> | </code> fields; drop amounts, IBANs and bank IDs.</li>
+        <li>Find candidate customers from tokens that hit items: exact, suffix (number without prefix), prefix (truncated), or one edit / transposition.</li>
+        <li>Within that customer's open items only, pick one item per cited token so that Σ invoices − credit notes = cash ± 0.01.</li>
+        <li>Else complete with uncited open items (credit notes first), else explain the gap with an exception.</li>
+      </ol>
+      <p class="more"><strong>Second round:</strong> trying related credit notes first lifted ar_1toN_credit_note 0.60 → 0.749, ar_n_to_m 0.53 → 0.728, ar_fx 0.53 → 0.874 (with subset-sum changes).</p>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>ES02 · Norma 43 · 2025-03-10</span><span class="amt">+6,777.49 EUR</span></div>TRANSFERENCIA SEPA | 66417670-CLIMATIZACION DURAN S.A. | PAGO FACTURA <mark>0100254</mark> <mark>0100543</mark></div>
+      <div class="strip"><div class="meta"><span>AU01 · camt.053 · 2025-05-07</span><span class="amt">+1,515.59 AUD</span></div>DIRECT CREDIT REED AQUATICS PTY LT PAYMENT INV <mark>INV21-</mark> · remittance INV INV21-0126520</div>
+      <svg class="sv" viewBox="0 0 340 150" role="img" aria-label="Noisy tokens are matched to document numbers by exact, suffix, prefix or one-edit rules">
+        <text x="8" y="16" class="s">token in text</text><text x="200" y="16" class="s">our document</text>
+        <rect class="bx" x="8" y="24" width="110" height="24" rx="5"/><text x="16" y="40">0100543</text>
+        <path class="kf dr" pathLength="1" d="M118,36 L196,36" marker-end="url(#ah)"/><text x="157" y="31" text-anchor="middle" class="s">suffix</text>
+        <rect class="bxf" x="200" y="24" width="132" height="24" rx="5"/><text x="208" y="40">FV25-0100543</text>
+        <rect class="bx" x="8" y="60" width="110" height="24" rx="5"/><text x="16" y="76">0100254</text>
+        <path class="kf dr" pathLength="1" d="M118,72 L196,72" marker-end="url(#ah)"/><text x="157" y="67" text-anchor="middle" class="s">suffix</text>
+        <rect class="bxf" x="200" y="60" width="132" height="24" rx="5"/><text x="208" y="76">FV25-0100254</text>
+        <rect class="bx" x="8" y="96" width="110" height="24" rx="5"/><text x="16" y="112">INV21-0126520</text>
+        <path class="kf dr" pathLength="1" d="M118,108 L196,108" marker-end="url(#ah)"/><text x="157" y="103" text-anchor="middle" class="s">1 edit</text>
+        <rect class="bxf" x="200" y="96" width="132" height="24" rx="5"/><text x="208" y="112">INV24-0126520</text>
+        <text x="8" y="142" class="s">3,580.83 + 3,196.66 = 6,777.49 ✓   ·   1,515.59 = 1,515.59 ✓</text>
+      </svg>
+      <div class="metrics"><div><b>43,223</b><span>lines claimed</span></div><div><b>99.5%</b><span>precision</span></div><div><b>35,344</b><span>exact-reference lines at 100 %</span></div></div>
+    </div>
+  </article>
+
+  <!-- 5.7 subset sum -->
+  <article class="chap rv" id="p-subset" style="--fam:var(--f-receipts)">
+    <div class="txt">
+      <span class="no"><b>5.7</b> matcher 7 · <code>subset_sum</code></span>
+      <h3>Who paid, and which invoices add up</h3>
+      <p>Many receipts cite nothing useful. Then we need two answers: which customer paid, and which of its open invoices the amount settles. Third parties muddy the first: parents pay for subsidiaries, collection agencies pay under a file number (<code>EXPTE</code>), confirming banks pay on behalf (<code>ORD.</code>).</p>
+      <ol>
+        <li><strong>Payer:</strong> IBAN against the customer master and IBANs learned from TRAIN; payer name cut out by per-format patterns (<code>/ORDP/</code>, <code>ORD.</code>, <code>EXPTE</code>, <code>POR CTA DE</code>, SPEI…), compared on letters and digits only so truncated names still match.</li>
+        <li><strong>Pool:</strong> that customer's open items in the line's entity and currency, issued by the booking date, minus what earlier matchers and lines took.</li>
+        <li><strong>Search:</strong> one invoice, one net of its discount or withholding, then subsets. If the direct payer has none, try the group's other customers.</li>
+        <li><strong>Guard:</strong> claim only if exactly one customer has a solution and the expected number of coincidental matches is ≤ 0.3.</li>
+      </ol>
+      <p class="more"><strong>Payer knowledge on LIVE:</strong> 86,003 name aliases and 5,483 learned IBANs, learned only from lines before the window.</p>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>ES01 · Norma 43 · 2025-01-02</span><span class="amt">+1,346.90 EUR</span></div>TRANSFERENCIA SEPA | 05899212-<mark>PARRA CONSTRUCCIONES S.L.</mark> |</div>
+      <svg class="sv" viewBox="0 0 340 150" role="img" aria-label="The payer name resolves to a customer; three of its open invoices sum to the cash">
+        <rect class="bx" x="8" y="10" width="124" height="34" rx="6"/><text x="70" y="31" text-anchor="middle">name in text</text>
+        <path class="k dr" pathLength="1" d="M132,27 L196,27" marker-end="url(#ah)"/><text x="164" y="21" text-anchor="middle" class="s">resolve</text>
+        <rect class="bxf" x="200" y="10" width="132" height="34" rx="6"/><text x="266" y="31" text-anchor="middle" class="b">customer</text>
+        <text x="8" y="64" class="s">its open invoices (pool)</text>
+        <g id="pool"></g>
+        <text x="8" y="140" class="b">298.97 + 508.28 + 539.65 = 1,346.90 ✓</text>
+      </svg>
+      <div class="metrics"><div><b>39,035</b><span>lines claimed</span></div><div><b>99.5%</b><span>precision</span></div><div><b>≤ 0.3</b><span>expected coincidences to claim</span></div></div>
+      <div class="strip"><div class="meta"><span>ES01 · Norma 43 · collection agency</span><span class="amt">+135.31 EUR</span></div>TRANSFERENCIAS GESTION DE IMPAGADOS D | GESTION DE <mark>EXPTE 00457</mark> ALEJANDRO ARRIE</div>
+    </div>
+  </article>
+
+  <!-- 5.8 same amount -->
+  <article class="chap rv" id="p-same" style="--fam:var(--f-receipts)">
+    <div class="txt">
+      <span class="no"><b>5.8</b> matcher 8 · <code>same_amount</code></span>
+      <h3>Same-amount invoices</h3>
+      <p>Service customers pay a fixed monthly fee, so the same customer has several open invoices of identical amount. The amount alone cannot tell them apart.</p>
+      <ol>
+        <li>A month named in the text (“SERVICE MAY 2025”, “MANT. MAYO 25”, “SERVICIOS MAYO”) picks the invoice for that service month, which is issued at the start of the following month.</li>
+        <li>Otherwise take the oldest open one (first in, first out).</li>
+        <li>Runs inside the same chronological pass as subset-sum, so an invoice consumed by one line is never offered to a later one.</li>
+      </ol>
+      <p class="more"><strong>Unfixable noise:</strong> when a customer pays two same-amount invoices on the same day, which line gets which invoice is random in the answer key. About 140 val errors come from that.</p>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>AU01 · camt.053 · 2025-01-02</span><span class="amt">+1,769.28 AUD</span></div>DIRECT CREDIT POOL &amp; SPA WATTLE CR · remittance <mark>SERVICE OCTOBER 2024</mark></div>
+      <svg class="sv" viewBox="0 0 340 130" role="img" aria-label="Twelve monthly invoices of 1,769.28; the one issued on 1 November 2024 is the October service">
+        <text x="8" y="16" class="s">one customer · 1,769.28 every month · 2024 issue dates</text>
+        <g id="months"></g>
+        <text x="8" y="112" class="b">October service → invoice issued 1 Nov 2024</text>
+        <text x="8" y="126" class="s">INV24-0325658 ✓</text>
+      </svg>
+      <div class="metrics"><div><b>7,292</b><span>lines claimed</span></div><div><b>100%</b><span>precision when a month is named</span></div><div><b>96.5%</b><span>precision of oldest-first</span></div></div>
+    </div>
+  </article>
+
+  <!-- 5.9 short payments -->
+  <article class="chap rv" id="p-short" style="--fam:var(--f-exceptions)">
+    <div class="txt">
+      <span class="no"><b>5.9</b> matcher 9 · <code>short_payments</code></span>
+      <h3>Short payments and overpayments</h3>
+      <p>A receipt a little below or above one open invoice of the payer. The gap has a cause, and each cause has its own exception code and its own fingerprint.</p>
+      <ol>
+        <li>Only receipts no earlier matcher claimed, with a resolved payer and exactly one open invoice that the gap explains.</li>
+        <li><span class="tag x">SHORT_BANK_CHARGES</span>: a small fixed gap taken by intermediary banks on international wires.</li>
+        <li><span class="tag x">SHORT_WITHHOLDING</span>: 1.25 %, 1.5 % or 10 % withheld tax, only for MX, BR and MA customers.</li>
+        <li><span class="tag x">OVERPAYMENT</span>: only if the excess is a round amount (1 to 200) or exactly +1 % or +10 % (chapter 6).</li>
+      </ol>
+      <p class="more"><strong>Exception F1:</strong> SHORT_BANK_CHARGES 0.368 → 0.937, OVERPAYMENT 0.575 → 0.992.</p>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>AU01 · 2025-03-11</span><span class="amt">+24,117.67 AUD</span></div>DIRECT CREDIT HYDRO PRIME LTD N/REF 2025-8339</div>
+      <div class="strip"><div class="meta"><span>CN01 · MT940 · 2025-03-10</span><span class="amt">+8,832.70 CNY</span></div>TT IN POOLS HUGHES CO., LTD. INV# VTN250100270</div>
+      <div class="strip"><div class="meta"><span>MX01 · MT940 · 2025-03-10</span><span class="amt">+29,787.34 MXN</span></div>SPEI RECIBIDO … CONCEPTO TRANSFERENCIA ACS SANEAMIENTOS S.A. DE C.V.</div>
+      <div class="panel" style="padding:12px 14px;box-shadow:none">
+        <div class="calc">
+          <span>INV25-0305368 · 24,149.27 − cash</span><span class="r">31.60 <span class="tag x">BANK_CHARGES</span></span>
+          <span>cash − VTN250100270 · 8,732.70</span><span class="r">+100.00 <span class="tag x">OVERPAYMENT</span></span>
+          <span>A01-2501458 · 33,097.04 × 10 %</span><span class="r">3,309.70 <span class="tag x">WITHHOLDING</span></span>
+        </div>
+      </div>
+      <div class="metrics"><div><b>345</b><span>lines claimed</span></div><div><b>98.2%</b><span>precision</span></div><div><b>0.992</b><span>OVERPAYMENT F1</span></div></div>
+    </div>
+  </article>
+
+  <!-- 5.10 refunds -->
+  <article class="chap rv" id="p-refunds" style="--fam:var(--f-payments)">
+    <div class="txt">
+      <span class="no"><b>5.10</b> matcher 10 · <code>ap_refunds</code></span>
+      <h3>Supplier refunds</h3>
+      <p>Money flows the other way: a supplier refunds one of its credit notes to us. The incoming line settles the supplier credit note (APC) for its open amount, with no exception.</p>
+      <ol>
+        <li>An incoming line equal to an open supplier credit note of that entity, in the same currency.</li>
+        <li>The credit note is pointed to by its number (supplier numbering, with or without prefix), the invoice it credits, or the supplier's IBAN or name.</li>
+        <li>Exactly one credit note must qualify.</li>
+        <li>Texts saying “PAGO DOBLE / DOUBLE / TWICE” are left alone unless they cite a credit-note number: those refund a payment we made twice, a different category.</li>
+      </ol>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>AU01 · camt.053 · 2025-01-02</span><span class="amt">+237.34 AUD</span></div>DIRECT CREDIT PUMPS EXPRESS PTY LT CREDIT NOTE AB-A00 · remittance CREDIT NOTE <mark>AB-A004384</mark></div>
+      <svg class="sv" viewBox="0 0 340 92" role="img" aria-label="A supplier's incoming transfer settles its own credit note">
+        <rect class="bx" x="8" y="22" width="120" height="44" rx="8"/><text x="68" y="41" text-anchor="middle" class="b">supplier</text><text x="68" y="57" text-anchor="middle" class="s">Pumps Express</text>
+        <path class="kf dr" pathLength="1" d="M128,44 L204,44" marker-end="url(#ah)"/><text x="166" y="37" text-anchor="middle" class="s">+237.34 in</text>
+        <rect class="bxf" x="208" y="22" width="124" height="44" rx="8"/><text x="270" y="41" text-anchor="middle" class="b">APC AB-A004384</text><text x="270" y="57" text-anchor="middle" class="s">credit note · 237.34</text>
+      </svg>
+      <div class="metrics"><div><b>2,513</b><span>lines claimed</span></div><div><b>100.0%</b><span>precision</span></div><div><b>≈0.55</b><span>points</span></div></div>
+    </div>
+  </article>
+
+  <!-- 5.11 duplicates -->
+  <article class="chap rv" id="p-dup" style="--fam:var(--f-exceptions)">
+    <div class="txt">
+      <span class="no"><b>5.11</b> matcher 11 · <code>duplicates</code></span>
+      <h3>Duplicate payments</h3>
+      <p>A customer pays an invoice that is already settled. Runs last, on credits still unclaimed after every other matcher.</p>
+      <ol>
+        <li>An earlier line 0–14 days before paid exactly that one invoice, in full, for the same amount, from the same payer.</li>
+        <li>Any document number cited in the text must be that invoice.</li>
+        <li>The customer must have no other open invoice of that amount; otherwise it is just next month's fixed fee.</li>
+        <li>Duplicates never reduce the open amount: an early bug undid them as reductions, which caused 27 of 30 duplicate misses on the sample month.</li>
+      </ol>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>AU01 · 2025-03-10</span><span class="amt">+2,105.09 AUD</span></div>DIRECT CREDIT POOL &amp; SPA LEVANTE P N/REF 2025-2677</div>
+      <div class="strip"><div class="meta"><span>AU01 · 2025-03-17</span><span class="amt">+2,105.09 AUD</span></div>DIRECT CREDIT POOL &amp; SPA LEVANTE P N/REF 2025-2677</div>
+      <svg class="sv" viewBox="0 0 340 108" role="img" aria-label="Two identical payments seven days apart; the second is a duplicate">
+        <text x="155" y="12" text-anchor="middle" class="s">7 days · same amount · same payer</text>
+        <path class="kx dr" pathLength="1" d="M244,50 C200,18 110,18 68,50" marker-end="url(#ah)"/>
+        <line class="k" x1="14" y1="58" x2="326" y2="58"/>
+        <circle class="ff" cx="60" cy="58" r="7"/><text x="60" y="82" text-anchor="middle" class="b">10 Mar</text><text x="60" y="97" text-anchor="middle" class="s">pays INV24-0120278</text>
+        <circle class="fx" cx="250" cy="58" r="7"/><text x="250" y="82" text-anchor="middle" class="b">17 Mar</text><text x="250" y="97" text-anchor="middle" class="s">DUPLICATE_PAYMENT</text>
+      </svg>
+      <div class="metrics"><div><b>622</b><span>lines claimed</span></div><div><b>99.8%</b><span>precision</span></div><div><b>0.11→0.966</b><span>DUPLICATE_PAYMENT F1</span></div></div>
+    </div>
+  </article>
+
+  <!-- 5.12 categories -->
+  <article class="chap rv" id="p-cls" style="--fam:var(--f-nonitem)">
+    <div class="txt">
+      <span class="no"><b>5.12</b> classifier · <code>classification</code></span>
+      <h3>Categories and UNIDENTIFIED</h3>
+      <p>9.5 % of val lines (19,051) settle no item. Three categories dominate: BANK_FEES 9,718, UNIDENTIFIED 4,585 and CASH_POOL 1,554; the other 18 share 3,194.</p>
+      <ol>
+        <li>One logistic regression over 22 classes, with features from bank codes, text words, counterparty IBAN type, mentions of our own accounts, and “pair context”: an opposite movement on another of our accounts the same day, as in cash-pool sweeps and FX deals.</li>
+        <li>Two deterministic overrides: reversal pairs (“ANULACION OPERACION INDEBIDA” with the wrong booking) and keyword rules for near-empty classes (TAX_REFUND has 4 examples in all of TRAIN, LOAN_DRAWDOWN 32).</li>
+        <li><code>p_items</code> vetoes matcher claims on lines that look like no-item lines: on val it removed 18,157 lines, of which only 19 were real item lines.</li>
+        <li>An unclaimed receipt becomes <span class="tag x">UNIDENTIFIED</span> only when <code>p_items</code> &lt; 0.9 (chapter 6).</li>
+      </ol>
+    </div>
+    <div class="vis">
+      <div class="strip"><div class="meta"><span>DE01 · camt.053</span><span class="amt">−653,800.57 EUR</span></div>TRASPASO PROPIO <span class="tag c">CASH_POOL</span></div>
+      <div class="strip"><div class="meta"><span>FR01 · MT940</span><span class="amt">−0.90 EUR</span></div>FRAIS VIREMENT <span class="tag c">BANK_FEES</span></div>
+      <div class="strip"><div class="meta"><span>AU01 · camt.053</span><span class="amt">+770.14 AUD</span></div>DIRECT CREDIT JWB BACKYARD PTY LTD INVOICE <span class="tag x">UNIDENTIFIED</span></div>
+      <svg class="sv" viewBox="0 0 340 74" role="img" aria-label="Share of no-item lines by category: bank fees about half, unidentified about a quarter">
+        <g id="catbar"></g>
+      </svg>
+      <div class="metrics"><div><b>99.99%</b><span>no-item lines categorised right (1 wrong of 19,051)</span></div><div><b>23,110</b><span>lines it labels</span></div><div><b>0.956</b><span>UNIDENTIFIED F1</span></div></div>
+    </div>
+  </article>
+  </div>
+</section>
+
+<!-- ======================= 6. EXCEPTIONS ======================= -->
+<section id="exceptions">
+  <div class="head rv">
+    <span class="eyebrow"><b>6</b> · Exception rules</span>
+    <h2>The answer key is very literal, down to the cent</h2>
+    <p class="answer">The labels follow POLICIES.md exactly, including how amounts are written and how they are rounded. Copying those details took several exception F1 scores from about 0.1–0.6 to above 0.93. Fed the true items and amounts, our rules library scores macro-F1 above 0.98 on every code it decides; the remaining exception errors come from matching.</p>
+  </div>
+  <div class="ex-cards">
+    <div class="panel rv lift">
+      <span class="eyebrow">Amount convention</span>
+      <h3 style="margin:6px 0 8px">Write the invoice, not the cash, when the gap is explained</h3>
+      <p class="sub">When an invoice is fully cleared with an explained shortfall (discount, withholding, bank charges, FX), the row's amount is the invoice's full open amount. For a real partial payment it is the cash applied. Getting this wrong costs the pair, the line and the exception at once.</p>
+      <div class="calc">
+        <span>cash received</span><span class="r">838.55</span>
+        <span>INV24-0225969 open amount</span><span class="r">855.66</span>
+        <span>2 % early-payment discount</span><span class="r">17.11</span>
+        <span class="tot">amount we write</span><span class="r tot"><span class="hl">855.66</span> SHORT_DISCOUNT</span>
+      </div>
+    </div>
+    <div class="panel rv lift">
+      <span class="eyebrow">Rounding</span>
+      <h3 style="margin:6px 0 8px">Half-up for deductions, truncation for partials</h3>
+      <p class="sub">Discounts and withholding are rounded half-up to the cent. Python's default <code>round()</code> is banker's rounding and reproduced only part of them. Partial payments are truncated: a third of an invoice is cut, not rounded.</p>
+      <div class="calc">
+        <span>discounts reproduced, <code>round()</code></span><span class="r">5,733 of 5,791</span>
+        <span>discounts reproduced, half-up</span><span class="r okc">5,791 of 5,791</span>
+        <span>withholdings, <code>round()</code></span><span class="r">1,193 of 1,224</span>
+        <span>withholdings, half-up</span><span class="r okc">1,224 of 1,224</span>
+        <span class="tot">RE240216242 · 19,307.24 ÷ 3 = 6,435.7467</span><span class="r tot"><span class="hl">6,435.74</span> PARTIAL</span>
+      </div>
+      <p class="note" style="margin-top:8px">The last row is a real instalment in the val answer key: truncated to 6,435.74, where rounding would give 6,435.75.</p>
+    </div>
+    <div class="panel rv lift">
+      <span class="eyebrow">Overpayment fingerprint</span>
+      <h3 style="margin:6px 0 8px">Every real overpayment is round</h3>
+      <p class="sub">In the answer key, an overpayment is always the invoice plus a round amount (1 to 200) or exactly +1 % or +10 %. Our check <code>overpayment_plausible</code> keeps only those. OVERPAYMENT F1 went to 0.992.</p>
+      <div class="leak" id="overp"></div>
+      <p class="note" style="margin-top:8px">Matcher OVERPAYMENT rows that turned out right, inside vs outside the pattern.</p>
+    </div>
+    <div class="panel rv lift">
+      <span class="eyebrow">The UNIDENTIFIED trade-off</span>
+      <h3 style="margin:6px 0 8px">Flag only what looks like nobody's invoice</h3>
+      <p class="sub">First version: every unclaimed receipt was UNIDENTIFIED. Recall 1.0, precision 0.442 (5,777 false positives). A matcher miss is a wrong line either way, so flagging it only added a false positive. Now a line is flagged only when the classifier gives <code>p_items</code> &lt; 0.9. That alone (with dropping a bad fallback) took val from 90.04 to 90.81.</p>
+      <div class="dumb" id="unid"></div>
+    </div>
+  </div>
+  <figure class="panel rv">
+    <h4>Exception F1 now, per code (val, honest run)</h4>
+    <p class="sub">Macro-F1 went from 0.716 in the first full run to 0.962. The four biggest moves are shown above each tile's current value.</p>
+    <div class="f1grid" id="f1grid"></div>
+    <figcaption>SHORT_DISPUTE (0.918) and FX_DIFFERENCE (0.924, recall 0.858) are lowest: missing advices, and FX rows on lines no matcher claimed.</figcaption>
+  </figure>
+</section>
+
+<!-- ======================= 7. TRUST ======================= -->
+<section id="trust">
+  <div class="head rv">
+    <span class="eyebrow"><b>7</b> · Why you can trust the number</span>
+    <h2>No leakage, an untouched holdout, and a real LIVE score</h2>
+    <p class="answer">Only two components learn from the answer key, both cut by date. No matcher reads it. The one random draw uses a fixed seed and no LLM is called anywhere, so the same input gives the same file.</p>
+  </div>
+  <div class="grid2">
+    <div class="panel rv">
+      <h4>Time-split learning</h4>
+      <p class="sub">Model caches are stored per cutoff, so they cannot mix.</p>
+      <div class="scroll-x"><table class="cmp">
+        <thead><tr><th>component</th><th>val trains on</th><th>hold trains on</th><th>LIVE / FINAL</th></tr></thead>
+        <tbody>
+          <tr><td>category model</td><td>before 2025-01-01</td><td>before 2024-01-01</td><td>all of TRAIN</td></tr>
+          <tr><td>payer aliases</td><td>before 2025-01-01</td><td>before 2024-01-01</td><td>all of TRAIN</td></tr>
+        </tbody></table></div>
+    </div>
+    <div class="panel rv">
+      <h4>The start-state leak, found and fixed</h4>
+      <p class="sub">To make Jan–Jun 2025 look like LIVE we must rebuild which invoices were open on 1 Jan. Working backwards from the end-of-June list dropped 21,825 invoices (7.94 %) that were open in January but later cancelled without a payment. In LIVE those stay as distractors, so removing them made matching look easier.</p>
+      <div class="leak" id="leakbars"></div>
+      <p class="note" style="margin-top:8px">Fix: rebuild from payments before the window only. Cost of the leak: 0.04 points (96.40 → 96.36).</p>
+    </div>
+  </div>
+  <figure class="panel rv">
+    <h4>Holdout: a window no rule was tuned on</h4>
+    <p class="sub">Rules were written while looking at val, so val is a development set. Jan–Jun 2024 was never used for tuning.</p>
+    <div class="scroll-x"><table class="cmp">
+      <thead><tr><th></th><th class="r">val · Jan–Jun 2025 · tuned on</th><th class="r">hold · Jan–Jun 2024 · untouched</th><th class="r">LIVE v1 · Jul–Dec 2025</th></tr></thead>
+      <tbody>
+        <tr><td>Score</td><td class="r"><b>96.36</b></td><td class="r"><b style="color:var(--ok)">96.46</b></td><td class="r"><b>93.73</b></td></tr>
+        <tr><td>Allocation F1 (P / R)</td><td class="r">0.958 (0.999 / 0.920)</td><td class="r">0.960 (0.999 / 0.925)</td><td class="r">0.944 (0.998 / 0.896)</td></tr>
+        <tr><td>Transaction accuracy</td><td class="r">0.975</td><td class="r">0.976</td><td class="r">0.964</td></tr>
+        <tr><td>Exception macro-F1</td><td class="r">0.962</td><td class="r">0.959</td><td class="r">0.880</td></tr>
+      </tbody></table></div>
+    <figcaption>The same segments lose points in both local windows by about the same amounts. LIVE v1 is an older file (built from code between our 90.81 and about 94.3 val runs), so it is not the same pipeline as the other two columns. On segments both share, it sits close to local: ar_ref_noise 94.8 % vs 96.1 %, ar_short_dispute 80.8 % vs 82.8 %, ar_1toN_text 94.1 % vs 94.8 %.</figcaption>
+  </figure>
+  <div class="panel rv">
+    <h4>The remaining risk: drift</h4>
+    <p class="sub">Val and hold are both inside TRAIN, so neither tests the changes POLICIES §6 announces. Only LIVE and FINAL measure them. Matchers that rely on learned payer aliases or bank-text formats are the most exposed.</p>
+    <ul class="risk">
+      <li><span>2025-09 · LIVE</span>A big customer switches to a new “Voucher” remittance layout. Handled (chapter 5.4).</li>
+      <li><span>2025-10-01 · LIVE</span>Banco del Moncayo moves from Norma 43 to camt.053, so texts look different. The category model gives Oct–Dec the same no-item mix as Jul–Sep.</li>
+      <li><span>2026-01-01 · FINAL</span>A new South African subsidiary: new entity, new bank, ZAR, its own invoice numbering, renamed on 2026-04-01.</li>
+      <li><span>2026 · FINAL</span>Customers are renamed, change banks and pay more slowly.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ======================= 8. PROGRESSION ======================= -->
+<section id="progress">
+  <div class="head rv">
+    <span class="eyebrow"><b>8</b> · Score progression</span>
+    <h2>From 12.72 to 96.36</h2>
+    <p class="answer">The jump came from building every side-file matcher in parallel; the last six points came from exception rules and a second wave of targeted matchers. The organisers' reference points: about 19 for a naive baseline and about 61 for well-worked rules.</p>
+  </div>
+  <figure class="panel rv chart" id="progchart">
+    <div class="legend"><span><i style="background:var(--s1);border-radius:50%"></i>val (Jan–Jun 2025)</span><span><i style="background:var(--ok);border-radius:50%"></i>untouched holdout</span><span><i style="background:var(--s2);border-radius:50%"></i>LIVE leaderboard</span></div>
+    <div class="scroll-x"><svg viewBox="0 0 760 360" style="min-width:560px" role="img" aria-label="Score by milestone: baseline 12.72, first full pipeline 90.04, UNIDENTIFIED threshold 90.81, second-wave matchers 96.40, leak fixed 96.36, holdout 96.46, LIVE v1 93.73" id="progsvg"></svg></div>
+    <div class="scroll-x" style="margin-top:6px"><svg viewBox="0 0 760 210" style="min-width:560px" role="img" aria-label="Zoom of the same scores between 89 and 97" id="zoomsvg"></svg></div>
+    <figcaption>Top: the full 0–100 scale. Bottom: the same points zoomed to 89–97. Hover or focus a point for what moved it.</figcaption>
+  </figure>
+</section>
+
+<!-- ======================= 9. LEFT ======================= -->
+<section id="left">
+  <div class="head rv">
+    <span class="eyebrow"><b>9</b> · What's left, and what we learned</span>
+    <h2>The remaining losses are genuinely ambiguous</h2>
+    <p class="answer">Almost every remaining line error is a line no matcher claimed. Most are lines where several sets of invoices add up to the same amount, or disputed short payments with no advice anywhere. We left those unclaimed rather than guess.</p>
+  </div>
+  <figure class="panel rv">
+    <h4>Points still lost, by segment (val, honest run)</h4>
+    <div class="hbars" id="lostbars" style="margin-top:12px"></div>
+    <figcaption>The estimate counts every pair of a wrong line, so it overstates huge lines: <code>ap_fx</code> is a few bulk payments of about 1,000 rows, each with one bad row.</figcaption>
+  </figure>
+  <div class="lessons">
+    <div class="lesson rv lift"><h4>Priority-ordered matchers that claim whole lines</h4><p>Each matcher claims only what it is sure of, and later matchers see earlier claims. Precision stays at 99.9 % because nothing guesses on a line a more certain matcher could own.</p></div>
+    <div class="lesson rv lift"><h4>Leave a line unclaimed rather than guess</h4><p>A wrong claim loses pairs, the line and maybe an exception; a miss loses only the line. Every ambiguous matcher has a “unique solution only” guard.</p></div>
+    <div class="lesson rv lift"><h4>Side files beat clever text matching</h4><p>Payment runs, batches, card and cheque files, advices and PDF clauses resolve their cases at 99.6–100 % precision, and one line can hold up to 1,540 pairs.</p></div>
+    <div class="lesson rv lift"><h4>Measure precision per method</h4><p><code>ref_exact</code>, written as an early catch-all, fell to 0 % precision on 201 lines once better matchers ran first. Per-method precision in the scorer made that visible, and we removed it.</p></div>
+    <div class="lesson rv lift"><h4>Your validation set is code too</h4><p>Rebuilding the start state went wrong three times, each time moving the local score. It needed the same scrutiny as the model.</p></div>
+    <div class="lesson rv lift"><h4>Evidence beats generic rules</h4><p>Exception labels from matchers that read documents are kept; generic rules only fill the rest. Without that, advance-deduction accuracy fell to about 0 %.</p></div>
+    <div class="lesson rv lift"><h4>Parallel agents need separate outputs</h4><p>Agents running partial matchers overwrote a shared file and produced a bogus 36.48. Partial runs now write their own file.</p></div>
+    <div class="lesson rv lift"><h4>Ownership gaps lose points silently</h4><p>Rejected supplier transfers were left to nobody after two conflicting instructions. Turned back on: 168 of 171 at 100 %.</p></div>
+  </div>
+  <div class="panel rv">
+    <h4>Ideas we have not tested yet</h4>
+    <p class="ink2" style="font-size:14.5px">Break subset ties in <code>ar_ref_noise</code> with due-date order or the payer's habitual patterns; a deeper credit-note-aware search for truncated multi-invoice texts; track partial-payment state across matchers so <code>refs</code> can tell a remainder from a first partial (<code>ar_n_to_m</code>).</p>
+  </div>
+</section>
+
+<footer>
+  <span>Built by Kenny, Matias, Nikita and ZhengJinFa for the Talky × Anthropic “Close the Books” hackathon, 7 Nov 2026. The data is synthetic: every company, name and amount on this page is fictional.</span>
+  <span>Numbers come from our own runs: <code>integration/out/val_honest.log</code>, <code>integration/out/hold.log</code>, the LIVE leaderboard response and <code>insights.md</code> on branch <code>kenny/full-pipeline</code>. val = TRAIN Jan–Jun 2025 shaped like LIVE; hold = TRAIN Jan–Jun 2024.</span>
+</footer>
+</div>
+
+<div class="tip" id="tip" role="tooltip" aria-hidden="true"></div>
+
+<script>
+(function(){
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var root = document.documentElement;
+  var fmt = function(n,d){ return n.toLocaleString('en-US',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); };
+  var NS='http://www.w3.org/2000/svg';
+  function el(tag,attrs,parent,text){ var e=document.createElementNS(NS,tag); for(var k in attrs) e.setAttribute(k,attrs[k]); if(text!=null) e.textContent=text; if(parent) parent.appendChild(e); return e; }
+  function h(tag,cls,parent,text){ var e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; if(parent) parent.appendChild(e); return e; }
+
+  /* ---- tooltip ---- */
+  var tip=document.getElementById('tip');
+  function showTip(evt,head,val,rows){
+    tip.textContent='';
+    if(head) h('div','h',tip,head);
+    if(val) h('b','',tip,val);
+    (rows||[]).forEach(function(r){ var d=h('div','r',tip); if(r[0]){ var i=h('i','',d); i.style.background=r[0]; } d.appendChild(document.createTextNode(r[1])); });
+    var x,y;
+    if(evt && evt.clientX!=null && evt.type!=='focus'){ x=evt.clientX; y=evt.clientY; }
+    else { var b=evt.target.getBoundingClientRect(); x=b.left+b.width/2; y=b.top; }
+    tip.classList.add('on');
+    var w=tip.offsetWidth, ht=tip.offsetHeight;
+    var left=Math.min(window.innerWidth-w-8, Math.max(8,x+14)), top=y-ht-12; if(top<8) top=y+18;
+    tip.style.left=left+'px'; tip.style.top=top+'px';
+  }
+  function hideTip(){ tip.classList.remove('on'); }
+  function bindTip(node,fn){ node.addEventListener('pointermove',function(e){fn(e);}); node.addEventListener('focus',function(e){fn(e);}); node.addEventListener('pointerleave',hideTip); node.addEventListener('blur',hideTip); }
+
+  /* ---- 2. dots ---- */
+  var dots=document.getElementById('dots98');
+  for(var i=0;i<98;i++){ var d=h('i',i>=95?'dis':'',dots); }
+
+  /* ---- generic horizontal bar builder ---- */
+  function hbars(id,rows,max,opts){
+    var host=document.getElementById(id);
+    rows.forEach(function(r){
+      var row=h('div','hb',host); row.tabIndex=0;
+      var lab=h('div','lab',row,r.name); if(r.sub) h('small','',lab,r.sub);
+      var tr=h('div','track grow-host',row);
+      r.parts.forEach(function(p){ var s=h('div','seg grow',tr); s.style.width=(100*p.v/max)+'%'; s.style.background=p.c; });
+      h('div','val',row,r.label);
+      bindTip(row,function(e){ showTip(e,r.name,r.label+(opts&&opts.unit?opts.unit:''),r.tip); });
+    });
+  }
+
+  /* exception frequency */
+  var EXC=[['FX_DIFFERENCE',15793],['SHORT_DISCOUNT',15624],['PARTIAL',12511],['UNIDENTIFIED',4585],['SHORT_WITHHOLDING',4330],['RETURNED',4092],['SHORT_DISPUTE',3036],['DUPLICATE_PAYMENT',707],['OVERPAYMENT',400],['SHORT_BANK_CHARGES',171]];
+  hbars('excfreq',EXC.map(function(e){return {name:e[0],parts:[{v:e[1],c:'var(--f-exceptions)'}],label:fmt(e[1]),tip:[[null,'rows in the val answer key'],[null,'worth up to 2 points, like every code']]};}),15793);
+
+  /* ---- 3. segments ---- */
+  var N=199987,P=735474;
+  var SEG=[['ar_ref_noise',42462,92722,'Customer payment, noisy or missing reference'],['ap_payment_multi',24058,85430,'Our payment covering several supplier invoices'],['ar_short_dispute',1067,104691,'Big customer pays an advice minus disputed amounts'],['ar_dd_batch',1530,94025,'Direct-debit batch credited as one line'],['ar_1to1',19143,19143,'One payment, one invoice, clean reference'],['ar_1toN_remittance',1206,54817,'One payment, many invoices listed in an advice'],['ap_payment_single',17368,17368,'Our payment of one supplier invoice'],['ar_1toN_text',6124,36220,'One payment, many invoices named in the text'],['ap_fx',1217,45117,'Supplier payment in another currency'],['ar_1toN_credit_note',3184,32775,'Invoices paid net of credit notes']];
+  hbars('segbars',SEG.map(function(s){ var a=30*s[1]/N,b=50*s[2]/P; return {name:s[0],sub:s[3],parts:[{v:a,c:'var(--s1)'},{v:b,c:'var(--s2)'}],label:(a+b).toFixed(2),
+    tip:[['var(--s1)',fmt(s[1])+' lines → '+a.toFixed(2)+' pts'],['var(--s2)',fmt(s[2])+' pairs → '+b.toFixed(2)+' pts']]}; }),13,{unit:' points max'});
+
+  /* ---- 4. matchers ---- */
+  var M=[['payment_runs','f-payments',60361,'100.0','supplier payment-run files'],['dd_batches','f-batches',5984,'99.6','direct-debit batches, returns'],['cards_cheques','f-batches',3304,'100.0','card settlements, cheque deposits'],['remittance','f-remittances',7862,'100.0','customer remittance advices'],['pdf_cases','f-pdf',6336,'99.9','clauses in invoice PDFs'],['refs','f-receipts',43223,'99.5','invoice numbers in the text'],['subset_sum','f-receipts',39035,'99.5','payer + invoices adding up'],['same_amount','f-receipts',7292,'98.0','month in text, else oldest'],['short_payments','f-exceptions',345,'98.2','bank charges, withholding, overpaid'],['ap_refunds','f-payments',2513,'100.0','supplier refunds of credit notes'],['duplicates','f-exceptions',622,'99.8','second payment of a paid invoice']];
+  var ml=document.getElementById('mlist'), left=N;
+  M.forEach(function(m,i){
+    left-=m[2];
+    var r=h('div','mrow',ml); r.tabIndex=0;
+    h('span','i',r,String(i+1));
+    var nm=h('span','nm',r); var sw=h('i','',nm); sw.style.background='var(--'+m[1]+')'; var t=h('span','',nm,m[0]);
+    var bar=h('span','bar',r); var s=h('span','grow',bar); s.style.width=(100*m[2]/60361)+'%'; s.style.background='var(--'+m[1]+')';
+    h('span','n',r,fmt(m[2])); h('span','p',r,m[3]+'%');
+    var lfl=left;
+    bindTip(r,function(e){ showTip(e,'matcher '+(i+1)+' · '+m[0],fmt(m[2])+' lines',[[null,m[4]],[null,'precision '+m[3]+'%'],[null,fmt(lfl)+' lines left after it']]); });
+  });
+  var rr=h('div','mrow',ml); h('span','i',rr,'→'); var nm2=h('span','nm',rr); var sw2=h('i','',nm2); sw2.style.background='var(--f-nonitem)'; h('span','',nm2,'to classifier');
+  var b2=h('span','bar',rr); var s2=h('span','grow',b2); s2.style.width=(100*23110/60361)+'%'; s2.style.background='var(--f-nonitem)';
+  h('span','n',rr,fmt(left)); h('span','p',rr,'80.9%');
+  bindTip(rr,function(e){ showTip(e,'classification',fmt(left)+' lines',[[null,'19,051 truly settle nothing (almost all right)'],[null,'about 4,000 are item lines no matcher could claim']]); });
+
+  /* ---- 5. mini diagrams ---- */
+  var g=document.getElementById('ddr');
+  for(var k=0;k<11;k++){ var col=k%4,row=Math.floor(k/4); var x=10+col*36,y=18+row*26;
+    el('rect',{class:k===9?'fx':'bxf',x:x,y:y,width:30,height:18,rx:4},g); }
+  [27,53,79].forEach(function(y){ el('path',{class:'k dr',pathLength:1,d:'M156,'+y+' C185,'+y+' 185,62 210,62'},g); });
+  el('line',{class:'k',x1:154,y1:20,x2:154,y2:86},g);
+  el('text',{x:10,y:12,class:'s'},g,'receipts in the batch file');
+
+  var cb=document.getElementById('cardbars'); var orders=[130.03,1013.29,465.89,228.47,195.70], tot=2033.38, xx=8;
+  orders.forEach(function(o){ var w=320*o/tot; el('rect',{class:'bxf',x:xx,y:26,width:Math.max(w-2,2),height:28,rx:3},cb); if(w>50) el('text',{x:xx+w/2-1,y:44,'text-anchor':'middle'},cb,o.toFixed(2)); xx+=w; });
+
+  var ag=document.getElementById('advgrid');
+  for(var a=0;a<97;a++){ var c=a%14,rw=Math.floor(a/14); el('rect',{class:(a===18||a===51||a===77)?'fx':'ff',x:20+c*11.6,y:54+rw*14.5,width:8.5,height:10,rx:2,opacity:(a===18||a===51||a===77)?1:.55},ag); }
+
+  var pool=document.getElementById('pool'); var vals=[null,'298.97',null,'508.28',null,null,'539.65',null];
+  vals.forEach(function(v,i){ var x=8+i*41; el('rect',{class:v?'bxf':'bx',x:x,y:74,width:36,height:28,rx:5},pool); if(v){ el('text',{x:x+18,y:92,'text-anchor':'middle',style:'font-size:9px'},pool,v); } else el('text',{x:x+18,y:92,'text-anchor':'middle',class:'s'},pool,'·'); });
+
+  var mg=document.getElementById('months'); var labs=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  labs.forEach(function(m,i){ var x=8+i*27.3; var on=i===10; el('rect',{class:on?'ff':'bx',x:x,y:28,width:23,height:44,rx:4},mg); el('text',{x:x+11.5,y:88,'text-anchor':'middle',class:on?'b':'s'},mg,m); if(on){ el('text',{x:x+11.5,y:54,'text-anchor':'middle',style:'fill:#fff;font-size:12px'},mg,'✓'); } });
+
+  var cat=document.getElementById('catbar'); var C=[['BANK_FEES',9718],['UNIDENTIFIED',4585],['CASH_POOL',1554],['18 others',3194]], ct=19051, cx=8;
+  var ccol=['var(--f-nonitem)','var(--f-exceptions)','var(--f-receipts)','var(--muted)'];
+  C.forEach(function(c,i){ var w=324*c[1]/ct; el('rect',{x:cx,y:8,width:Math.max(w-2,1),height:22,rx:3,style:'fill:'+ccol[i]},cat); cx+=w;
+    var lx=[8,86,181,259][i]; el('rect',{x:lx,y:40,width:9,height:9,rx:2,style:'fill:'+ccol[i]},cat); el('text',{x:lx+13,y:48},cat,c[0]); el('text',{x:lx+13,y:62,class:'s'},cat,fmt(c[1])); });
+
+  /* ---- 6. dumbbells ---- */
+  function dumb(id,rows){ var host=document.getElementById(id);
+    rows.forEach(function(r){ var d=h('div','db',host); h('span','nm',d,r[0]); var ln=h('div','ln',d);
+      var seg=h('span','seg',ln); seg.style.left=(r[1]*100)+'%'; seg.style.width=((r[2]-r[1])*100)+'%';
+      var a=h('span','a',ln); a.style.left=(r[1]*100)+'%'; var b=h('span','b',ln); b.style.left=(r[2]*100)+'%'; b.dataset.to=(r[2]*100)+'%'; b.dataset.from=(r[1]*100)+'%';
+      h('span','v',d,r[3]); }); }
+  dumb('unid',[['precision',0.442,0.992,'0.442 → 0.992'],['F1',0.614,0.956,'0.614 → 0.956']]);
+  var uh=document.getElementById('unid'); h('p','note',uh,'First version (grey) vs p_items < 0.9 (green).');
+
+  function lk(id,rows){ var host=document.getElementById(id); rows.forEach(function(r){ var d=h('div','lk',host); h('span','',d,r[0]); var b=h('div','bar',d); var s=h('span','grow',b); s.style.width=(r[1]*100)+'%'; s.style.background=r[2]; h('span','v',d,r[3]); }); }
+  lk('overp',[['inside pattern',310/314,'var(--ok)','310 / 314'],['outside pattern',0,'var(--bad)','0 / 55']]);
+  lk('leakbars',[['forward replay',1,'var(--s1)','274,712'],['backward (leaky)',252887/274712,'var(--s2)','252,887']]);
+
+  var F1=[['PARTIAL',.963],['OVERPAYMENT',.992,.575],['SHORT_DISCOUNT',.982],['SHORT_BANK_CHARGES',.937,.368],['SHORT_WITHHOLDING',.983],['SHORT_DISPUTE',.918],['DUPLICATE_PAYMENT',.966,.110],['UNIDENTIFIED',.956,.614],['RETURNED',.994],['FX_DIFFERENCE',.924]];
+  var fg=document.getElementById('f1grid');
+  F1.forEach(function(f){ var t=h('div','f1 lift',fg); h('span','c',t,f[0]+(f[2]!=null?' · was '+f[2].toFixed(3):'')); h('b','',t,f[1].toFixed(3)); var m=h('div','m',t); var s=h('span','grow',m); s.style.transform='scaleX('+f[1]+')'; s.dataset.sx=f[1]; });
+
+  /* ---- 9. points lost ---- */
+  var LOST=[['ar_ref_noise',1.28,'96.1 %','Payments of 8+ invoices out of 30+ open ones: many subsets add up'],['ar_1toN_credit_note',1.25,'74.8 %','Big lines netting several credit notes; truncated texts allow several sets'],['ar_short_dispute',0.98,'82.8 %','17 % of lines have no advice at all'],['ar_1toN_text',0.44,'94.8 %','Truncated multi-invoice texts'],['ar_n_to_m',0.28,'68.3 %','Refs cannot tell a remainder from a first partial'],['ap_fx',0.21,'99.8 %','A few giant bulk lines with one bad row each'],['ar_fx',0.17,'87.4 %','No orig_amount and ambiguous rates']];
+  hbars('lostbars',LOST.map(function(l){return {name:l[0],sub:l[3],parts:[{v:l[1],c:'var(--s2)'}],label:l[1].toFixed(2),tip:[[null,'line accuracy '+l[2]],[null,l[3]]]};}),1.4,{unit:' points lost'});
+
+  /* ---- 8. progression chart ---- */
+  var STEPS=[{x:80,v:12.72,n:['Our','baseline'],d:'Starter idea on our ingestion'},{x:200,v:90.04,n:['First full','pipeline'],d:'All side-file matchers, references, subset-sum, categories, exception rules (8 parallel matcher agents)'},
+    {x:320,v:90.81,n:['UNIDENTIFIED','threshold'],d:'p_items < 0.9 and a bad fallback dropped'},{x:440,v:96.40,n:['Second-wave','matchers'],d:'Duplicates, refunds, refs, subset-sum, half-up rounding, short payments'},
+    {x:560,v:96.36,n:['Leak fixed','(honest val)'],d:'Start state rebuilt from payments before the window only'}];
+  var HOLD={x:650,v:96.46,n:['Holdout','2024 H1'],d:'Untouched window, never used for tuning',c:'h'}, LIVE={x:725,v:93.73,n:['LIVE','v1 file'],d:'First real out-of-sample score; an older file',c:'l'};
+  function chart(svgId,y0,y1,top,bot,ticks,refs,labels){
+    var svg=document.getElementById(svgId); var Y=function(v){return bot-(v-y0)*(bot-top)/(y1-y0);};
+    ticks.forEach(function(t){ el('line',{class:'gl',x1:44,x2:752,y1:Y(t),y2:Y(t)},svg); el('text',{class:'ax',x:36,y:Y(t)+4,'text-anchor':'end'},svg,String(t)); });
+    (refs||[]).forEach(function(r){ el('line',{class:'ref',x1:44,x2:600,y1:Y(r[0]),y2:Y(r[0])},svg); el('text',{class:'reft',x:598,y:Y(r[0])-5,'text-anchor':'end'},svg,r[1]); });
+    el('line',{class:'sep',x1:605,x2:605,y1:top-6,y2:bot},svg);
+    var pts=STEPS.filter(function(s){return s.v>=y0;});
+    var dpath=pts.map(function(s,i){return (i?'L':'M')+s.x+','+Y(s.v).toFixed(1);}).join(' ');
+    if(svgId==='progsvg'){ el('path',{class:'area fade',d:dpath+' L'+pts[pts.length-1].x+','+bot+' L'+pts[0].x+','+bot+' Z'},svg); }
+    el('path',{class:'ln dr',pathLength:1,d:dpath},svg);
+    pts.concat([HOLD,LIVE]).forEach(function(s,i){
+      var cy=Y(s.v);
+      var hit=el('circle',{class:'hit',cx:s.x,cy:cy,r:14,tabindex:0,'aria-label':s.n.join(' ')+': '+s.v.toFixed(2)},svg);
+      var c=el('circle',{class:'pt fade '+(s.c||''),cx:s.x,cy:cy,r:5.5},svg); c.style.transitionDelay=(0.25+i*0.15)+'s';
+      var low=s.v<20; var lab=el('text',{class:'vl fade',x:low?s.x+12:s.x,y:low?cy+4:cy-12,'text-anchor':low?'start':'middle'},svg,s.v.toFixed(2)); lab.style.transitionDelay=(0.3+i*0.15)+'s';
+      if(labels){ var t=el('text',{class:'xl',x:s.x,y:bot+20,'text-anchor':'middle'},svg); el('tspan',{x:s.x,dy:0},t,s.n[0]); el('tspan',{x:s.x,dy:13},t,s.n[1]); }
+      bindTip(hit,function(e){ showTip(e,s.n.join(' '),s.v.toFixed(2),[[s.c==='h'?'var(--ok)':s.c==='l'?'var(--s2)':'var(--s1)',s.d]]); });
+    });
+  }
+  chart('progsvg',0,100,24,300,[0,25,50,75,100],[[19,'naive baseline ≈19'],[61,'well-worked rules ≈61']],true);
+  chart('zoomsvg',89,97,22,178,[89,91,93,95,97],null,true);
+  // zoom svg label room
+  document.getElementById('zoomsvg').setAttribute('viewBox','0 0 760 215');
+
+  /* ---- reveal + counters ---- */
+  var revealables=[].slice.call(document.querySelectorAll('.rv'));
+  function finish(elm){ elm.classList.remove('pre');
+    [].forEach.call(elm.querySelectorAll('.db .b'),function(b){ b.style.left=b.dataset.to; });
+  }
+  function count(b){ var to=parseFloat(b.dataset.count), dec=+b.dataset.dec||0, suf=b.dataset.suf||''; var t0=null, dur=1400;
+    function step(ts){ if(!t0) t0=ts; var p=Math.min(1,(ts-t0)/dur), e=1-Math.pow(1-p,3); b.textContent=fmt(to*e,dec)+suf; if(p<1) requestAnimationFrame(step); }
+    requestAnimationFrame(step); }
+  if(!reduce && 'IntersectionObserver' in window){
+    root.classList.add('js-motion');
+    var vh=window.innerHeight;
+    revealables.forEach(function(r){ var b=r.getBoundingClientRect(); if(b.top>vh*0.92){ r.classList.add('pre'); [].forEach.call(r.querySelectorAll('.db .b'),function(x){ x.style.left=x.dataset.from; }); } });
+    var io=new IntersectionObserver(function(es){ es.forEach(function(en){ if(en.isIntersecting){ finish(en.target); io.unobserve(en.target); } }); },{rootMargin:'0px 0px -8% 0px',threshold:0.08});
+    revealables.forEach(function(r){ if(r.classList.contains('pre')) io.observe(r); });
+    // safety: never leave content hidden
+    setTimeout(function(){ revealables.forEach(function(r){ var b=r.getBoundingClientRect(); if(b.top<window.innerHeight) finish(r); }); },2500);
+    [].forEach.call(document.querySelectorAll('[data-count]'),count);
+  }
+
+  /* ---- progress bar ---- */
+  var prog=document.getElementById('prog');
+  function onScroll(){ var d=document.documentElement; var p=d.scrollTop/(d.scrollHeight-d.clientHeight||1); prog.style.setProperty('--p',Math.max(0,Math.min(1,p))); }
+  window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+})();
+</script>

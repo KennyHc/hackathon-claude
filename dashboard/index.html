@@ -1,0 +1,582 @@
+<meta name="dash-one-writer">
+<style>
+  /* Layout: a mission-control board — status band, four score tiles, then one card per question, two to a row when wide. */
+  #dash-root { --dash-gutter: clamp(16px, 3vw, 40px); }
+  .mc { display: grid; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans); color: var(--color-fg); max-width: 1320px; margin-inline: auto; }
+  .mc-head { display: grid; gap: var(--cds-gap-sm); padding-block: var(--cds-pad-md) 0; }
+  .mc-eyebrow { font-size: var(--cds-font-size-caption); letter-spacing: .08em; text-transform: uppercase; color: var(--color-fg-muted); display: flex; gap: var(--cds-gap-sm); align-items: center; flex-wrap: wrap; }
+  .mc-live { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border: 1px solid var(--color-border-line); border-radius: 999px; letter-spacing: .04em; }
+  .mc-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--color-ok); display: inline-block; }
+  .mc-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: clamp(2rem, 4.2vw, 3.4rem); line-height: 1.05; margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+  .mc-take { font-size: var(--cds-font-size-heading); line-height: 1.5; color: var(--color-fg-muted); max-width: 70ch; margin: 0; text-wrap: pretty; }
+  .mc-take b { color: var(--color-fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .mc-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--cds-gap-md); }
+  .mc-tile { position: relative; overflow: hidden; background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: grid; gap: var(--cds-gap-xs); transition: transform var(--cds-dur-slow) var(--cds-ease-out), box-shadow var(--cds-dur-slow) var(--cds-ease-out), border-color var(--cds-dur-slow); }
+  .mc-tile::after { content: ""; position: absolute; inset: auto 0 0 0; height: 3px; background: var(--mc-tone, var(--cds-chart-muted)); transform: scaleX(.18); transform-origin: left; transition: transform var(--cds-dur-slow) var(--cds-ease-out); }
+  .mc-tile:hover { transform: translateY(-3px); box-shadow: var(--cds-shadow-popover); border-color: var(--cds-chart-axis); }
+  .mc-tile:hover::after { transform: scaleX(1); }
+  .mc-tile.mc-hero { --mc-tone: var(--color-ok); }
+  .mc-tlabel { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); letter-spacing: .06em; text-transform: uppercase; }
+  .mc-num { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: clamp(2.4rem, 4vw, 3.2rem); line-height: 1; font-variant-numeric: tabular-nums; display: inline-block; }
+  .mc-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-variant-numeric: tabular-nums; }
+  .mc-sub b { font-weight: 600; }
+  .mc-up { color: var(--color-ok); }
+  .mc-down { color: var(--color-bad); }
+
+  .mc-section { display: grid; gap: var(--cds-gap-md); }
+  .mc-h2 { font-size: var(--cds-font-size-title); font-weight: var(--cds-font-weight-medium); margin: 0; text-wrap: balance; }
+  .mc-lede { margin: 0; color: var(--color-fg-muted); max-width: 72ch; line-height: 1.5; }
+  .mc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: var(--cds-gap-md); }
+  .mc-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: grid; gap: var(--cds-gap-sm); align-content: start; min-width: 0; transition: border-color var(--cds-dur-slow), box-shadow var(--cds-dur-slow) var(--cds-ease-out); }
+  .mc-card:hover { border-color: var(--cds-chart-axis); box-shadow: var(--cds-shadow-popover); }
+  .mc-card h3 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+  .mc-note { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); line-height: 1.45; }
+  .mc-wide { grid-column: 1 / -1; }
+  .mc-chart { position: relative; min-width: 0; }
+  .mc-chart svg { display: block; overflow: visible; }
+  .mc-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm) var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; padding: 0; list-style: none; }
+  .mc-legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .mc-sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--cds-chart-muted); }
+
+  .mc-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); line-height: 1.45; white-space: nowrap; z-index: 3; opacity: 0; transform: translateY(4px); transition: opacity 120ms, transform 120ms; font-variant-numeric: tabular-nums; }
+  .mc-tip.on { opacity: 1; transform: none; }
+  .mc-tip .k { color: var(--cds-text-secondary); }
+
+  .mc-clock { display: grid; gap: var(--cds-gap-sm); }
+  .mc-next { font-family: var(--font-anthropic-serif); font-size: clamp(1.6rem, 3vw, 2.2rem); line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+  .mc-tools { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; justify-content: space-between; }
+  .mc-search { font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 6px 10px; min-width: 0; width: min(100%, 18rem); }
+  .mc-search:focus-visible, .mc-th:focus-visible { outline: 2px solid var(--cds-chart-axis); outline-offset: 2px; }
+  .mc-tablebox { max-height: 34rem; overflow: auto; border-top: 1px solid var(--color-border-line); }
+  .mc-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-body); font-variant-numeric: tabular-nums; }
+  .mc-table th { position: sticky; top: 0; background: var(--color-panel); text-align: right; font-weight: var(--cds-font-weight-medium); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); padding: 8px 10px; border-bottom: 1px solid var(--color-border-line); z-index: 1; }
+  .mc-table th:first-child, .mc-table td:first-child { text-align: left; }
+  .mc-th { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; white-space: nowrap; }
+  .mc-th::after { content: " ↕"; opacity: .35; }
+  th[aria-sort="ascending"] .mc-th::after { content: " ↑"; opacity: 1; }
+  th[aria-sort="descending"] .mc-th::after { content: " ↓"; opacity: 1; }
+  .mc-table td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .mc-table tbody tr { transition: background-color 160ms; }
+  .mc-table tbody tr:hover { background: var(--cds-chart-grid); }
+  .mc-cellbar { display: inline-grid; grid-template-columns: 3.4rem 3.2rem; align-items: center; gap: 6px; justify-content: end; }
+  .mc-cellbar span { height: 6px; border-radius: 3px; background: var(--cds-chart-grid); position: relative; overflow: hidden; }
+  .mc-cellbar span i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--mc-bar, var(--cds-chart-muted)); }
+  .mc-bad { color: var(--color-bad); }
+  .mc-warn { color: var(--color-warn); }
+  @media (max-width: 640px) { .mc-hide-narrow { display: none; } }
+
+  details.mc-notes { border-top: 1px solid var(--color-border-line); padding-block: var(--cds-pad-md); color: var(--color-fg-muted); font-size: var(--cds-font-size-body); line-height: 1.55; }
+  details.mc-notes summary { cursor: pointer; color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
+  details.mc-notes dl { display: grid; grid-template-columns: minmax(8rem, 14rem) 1fr; gap: var(--cds-gap-xs) var(--cds-gap-md); margin: var(--cds-gap-md) 0 0; }
+  details.mc-notes dt { color: var(--color-fg); }
+  details.mc-notes dd { margin: 0; }
+  @media (max-width: 640px) { details.mc-notes dl { grid-template-columns: 1fr; } }
+
+  [data-dash-source-state=empty] { color: transparent; }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .mc-reveal.mc-in { animation: mc-rise var(--cds-dur-slow) var(--cds-ease-out) both; }
+    .mc-tiles .mc-tile:nth-child(2).mc-in { animation-delay: 70ms; }
+    .mc-tiles .mc-tile:nth-child(3).mc-in { animation-delay: 140ms; }
+    .mc-tiles .mc-tile:nth-child(4).mc-in { animation-delay: 210ms; }
+    .mc-num.mc-ready { animation: mc-roll 700ms var(--cds-ease-out) both; }
+    .mc-live i { animation: mc-pulse 2.4s ease-in-out infinite; }
+    @keyframes mc-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @keyframes mc-roll { from { opacity: 0; transform: translateY(.35em); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+    @keyframes mc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+  }
+</style>
+
+<div class="mc">
+  <header class="mc-head" id="top">
+    <div class="mc-eyebrow"><span class="mc-live"><i></i>Talky × Anthropic · Close the Books</span><span>Saturday 7 November 2026 · Madrid</span></div>
+    <h1 class="mc-title">Close the Books Mission Control</h1>
+    <p class="mc-take">LIVE v2 scored <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v2" data-fmt="2">—</b>, <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=val_minus_live" data-fmt="2">—</b> points under validation and <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=hold_minus_live" data-fmt="2">—</b> under the untouched holdout. Precision holds (<b data-draw="num" data-source="runs" data-field="precision" data-where="run=LIVE v2" data-fmt="3">—</b> on LIVE vs <b data-draw="num" data-source="runs" data-field="precision" data-where="run=Validation" data-fmt="3">—</b>); the gap is recall (<b data-draw="num" data-source="runs" data-field="recall" data-where="run=LIVE v2" data-fmt="3">—</b> vs <b data-draw="num" data-source="runs" data-field="recall" data-where="run=Validation" data-fmt="3">—</b>): lines we leave unmatched, not wrong matches.</p>
+  </header>
+
+  <section class="mc-tiles" aria-label="Headline scores">
+    <article class="mc-tile mc-hero mc-reveal">
+      <span class="mc-tlabel">LIVE leaderboard · v2</span>
+      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v2" data-fmt="2">—</span>
+      <span class="mc-sub"><b class="mc-up" data-draw="num" data-source="gaps" data-field="value" data-where="measure=v2_minus_v1" data-fmt="+2">—</b> vs v1 (<span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v1" data-fmt="2">—</span>) · Jul–Dec 2025</span>
+    </article>
+    <article class="mc-tile mc-reveal" style="--mc-tone: var(--cds-chart-axis)">
+      <span class="mc-tlabel">Validation · tuned on</span>
+      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=Validation" data-fmt="2">—</span>
+      <span class="mc-sub">TRAIN Jan–Jun 2025 · <span data-draw="num" data-source="runs" data-field="lines" data-where="run=Validation" data-fmt="int">—</span> lines</span>
+    </article>
+    <article class="mc-tile mc-reveal" style="--mc-tone: var(--cds-chart-axis)">
+      <span class="mc-tlabel">Holdout · never tuned on</span>
+      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=Holdout" data-fmt="2">—</span>
+      <span class="mc-sub">TRAIN Jan–Jun 2024 · <span data-draw="num" data-source="runs" data-field="lines" data-where="run=Holdout" data-fmt="int">—</span> lines</span>
+    </article>
+    <article class="mc-tile mc-reveal">
+      <span class="mc-tlabel">Organisers' "well-worked rules"</span>
+      <span class="mc-num" data-draw="num" data-source="benchmarks" data-field="score" data-where="approach=Well-worked heuristic rules" data-fmt="0">—</span>
+      <span class="mc-sub">Reference score on the rules page · naive approach <span data-draw="num" data-source="benchmarks" data-field="score" data-where="approach=Naive: exact amount + reference" data-fmt="0">—</span></span>
+    </article>
+  </section>
+
+  <section class="mc-section mc-reveal" id="clock">
+    <div class="mc-card mc-wide">
+      <h3>Today's clock</h3>
+      <p class="mc-note">Madrid time. The marker shows now; FINAL is a single shot and must be submitted before submissions close.</p>
+      <div class="mc-chart mc-clock" data-draw="clock" data-source="timeline" style="min-height: 150px"></div>
+    </div>
+  </section>
+
+  <section class="mc-section" id="generalise">
+    <h2 class="mc-h2 mc-reveal">Does it generalise?</h2>
+    <p class="mc-lede mc-reveal">Each score component on the window we tuned on, a window nobody tuned on, and the two LIVE uploads. Dots that sit together mean the rules carry over; a dot that drifts left is where LIVE is harder.</p>
+    <div class="mc-grid">
+      <div class="mc-card mc-reveal">
+        <h3>Score components by run</h3>
+        <p class="mc-note">Allocation precision and recall make up allocation F1 (half the score); transaction accuracy is 30 %, exception macro-F1 20 %.</p>
+        <ul class="mc-legend" data-draw="runlegend" data-source="runs"></ul>
+        <div class="mc-chart" data-draw="components" data-source="runs" style="min-height: 280px"></div>
+      </div>
+      <div class="mc-card mc-reveal">
+        <h3>How the score was built</h3>
+        <p class="mc-note">Each step's score; dashed lines are the organisers' reference scores for a naive approach and for well-worked rules.</p>
+        <div class="mc-chart" data-draw="progress" data-source="progression benchmarks" style="min-height: 280px"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mc-section" id="segments">
+    <h2 class="mc-h2 mc-reveal">Case types: local vs LIVE</h2>
+    <p class="mc-lede mc-reveal">Each bubble is one case type (segment), sized by the points it is worth. On the diagonal, LIVE matches validation; below it, LIVE is worse. Hover a bubble for its numbers.</p>
+    <div class="mc-grid">
+      <div class="mc-card mc-reveal">
+        <h3>Line accuracy, validation vs LIVE v2</h3>
+        <p class="mc-note">Shaded band: within 2 points of validation. Segments the leaderboard does not report are left out.</p>
+        <div class="mc-chart" data-draw="scatter" data-source="segments" style="min-height: 340px"></div>
+      </div>
+      <div class="mc-card mc-reveal">
+        <h3>Where points still leak</h3>
+        <p class="mc-note">Points lost per segment on validation and holdout (estimate: 30 × share of lines wrong + 50 × share of pairs on wrong lines).</p>
+        <ul class="mc-legend"><li><i class="mc-sw" data-draw="sw0"></i>Validation</li><li><i class="mc-sw" data-draw="sw1"></i>Holdout</li></ul>
+        <div class="mc-chart" data-draw="leaks" data-source="segments" style="min-height: 320px"></div>
+      </div>
+      <div class="mc-card mc-wide mc-reveal">
+        <div class="mc-tools">
+          <h3>Every segment</h3>
+          <input id="mc-seg-search" class="mc-search" type="search" placeholder="Filter segments" aria-label="Filter segments">
+        </div>
+        <p class="mc-note">Sorted by the points each segment is worth. Click a column to sort. Red: LIVE v2 more than 2 points below validation.</p>
+        <div class="mc-tablebox">
+          <table class="mc-table" data-source="segments" data-row-key="segment">
+            <thead><tr>
+              <th data-field="segment" aria-sort="none"><button class="mc-th" data-sort="segment">Segment</button></th>
+              <th data-field="lines" aria-sort="none" class="mc-hide-narrow"><button class="mc-th" data-sort="lines">Lines (val)</button></th>
+              <th data-field="max_points" aria-sort="descending"><button class="mc-th" data-sort="max_points">Max points</button></th>
+              <th data-field="accuracy_val" aria-sort="none"><button class="mc-th" data-sort="accuracy_val">Validation</button></th>
+              <th data-field="accuracy_hold" aria-sort="none" class="mc-hide-narrow"><button class="mc-th" data-sort="accuracy_hold">Holdout</button></th>
+              <th data-field="accuracy_live_v2" aria-sort="none"><button class="mc-th" data-sort="accuracy_live_v2">LIVE v2</button></th>
+              <th data-field="points_lost_val" aria-sort="none" class="mc-hide-narrow"><button class="mc-th" data-sort="points_lost_val">Points lost (val)</button></th>
+            </tr></thead>
+            <tbody data-draw="segtable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mc-section" id="parts">
+    <h2 class="mc-h2 mc-reveal">The parts, window against window</h2>
+    <p class="mc-lede mc-reveal">A rule fitted to the tuning window loses precision first on new data. Matchers run in this order; each claims whole lines and later ones never touch them.</p>
+    <div class="mc-grid">
+      <div class="mc-card mc-reveal">
+        <h3>Matchers: lines claimed and precision</h3>
+        <p class="mc-note">Bar: lines claimed on validation. Right: share of those lines fully correct, validation then holdout.</p>
+        <div class="mc-chart" data-draw="matchers" data-source="matchers" style="min-height: 380px"></div>
+      </div>
+      <div class="mc-card mc-reveal">
+        <h3>Exception F1, validation vs holdout</h3>
+        <p class="mc-note">Each code counts equally in the exception score. A line between the dots is the gap.</p>
+        <ul class="mc-legend"><li><i class="mc-sw" data-draw="sw0"></i>Validation</li><li><i class="mc-sw" data-draw="sw1"></i>Holdout</li></ul>
+        <div class="mc-chart" data-draw="exceptions" data-source="exceptions" style="min-height: 330px"></div>
+      </div>
+    </div>
+  </section>
+
+  <details class="mc-notes">
+    <summary>Definitions and what's left out</summary>
+    <dl>
+      <dt>Score</dt><dd>100 × (0.5 · allocation F1 + 0.3 · transaction accuracy + 0.2 · exception macro-F1). An amount counts as right within max(0.01, 0.5 %).</dd>
+      <dt>Allocation precision / recall</dt><dd>Share of the (bank line, item, amount) pairs we submit that are right / share of the true pairs we found.</dd>
+      <dt>Transaction accuracy</dt><dd>Share of bank lines where every row is right.</dd>
+      <dt>Validation</dt><dd>TRAIN Jan–Jun 2025 rebuilt to look like LIVE. Rules and thresholds were written while looking at it.</dd>
+      <dt>Holdout</dt><dd>TRAIN Jan–Jun 2024, built the same way and never used for tuning. Learned parts only see data before 2024-01-01.</dd>
+      <dt>Max points</dt><dd>What a segment adds going from 0 % to 100 %: 30 × its share of lines + 50 × its share of item pairs.</dd>
+      <dt>Left out</dt><dd>FINAL is scored only at the reveal. LIVE per-exception scores are not published, so the exception chart compares validation and holdout only. LIVE does not report every segment.</dd>
+    </dl>
+  </details>
+</div>
+
+<script>
+  window.mc = (() => {
+    const motion = window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+    const fmts = { '0': d3.format('.0f'), '2': d3.format('.2f'), '3': d3.format('.3f'), '+2': d3.format('+.2f'), 'int': d3.format(','), 'pct': d3.format('.1%') };
+    const where = (s) => (s || '').split('&').filter(Boolean).map((p) => p.split('=').map(decodeURIComponent));
+    const pick = (rows, s) => rows.find((r) => where(s).every(([k, v]) => String(r[k]) === v));
+    const runColor = { 'Validation': 0, 'Holdout': 1, 'LIVE v1': null, 'LIVE v2': 2 };
+    const color = (run) => runColor[run] == null ? 'var(--cds-chart-muted)' : dash.colors[runColor[run]];
+    const seen = new WeakSet();
+    const first = (el) => { const f = !seen.has(el); seen.add(el); return f && motion; };
+    const tip = (box) => {
+      let t = box.querySelector(':scope > .mc-tip');
+      if (!t) { t = document.createElement('div'); t.className = 'mc-tip'; box.appendChild(t); }
+      return {
+        show(ev, lines) {
+          t.replaceChildren(...lines.map(([k, v], i) => { const d = document.createElement('div'); if (i === 0) { d.className = 'k'; d.textContent = k; } else { d.textContent = v == null ? k : `${k}: ${v}`; } return d; }));
+          const r = box.getBoundingClientRect(); let x = ev.clientX - r.left + 14, y = ev.clientY - r.top + 12;
+          t.classList.add('on'); const w = t.offsetWidth, h = t.offsetHeight;
+          if (x + w > r.width) x = Math.max(0, ev.clientX - r.left - w - 14);
+          if (y + h > r.height) y = Math.max(0, r.height - h);
+          t.style.left = `${x}px`; t.style.top = `${y}px`;
+        },
+        hide() { t.classList.remove('on'); },
+      };
+    };
+    const axisText = (g) => g.attr('font-size', null).attr('font-family', null).call((s) => s.selectAll('text').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)')).call((s) => s.selectAll('line').style('stroke', 'var(--cds-chart-grid)')).call((s) => s.select('.domain').remove());
+    const measure = (svg, texts) => { const g = svg.append('g').style('font-size', 'var(--cds-font-size-caption)'); const w = d3.max(texts, (s) => g.append('text').text(s).node().getComputedTextLength()) || 0; g.remove(); return w; };
+    // Drop any label whose box meets one kept earlier (selector order = priority).
+    const declutter = (svg, sels) => {
+      const kept = [];
+      sels.forEach((sel) => svg.selectAll(sel).each(function () {
+        const b = this.getBBox(), pad = 2;
+        const hit = kept.some((k) => !(b.x + b.width + pad < k.x || k.x + k.width + pad < b.x || b.y + b.height + pad < k.y || k.y + k.height + pad < b.y));
+        if (hit) this.remove(); else kept.push(b);
+      }));
+    };
+    return { motion, fmts, where, pick, color, first, tip, axisText, measure, declutter };
+  })();
+
+  dash.calc('gaps', {
+    inputs: ['runs'],
+    title: 'Score gaps between runs',
+    description: 'Differences between run scores: validation and holdout minus LIVE v2, and LIVE v2 minus LIVE v1.',
+    fn: (runs) => {
+      const s = (name) => runs.find((r) => r.run === name).score;
+      return [
+        { measure: 'val_minus_live', value: +(s('Validation') - s('LIVE v2')).toFixed(2) },
+        { measure: 'hold_minus_live', value: +(s('Holdout') - s('LIVE v2')).toFixed(2) },
+        { measure: 'v2_minus_v1', value: +(s('LIVE v2') - s('LIVE v1')).toFixed(2) },
+      ];
+    },
+  });
+
+  dash.draw('num', (el) => {
+    const d = dash.data(el.dataset.source);
+    const row = d.status === 'ok' ? mc.pick(d.data, el.dataset.where) : null;
+    if (!row || row[el.dataset.field] == null) { el.textContent = '—'; el.classList.remove('mc-ready'); return; }
+    el.textContent = (mc.fmts[el.dataset.fmt] || String)(row[el.dataset.field]);
+    if (mc.first(el)) el.classList.add('mc-ready');
+  });
+
+  dash.draw('sw0', (el) => { el.style.background = dash.colors[0]; });
+  dash.draw('sw1', (el) => { el.style.background = dash.colors[1]; });
+
+  dash.draw('runlegend', (el) => {
+    const d = dash.data('runs');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    el.replaceChildren(...d.data.map((r) => {
+      const li = document.createElement('li'); const sw = document.createElement('i'); sw.className = 'mc-sw'; sw.style.background = mc.color(r.run);
+      li.append(sw, document.createTextNode(`${r.run} · ${r.role}`)); return li;
+    }));
+  });
+</script>
+
+<script>
+  // Today's clock: the day from 09:00 to 21:00 Madrid, events from the timeline, a moving "now" marker.
+  dash.draw('clock', {
+    mount: (el) => { const id = setInterval(() => dash.draw('clock'), 30000); return { id }; },
+    update: (el) => {
+      const d = dash.data('timeline');
+      if (d.status !== 'ok') { el.textContent = '—'; return; }
+      el.replaceChildren();
+      const ev = d.data.map((r) => ({ ...r, t: new Date(r.at) })).sort((a, b) => a.t - b.t);
+      const now = new Date();
+      const next = ev.find((e) => e.t > now && e.kind === 'deadline') || ev.find((e) => e.t > now);
+      const head = document.createElement('div'); head.className = 'mc-next';
+      if (next) {
+        const mins = Math.max(0, Math.round((next.t - now) / 60000));
+        head.textContent = `${next.event} in ${Math.floor(mins / 60)} h ${String(mins % 60).padStart(2, '0')} min`;
+      } else head.textContent = 'All deadlines have passed';
+      el.appendChild(head);
+      const W = el.clientWidth || 600, H = 92, m = { l: 8, r: 8 };
+      const day0 = new Date('2026-11-07T09:00:00+01:00'), day1 = new Date('2026-11-07T21:00:00+01:00');
+      const x = d3.scaleUtc([day0, day1], [m.l, W - m.r]).clamp(true);
+      const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Timeline of today');
+      const hm = (t) => t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
+      svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', 46).attr('y2', 46).style('stroke', 'var(--cds-chart-grid)').attr('stroke-width', 6).attr('stroke-linecap', 'round');
+      const done = svg.append('line').attr('x1', m.l).attr('y1', 46).attr('y2', 46).attr('stroke-width', 6).attr('stroke-linecap', 'round').style('stroke', dash.colors[0]).attr('x2', m.l);
+      const nx = x(now);
+      if (mc.first(el)) done.transition().duration(1100).ease(d3.easeCubicOut).attr('x2', nx); else done.attr('x2', nx);
+      const tipper = mc.tip(el);
+      const kinds = { deadline: 'var(--color-bad)', submission: dash.colors[2], milestone: 'var(--cds-chart-axis)' };
+      const pts = svg.selectAll('g.ev').data(ev).join('g').attr('class', 'ev').attr('transform', (e) => `translate(${x(e.t)},46)`).style('cursor', 'default');
+      pts.append('circle').attr('r', 9).style('fill', 'transparent');
+      pts.append('circle').attr('r', (e) => e.kind === 'deadline' ? 6 : 4.5).style('fill', (e) => kinds[e.kind]).style('stroke', 'var(--color-panel)').attr('stroke-width', 2);
+      const labelled = ev.filter((e) => e.kind === 'deadline');
+      svg.selectAll('text.tl').data(labelled).join('text').attr('class', 'tl').attr('x', (e) => x(e.t)).attr('y', (e, i) => i % 2 ? 84 : 22)
+        .attr('text-anchor', (e) => x(e.t) > W - 60 ? 'end' : 'middle').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text((e) => hm(e.t));
+      svg.append('line').attr('x1', nx).attr('x2', nx).attr('y1', 32).attr('y2', 60).style('stroke', 'var(--color-fg)').attr('stroke-width', 2);
+      svg.append('text').attr('class', 'now').attr('x', nx).attr('y', 72).attr('text-anchor', nx > W - 40 ? 'end' : nx < 40 ? 'start' : 'middle').style('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text(`now ${hm(now)}`);
+      mc.declutter(svg, ['text.now', 'text.tl']);
+      pts.on('mousemove', (event, e) => tipper.show(event, [[hm(e.t)], [e.event]])).on('mouseleave', () => tipper.hide());
+    },
+    unmount: (el, made) => clearInterval(made.id),
+  });
+</script>
+
+<script>
+  // Score components: one row per metric, a dot per run on a shared axis.
+  dash.draw('components', (el) => {
+    const d = dash.data('runs');
+    el.replaceChildren();
+    if (d.status !== 'ok') { el.textContent = '—'; return; }
+    const metrics = [['allocation_f1', 'Allocation F1'], ['precision', 'Allocation precision'], ['recall', 'Allocation recall'], ['txn_accuracy', 'Transaction accuracy'], ['exception_macro_f1', 'Exception macro-F1']];
+    const W = el.clientWidth || 500, row = 48;
+    const svg0 = d3.select(el).append('svg').attr('width', '100%');
+    const lw = mc.measure(svg0, metrics.map((m) => m[1])) + 14;
+    const m = { l: lw, r: 18, t: 8, b: 26 }, H = m.t + m.b + row * metrics.length;
+    const svg = svg0.attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Score components by run');
+    const vals = d.data.flatMap((r) => metrics.map(([k]) => r[k]));
+    const lo = Math.floor(d3.min(vals) * 50) / 50;
+    const x = d3.scaleLinear([lo, 1], [m.l, W - m.r]);
+    const y = d3.scaleBand(metrics.map((x) => x[0]), [m.t, H - m.b]).padding(0.3);
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(3, Math.floor((W - m.l) / 80)), '.0%').tickSize(-(H - m.t - m.b))).call(mc.axisText);
+    const tipper = mc.tip(el);
+    const g = svg.selectAll('g.row').data(metrics).join('g').attr('class', 'row').attr('transform', (mm) => `translate(0,${y(mm[0]) + y.bandwidth() / 2})`);
+    g.append('text').attr('x', m.l - 12).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((mm) => mm[1]);
+    g.append('line').attr('x1', (mm) => x(d3.min(d.data, (r) => r[mm[0]]))).attr('x2', (mm) => x(d3.max(d.data, (r) => r[mm[0]]))).style('stroke', 'var(--cds-chart-axis)').attr('stroke-width', 2).attr('stroke-linecap', 'round');
+    const anim = mc.first(el);
+    g.each(function (mm) {
+      const dots = d3.select(this).selectAll('circle').data(d.data).join('circle').attr('r', (r) => r.run === 'LIVE v2' ? 7 : 5.5)
+        .style('fill', (r) => mc.color(r.run)).style('stroke', 'var(--color-panel)').attr('stroke-width', 2).style('cursor', 'default')
+        .attr('cx', anim ? x(lo) : (r) => x(r[mm[0]]));
+      if (anim) dots.transition().delay((r, i) => 120 + i * 90).duration(900).ease(d3.easeCubicOut).attr('cx', (r) => x(r[mm[0]]));
+      dots.on('mousemove', (event, r) => { d3.select(event.currentTarget).attr('r', 9); tipper.show(event, [[mm[1]], [`${r.run}`, mc.fmts['3'](r[mm[0]])], [r.window]]); })
+        .on('mouseleave', (event, r) => { d3.select(event.currentTarget).attr('r', r.run === 'LIVE v2' ? 7 : 5.5); tipper.hide(); });
+    });
+  });
+</script>
+
+<script>
+  // Score progression: one bar per step, reference lines for the organisers' benchmarks.
+  dash.draw('progress', (el) => {
+    const d = dash.data('progression'), b = dash.data('benchmarks');
+    el.replaceChildren();
+    if (d.status !== 'ok' || b.status !== 'ok') { el.textContent = '—'; return; }
+    const rows = d.data.slice().sort((a, c) => a.step - c.step);
+    const W = el.clientWidth || 500, H = 300, m = { l: 34, r: 38, t: 22, b: 34 };
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Score progression');
+    const x = d3.scaleBand(rows.map((r) => r.step), [m.l, W - m.r]).padding(0.28);
+    const y = d3.scaleLinear([0, 100], [H - m.b, m.t]);
+    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(W - m.l - m.r))).call(mc.axisText);
+    const refs = b.data.filter((r) => r.score > 15 && r.score < 100);
+    svg.selectAll('line.ref').data(refs).join('line').attr('class', 'ref').attr('x1', m.l).attr('x2', W - m.r).attr('y1', (r) => y(r.score)).attr('y2', (r) => y(r.score)).style('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 4');
+    svg.selectAll('text.ref').data(refs).join('text').attr('class', 'ref').attr('x', W - m.r + 6).attr('y', (r) => y(r.score)).attr('dy', '.35em').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text((r) => `≈${r.score}`);
+    const tone = (r) => r.phase === 'live' ? dash.colors[2] : r.phase === 'hold' ? dash.colors[1] : r.phase === 'val' ? dash.colors[0] : 'var(--cds-chart-muted)';
+    const anim = mc.first(el);
+    const bars = svg.selectAll('rect.bar').data(rows).join('rect').attr('class', 'bar').attr('x', (r) => x(r.step)).attr('width', Math.min(32, x.bandwidth())).attr('rx', 3)
+      .style('fill', tone).attr('y', anim ? y(0) : (r) => y(r.score)).attr('height', anim ? 0 : (r) => y(0) - y(r.score)).style('cursor', 'default');
+    if (anim) bars.transition().delay((r, i) => i * 110).duration(800).ease(d3.easeCubicOut).attr('y', (r) => y(r.score)).attr('height', (r) => y(0) - y(r.score));
+    const off = (x.bandwidth() - Math.min(32, x.bandwidth())) / 2;
+    bars.attr('transform', `translate(${off},0)`);
+    const lbl = svg.selectAll('text.v').data(rows).join('text').attr('class', 'v').attr('x', (r) => x(r.step) + x.bandwidth() / 2).attr('y', (r) => y(r.score) - 6).attr('text-anchor', 'middle')
+      .style('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((r) => r.score.toFixed(r.score < 20 ? 1 : 2));
+    mc.declutter(svg, ['text.ref', 'text.v']);
+    if (anim) svg.selectAll('text.v').style('opacity', 0).transition().delay((r, i) => 400 + i * 110).duration(400).style('opacity', 1);
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickSize(0).tickPadding(8)).call(mc.axisText);
+    const tipper = mc.tip(el);
+    bars.on('mousemove', (event, r) => { d3.select(event.currentTarget).style('opacity', 0.8); tipper.show(event, [[`Step ${r.step} · ${r.phase}`], [r.label], ['Score', r.score.toFixed(2)], [r.note]]); })
+      .on('mouseleave', (event) => { d3.select(event.currentTarget).style('opacity', null); tipper.hide(); });
+  });
+</script>
+
+<script>
+  // Segment scatter: validation accuracy (x) vs LIVE v2 accuracy (y), bubble size = max points.
+  dash.draw('scatter', (el) => {
+    const d = dash.data('segments');
+    el.replaceChildren();
+    if (d.status !== 'ok') { el.textContent = '—'; return; }
+    const rows = d.data.filter((r) => r.accuracy_live_v2 != null && r.accuracy_val != null && r.lines > 0);
+    const W = el.clientWidth || 500, H = Math.min(420, Math.max(300, W * 0.8)), m = { l: 44, r: 16, t: 12, b: 38 };
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Validation vs LIVE accuracy per segment');
+    const lo = Math.floor(d3.min(rows, (r) => Math.min(r.accuracy_val, r.accuracy_live_v2)) * 20) / 20;
+    const x = d3.scaleLinear([lo, 1.005], [m.l, W - m.r]);
+    const y = d3.scaleLinear([lo, 1.005], [H - m.b, m.t]);
+    const r = d3.scaleSqrt([0, d3.max(rows, (q) => q.max_points)], [2.5, Math.max(12, W / 26)]);
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5, '.0%').tickSize(-(H - m.t - m.b))).call(mc.axisText);
+    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5, '.0%').tickSize(-(W - m.l - m.r))).call(mc.axisText);
+    svg.append('text').attr('class', 'cap').attr('x', W - m.r).attr('y', H - 4).attr('text-anchor', 'end').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Validation accuracy →');
+    svg.append('text').attr('class', 'cap').attr('x', m.l + 4).attr('y', m.t + 10).style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('↑ LIVE v2 accuracy');
+    const band = d3.area().x((v) => x(v)).y0((v) => y(Math.max(lo, v - 0.02))).y1((v) => y(Math.min(1.005, v + 0.02)));
+    svg.append('path').datum(d3.range(lo, 1.0051, 0.005)).attr('d', band).style('fill', 'var(--cds-chart-grid)').style('opacity', 0.9);
+    svg.append('line').attr('x1', x(lo)).attr('y1', y(lo)).attr('x2', x(1.005)).attr('y2', y(1.005)).style('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 4');
+    const bad = (q) => q.accuracy_val - q.accuracy_live_v2 > 0.02;
+    const anim = mc.first(el);
+    const sorted = rows.slice().sort((a, b) => b.max_points - a.max_points);
+    const dots = svg.selectAll('circle.s').data(sorted).join('circle').attr('class', 's').attr('cx', (q) => x(q.accuracy_val)).attr('cy', (q) => y(q.accuracy_live_v2))
+      .style('fill', (q) => bad(q) ? 'var(--cds-chart-status-critical)' : dash.colors[0]).style('fill-opacity', 0.55).style('stroke', (q) => bad(q) ? 'var(--cds-chart-status-critical)' : dash.colors[0]).attr('stroke-width', 1.2).style('cursor', 'default')
+      .attr('r', anim ? 0 : (q) => r(q.max_points));
+    if (anim) dots.transition().delay((q, i) => i * 18).duration(700).ease(d3.easeBackOut.overshoot(1.4)).attr('r', (q) => r(q.max_points));
+    const labels = sorted.filter((q) => bad(q) && q.max_points > 0.3).slice(0, 5);
+    svg.selectAll('text.lab').data(labels).join('text').attr('class', 'lab').attr('x', (q) => x(q.accuracy_val) + r(q.max_points) + 4).attr('y', (q) => y(q.accuracy_live_v2) + 4)
+      .attr('text-anchor', (q) => x(q.accuracy_val) > W * 0.7 ? 'end' : 'start').attr('dx', (q) => x(q.accuracy_val) > W * 0.7 ? -2 * r(q.max_points) - 8 : 0)
+      .style('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((q) => q.segment);
+    mc.declutter(svg, ['text.cap', 'text.lab']);
+    const tipper = mc.tip(el), p = mc.fmts.pct;
+    dots.on('mousemove', (event, q) => { d3.select(event.currentTarget).style('fill-opacity', 0.9).attr('stroke-width', 2.5); tipper.show(event, [[q.segment], ['Validation', p(q.accuracy_val)], ['Holdout', q.accuracy_hold == null ? '—' : p(q.accuracy_hold)], ['LIVE v2', p(q.accuracy_live_v2)], ['Max points', q.max_points.toFixed(2)]]); })
+      .on('mouseleave', (event) => { d3.select(event.currentTarget).style('fill-opacity', 0.55).attr('stroke-width', 1.2); tipper.hide(); });
+  });
+
+  // Points lost: top segments, validation and holdout side by side.
+  dash.draw('leaks', (el) => {
+    const d = dash.data('segments');
+    el.replaceChildren();
+    if (d.status !== 'ok') { el.textContent = '—'; return; }
+    const rows = d.data.filter((q) => q.points_lost_val != null).sort((a, b) => b.points_lost_val - a.points_lost_val).slice(0, 8);
+    const W = el.clientWidth || 500, rowH = 34;
+    const svg0 = d3.select(el).append('svg').attr('width', '100%');
+    const lw = mc.measure(svg0, rows.map((q) => q.segment)) + 12;
+    const m = { l: lw, r: 40, t: 4, b: 24 }, H = m.t + m.b + rowH * rows.length;
+    const svg = svg0.attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Points lost per segment');
+    const x = d3.scaleLinear([0, d3.max(rows, (q) => Math.max(q.points_lost_val, q.points_lost_hold || 0))], [m.l, W - m.r]).nice();
+    const y = d3.scaleBand(rows.map((q) => q.segment), [m.t, H - m.b]).padding(0.22);
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(4).tickSize(-(H - m.t - m.b))).call(mc.axisText);
+    svg.selectAll('text.n').data(rows).join('text').attr('class', 'n').attr('x', m.l - 8).attr('y', (q) => y(q.segment) + y.bandwidth() / 2).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((q) => q.segment);
+    const anim = mc.first(el), bh = y.bandwidth() / 2 - 1;
+    const tipper = mc.tip(el);
+    [['points_lost_val', 0, 'Validation'], ['points_lost_hold', 1, 'Holdout']].forEach(([k, i, name]) => {
+      const bars = svg.selectAll(`rect.b${i}`).data(rows).join('rect').attr('class', `b${i}`).attr('x', m.l).attr('y', (q) => y(q.segment) + i * (bh + 2)).attr('height', bh).attr('rx', 2)
+        .style('fill', dash.colors[i]).attr('width', anim ? 0 : (q) => x(q[k] || 0) - m.l).style('cursor', 'default');
+      if (anim) bars.transition().delay((q, j) => j * 70 + i * 120).duration(800).ease(d3.easeCubicOut).attr('width', (q) => x(q[k] || 0) - m.l);
+      bars.on('mousemove', (event, q) => tipper.show(event, [[q.segment], ['Validation', q.points_lost_val.toFixed(2)], ['Holdout', (q.points_lost_hold || 0).toFixed(2)], ['Max points', q.max_points.toFixed(2)]])).on('mouseleave', () => tipper.hide());
+    });
+    svg.selectAll('text.v').data(rows).join('text').attr('class', 'v').attr('x', (q) => x(Math.max(q.points_lost_val, q.points_lost_hold || 0)) + 6).attr('y', (q) => y(q.segment) + y.bandwidth() / 2).attr('dy', '.35em')
+      .style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => q.points_lost_val.toFixed(2));
+    mc.declutter(svg, ['text.n', 'text.v']);
+  });
+</script>
+
+<script>
+  // Segment table: sortable, searchable, in-cell bars on one shared 0–100 % scale.
+  window.mcSort = { key: 'max_points', dir: -1 };
+  document.querySelectorAll('.mc-th').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.sort;
+    window.mcSort = { key: k, dir: window.mcSort.key === k ? -window.mcSort.dir : (k === 'segment' ? 1 : -1) };
+    document.querySelectorAll('.mc-table th').forEach((th) => th.setAttribute('aria-sort', th.dataset.field === k ? (window.mcSort.dir > 0 ? 'ascending' : 'descending') : 'none'));
+    dash.draw('segtable');
+  }));
+  document.querySelectorAll('#mc-seg-search').forEach((i) => i.addEventListener('input', () => dash.draw('segtable')));
+
+  dash.draw('segtable', (el) => {
+    const d = dash.data('segments');
+    el.replaceChildren();
+    if (d.status !== 'ok') return;
+    const q = (document.querySelector('#mc-seg-search')?.value || '').trim().toLowerCase();
+    const { key, dir } = window.mcSort;
+    const rows = d.data.filter((r) => !q || r.segment.toLowerCase().includes(q)).sort((a, b) => {
+      const va = a[key], vb = b[key];
+      if (va == null) return 1; if (vb == null) return -1;
+      return typeof va === 'string' ? dir * va.localeCompare(vb) : dir * (va - vb);
+    });
+    const p = mc.fmts.pct;
+    const acc = (v, tone) => {
+      const td = document.createElement('td');
+      if (v == null) { td.textContent = '—'; return td; }
+      const w = document.createElement('div'); w.className = 'mc-cellbar';
+      const s = document.createElement('span'); const i = document.createElement('i'); i.style.width = `${Math.max(0, Math.min(1, v)) * 100}%`; if (tone) i.style.setProperty('--mc-bar', tone); s.appendChild(i);
+      const t = document.createElement('b'); t.style.fontWeight = '400'; t.textContent = p(v);
+      w.append(s, t); td.appendChild(w); return td;
+    };
+    el.append(...rows.map((r) => {
+      const tr = document.createElement('tr');
+      const c = (v, cls) => { const td = document.createElement('td'); td.textContent = v; if (cls) td.className = cls; return td; };
+      const gap = r.accuracy_live_v2 != null && r.accuracy_val - r.accuracy_live_v2 > 0.02;
+      const live = acc(r.accuracy_live_v2, gap ? 'var(--cds-chart-status-critical)' : dash.colors[2]); if (gap) live.classList.add('mc-bad');
+      const hold = acc(r.accuracy_hold, dash.colors[1]); hold.classList.add('mc-hide-narrow');
+      tr.append(c(r.segment), c(mc.fmts.int(r.lines), 'mc-hide-narrow'), c(r.max_points.toFixed(2)), acc(r.accuracy_val, dash.colors[0]), hold, live, c(r.points_lost_val == null ? '—' : r.points_lost_val.toFixed(2), 'mc-hide-narrow'));
+      return tr;
+    }));
+  });
+</script>
+
+<script>
+  // Matchers: lines claimed (bar) and precision on validation / holdout.
+  dash.draw('matchers', (el) => {
+    const d = dash.data('matchers');
+    el.replaceChildren();
+    if (d.status !== 'ok') { el.textContent = '—'; return; }
+    const rows = d.data.slice().sort((a, b) => a.order - b.order);
+    const W = el.clientWidth || 500, rowH = 30;
+    const svg0 = d3.select(el).append('svg').attr('width', '100%');
+    const lw = mc.measure(svg0, rows.map((q) => q.matcher)) + 30;
+    const pw = 128;
+    const m = { l: lw, r: pw, t: 18, b: 6 }, H = m.t + m.b + rowH * rows.length;
+    const svg = svg0.attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Matchers: lines claimed and precision');
+    const x = d3.scaleLinear([0, d3.max(rows, (q) => q.lines_val)], [m.l, W - m.r - 8]);
+    const y = d3.scaleBand(rows.map((q) => q.matcher), [m.t, H - m.b]).padding(0.3);
+    svg.append('text').attr('x', W - 70).attr('y', 10).attr('text-anchor', 'end').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('val');
+    svg.append('text').attr('x', W - 4).attr('y', 10).attr('text-anchor', 'end').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('hold');
+    const g = svg.selectAll('g.m').data(rows).join('g').attr('class', 'm').attr('transform', (q) => `translate(0,${y(q.matcher)})`);
+    g.append('text').attr('x', 0).attr('y', y.bandwidth() / 2).attr('dy', '.35em').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => String(q.order).padStart(2, '0'));
+    g.append('text').attr('x', 24).attr('y', y.bandwidth() / 2).attr('dy', '.35em').style('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((q) => q.matcher);
+    const anim = mc.first(el);
+    const bars = g.append('rect').attr('x', m.l).attr('height', y.bandwidth()).attr('rx', 3).style('fill', (q) => q.matcher === 'classifier' ? 'var(--cds-chart-muted)' : dash.colors[0]).style('cursor', 'default')
+      .attr('width', anim ? 0 : (q) => x(q.lines_val) - m.l);
+    if (anim) bars.transition().delay((q, i) => i * 60).duration(800).ease(d3.easeCubicOut).attr('width', (q) => x(q.lines_val) - m.l);
+    const tone = (v) => v < 0.95 ? 'var(--color-bad)' : v < 0.99 ? 'var(--color-warn)' : 'var(--color-fg)';
+    g.append('text').attr('x', W - 70).attr('y', y.bandwidth() / 2).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', (q) => tone(q.precision_val)).style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => mc.fmts.pct(q.precision_val));
+    g.append('text').attr('x', W - 4).attr('y', y.bandwidth() / 2).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', (q) => tone(q.precision_hold)).style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => mc.fmts.pct(q.precision_hold));
+    const tipper = mc.tip(el);
+    bars.on('mousemove', (event, q) => { d3.select(event.currentTarget).style('opacity', 0.8); tipper.show(event, [[`${q.order}. ${q.matcher}`], ['Lines (val)', mc.fmts.int(q.lines_val)], ['Lines (hold)', mc.fmts.int(q.lines_hold)], ['Precision (val)', mc.fmts.pct(q.precision_val)], ['Precision (hold)', mc.fmts.pct(q.precision_hold)]]); })
+      .on('mouseleave', (event) => { d3.select(event.currentTarget).style('opacity', null); tipper.hide(); });
+  });
+
+  // Exceptions: F1 dumbbell, validation vs holdout.
+  dash.draw('exceptions', (el) => {
+    const d = dash.data('exceptions');
+    el.replaceChildren();
+    if (d.status !== 'ok') { el.textContent = '—'; return; }
+    const rows = d.data.slice().sort((a, b) => a.f1_val - b.f1_val);
+    const W = el.clientWidth || 500, rowH = 30;
+    const svg0 = d3.select(el).append('svg').attr('width', '100%');
+    const lw = mc.measure(svg0, rows.map((q) => q.exception)) + 12;
+    const m = { l: lw, r: 18, t: 4, b: 24 }, H = m.t + m.b + rowH * rows.length;
+    const svg = svg0.attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Exception F1 by code');
+    const lo = Math.floor(d3.min(rows, (q) => Math.min(q.f1_val, q.f1_hold)) * 50) / 50;
+    const x = d3.scaleLinear([lo, 1], [m.l, W - m.r]);
+    const y = d3.scaleBand(rows.map((q) => q.exception), [m.t, H - m.b]).padding(0.3);
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(4, '.2f').tickSize(-(H - m.t - m.b))).call(mc.axisText);
+    const g = svg.selectAll('g.e').data(rows).join('g').attr('class', 'e').attr('transform', (q) => `translate(0,${y(q.exception) + y.bandwidth() / 2})`);
+    g.append('text').attr('x', m.l - 8).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((q) => q.exception);
+    const anim = mc.first(el);
+    const link = g.append('line').attr('x1', (q) => x(Math.min(q.f1_val, q.f1_hold))).attr('x2', (q) => x(Math.max(q.f1_val, q.f1_hold))).style('stroke', 'var(--cds-chart-axis)').attr('stroke-width', 3).attr('stroke-linecap', 'round');
+    const tipper = mc.tip(el);
+    [['f1_val', 0], ['f1_hold', 1]].forEach(([k, i]) => {
+      const c = g.append('circle').attr('r', 6).style('fill', dash.colors[i]).style('stroke', 'var(--color-panel)').attr('stroke-width', 2).style('cursor', 'default').attr('cx', anim ? x(lo) : (q) => x(q[k]));
+      if (anim) c.transition().delay((q, j) => j * 60 + i * 150).duration(900).ease(d3.easeCubicOut).attr('cx', (q) => x(q[k]));
+      c.on('mousemove', (event, q) => { d3.select(event.currentTarget).attr('r', 8.5); tipper.show(event, [[q.exception], ['Validation F1', mc.fmts['3'](q.f1_val)], ['Holdout F1', mc.fmts['3'](q.f1_hold)], ['Cases (val / hold)', `${mc.fmts.int(q.golden_val)} / ${mc.fmts.int(q.golden_hold)}`]]); })
+        .on('mouseleave', (event) => { d3.select(event.currentTarget).attr('r', 6); tipper.hide(); });
+    });
+    if (anim) link.style('opacity', 0).transition().delay(700).duration(500).style('opacity', 1);
+  });
+</script>
+
+<script>
+  // Scroll reveal: elements are visible at rest; entering the viewport replays a short rise.
+  (() => {
+    if (!mc.motion || !('IntersectionObserver' in window)) return;
+    const vh = window.innerHeight || 800;
+    const io = new IntersectionObserver((entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('mc-in'); io.unobserve(e.target); } }), { root: document, rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    document.querySelectorAll('.mc-reveal').forEach((n) => { if (n.getBoundingClientRect().top > vh) io.observe(n); else n.classList.add('mc-in'); });
+  })();
+</script>
