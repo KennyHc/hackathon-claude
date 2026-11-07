@@ -69,7 +69,7 @@ def num(s) -> float | None:
 _SP = "[ \u00a0\u2007\u2009\u202f]"
 _THOUSANDS = re.compile(r"(?<![\d/.,])(-?\d{1,3})((?:" + _SP + r"\d{3})+)([.,]\d{2})(?!\d)")
 _CCY = re.compile(r"(?<![A-Za-z0-9])(?:ZAR|R)" + _SP + r"?(?=-?\d)")
-_DATE = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}")
+_DATE = re.compile(r"(?<!\S)(?:\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{2}-\d{2})(?!\S)")   # the row date (dd/mm/yyyy or ISO), as its own token
 
 
 def _norm_amounts(s: str) -> str:
