@@ -30,6 +30,36 @@ ITEM_COLS = [
 ]
 
 
+EXTRA_COLS = ["party_name", "payment_terms", "po_number", "related_document", "payment_method", "cn_reason"]
+_DETAIL_PHASES = ["train", "live", "final"]  # where an item's original document can live (val is a subset of train)
+
+
+def item_details(phase: str, data_dir: str = DATA) -> pd.DataFrame:
+    """EXTRA_COLS per item_id, from the original invoice / credit-note files of train, live, final and `phase`
+    (open_items_at_start has only the 10 ITEM_COLS). AR: customer_name, payment_terms, customer_po, payment_method;
+    AP: supplier_name, payment_terms, our_po, payment_method; CN: party_name, related_document, reason."""
+    out = []
+    for ph in dict.fromkeys(_DETAIL_PHASES + [phase]):
+        d = os.path.join(data_dir, ph)
+        for name, m in [("ar_invoices", {"customer_name": "party_name", "payment_terms": "payment_terms",
+                                         "customer_po": "po_number", "payment_method": "payment_method"}),
+                        ("ap_invoices", {"supplier_name": "party_name", "payment_terms": "payment_terms",
+                                         "our_po": "po_number", "payment_method": "payment_method"}),
+                        ("credit_notes", {"party_name": "party_name", "related_document": "related_document",
+                                          "reason": "cn_reason"})]:
+            f = _find_csv(d, name)
+            if f is None:
+                continue
+            df = pd.read_csv(f, dtype=str, keep_default_na=False, usecols=["item_id"] + list(m))
+            out.append(df.rename(columns=m))
+    if not out:
+        return pd.DataFrame(columns=["item_id"] + EXTRA_COLS)
+    det = pd.concat(out, ignore_index=True).drop_duplicates("item_id", keep="last")
+    for c in EXTRA_COLS:
+        det[c] = det[c].fillna("") if c in det else ""
+    return det[["item_id"] + EXTRA_COLS]
+
+
 def _find_csv(dir_path: str, filename: str) -> Optional[str]:
     """Find a CSV file in directory, checking .csv.gz then .csv."""
     for ext in [".csv.gz", ".csv"]:
@@ -39,7 +69,18 @@ def _find_csv(dir_path: str, filename: str) -> Optional[str]:
     return None
 
 
-def load_items(phase: str, data_dir: str = DATA) -> pd.DataFrame:
+_ITEMS_CACHE: dict = {}
+
+
+def load_items(phase: str, data_dir: str = DATA, details: bool = True) -> pd.DataFrame:
+    """Cached wrapper (returns a copy): see _load_items."""
+    key = (phase, os.path.abspath(data_dir), details)
+    if key not in _ITEMS_CACHE:
+        _ITEMS_CACHE[key] = _load_items(phase, data_dir, details)
+    return _ITEMS_CACHE[key].copy()
+
+
+def _load_items(phase: str, data_dir: str = DATA, details: bool = True) -> pd.DataFrame:
     """Load all items available in a phase with standard schema ITEM_COLS.
 
     Amounts (total_amount, open_amount) are parsed as float.
@@ -145,7 +186,12 @@ def load_items(phase: str, data_dir: str = DATA) -> pd.DataFrame:
     items = pd.concat(dfs, ignore_index=True)
     # Deduplicate keeping earlier entries (e.g. open_items_at_start precedence)
     items = items.drop_duplicates(subset=["item_id"], keep="first").reset_index(drop=True)
-    return items[ITEM_COLS]
+    if not details:
+        return items[ITEM_COLS]
+    # ITEM_COLS + EXTRA_COLS (payment terms, PO, related document… for every item, incl. open_items_at_start)
+    items = items[ITEM_COLS].merge(item_details(phase, data_dir), on="item_id", how="left")
+    items[EXTRA_COLS] = items[EXTRA_COLS].fillna("")
+    return items
 
 
 class Ledger:

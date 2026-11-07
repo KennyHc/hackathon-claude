@@ -43,10 +43,11 @@ def exceptions_from_c(alloc, lines, phase):
     try:
         from classification.exceptions import assign_exceptions
         from integration.lib.ledger import load_items
+        from integration.lib.masters import masters_dir
     except ImportError as e:
         log(f"exceptions: classification/exceptions.py or integration/lib not available ({e}); keeping B's")
         return None
-    exc = assign_exceptions(alloc, lines, load_items(phase), masters_dir=os.path.join(ROOT, "data", "masters"))
+    exc = assign_exceptions(alloc, lines, load_items(phase), masters_dir=masters_dir(phase))
     log(f"exceptions: assign_exceptions gave {exc.notna().sum():,} codes")
     return exc
 

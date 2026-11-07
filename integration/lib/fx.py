@@ -43,6 +43,12 @@ def load_rates(masters_dir: str = MASTERS) -> pd.DataFrame:
         csv_path = os.path.join(masters_dir, "fx_rates.csv.gz")
 
     df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    # FINAL ships updated masters (incl. 2026 rates, ZAR) in data/final/masters_final/: add any rates found there
+    if os.path.abspath(masters_dir) == os.path.abspath(MASTERS):
+        extra = os.path.join(ROOT, "data", "final", "masters_final", "fx_rates.csv")
+        if os.path.exists(extra):
+            df = pd.concat([df, pd.read_csv(extra, dtype=str, keep_default_na=False)], ignore_index=True)
+            df = df.drop_duplicates(["date", "currency"], keep="last")
     df["units_per_eur"] = df["units_per_eur"].astype(float)
     df["date_dt"] = pd.to_datetime(df["date"])
     df = df.sort_values("date_dt").reset_index(drop=True)
