@@ -131,6 +131,11 @@ class Solver:
             self.pname[(sd, p)] = ws
             self.pnorm[(sd, p)] = nm
             df.update(set(ws))
+        self.word_parties = defaultdict(set)
+        for sd, p, e, nm in zip(it.side, it.party_id, it.entity, it.party_name_norm.fillna("")):
+            for w in nm.split():
+                if len(w) >= 3:
+                    self.word_parties[(e, sd, w)].add(p)
         n = max(len(self.pname), 1)
         self.idf = {w: float(np.log(1 + n / c)) for w, c in df.items()}
         bk = ctx.bank
@@ -206,6 +211,16 @@ class Solver:
         ix = self.ix
         self.cancelled = set()
         self.replaced = {}  # (side, party, alnum of cancelled invoice) -> credit note issue date
+        pos0 = {iid: k for k, iid in enumerate(ix.iid)}
+        try:  # PDF clauses: "anula y sustituye", credit notes cancelling an invoice in full (cached on ctx)
+            ids = getattr(self.ctx, "cancelled_items", None)
+            if ids is None:
+                from matching.pdf_clauses import cancelled_items
+                ids = cancelled_items(self.ctx)
+                self.ctx.cancelled_items = ids
+            self.cancelled |= {pos0[i] for i in ids if i in pos0}
+        except Exception:
+            pass
         it = self.ctx.items
         reason = it.reason.fillna("").str.upper()
         cn = it[(it.item_type.isin(["ARC", "APC"])) & reason.str.contains("ANULA|CANCEL")]
@@ -294,6 +309,16 @@ class Solver:
                 for p in parties:
                     votes[p] += w
         return votes
+
+    def name_parties(self, ent, side, words, top=3):
+        cand = set()
+        for w in words:
+            ps = self.word_parties.get((ent, side, w))
+            if ps and len(ps) <= 300:
+                cand |= ps
+        sc = [(self.name_score(words, side, p), p) for p in cand]
+        sc = sorted([x for x in sc if x[0] >= 0.6], reverse=True)[:top]
+        return [p for _, p in sc]
 
     def name_score(self, words, side, party):
         """share (idf-weighted) of the party's name words found in the bank text (prefix = truncated word)."""
@@ -546,8 +571,9 @@ class Solver:
         # merge slots with identical candidate sets (same number cited twice / joined + parts)
         uniq = {}
         for kind, cands, t in slots:
-            if cands not in uniq or (STRONG.get(kind, 0) > STRONG.get(uniq[cands][0], 0)):
-                uniq[cands] = (kind, cands, t)
+            key = cands if len(cands) == 1 else (cands, t.alnum)  # two cut numbers may share their candidates
+            if key not in uniq or (STRONG.get(kind, 0) > STRONG.get(uniq[key][0], 0)):
+                uniq[key] = (kind, cands, t)
         slots = list(uniq.values())
         all_strong = all(kd == "X" for kd, _, _ in slots)
         cur = ix.cur[slots[0][1][0]]
@@ -605,17 +631,18 @@ class Solver:
             rows = self.explain(S, line, cash, exact_cur, party, strict=True)
             return ("fx", best[0], rows) if rows else None
 
+        weak_only = not any(kd in STRONG for kd, _, _ in slots)  # only cut / mistyped references
         top_sc = combos[0][0]
         tops = [c for c in combos if c[0] == top_sc]
         # 1) strict explanation (discount in terms, withholding, FX): pins the cash to the cent
-        if name_ok or all_strong:
+        if (name_ok or all_strong) and not (weak_only and not name_ok):
             got = [(c, self.explain(c[1], line, cash, exact_cur, party, strict=True)) for c in tops[:4]]
             got = [(c, r) for c, r in got if r]
             if len(got) == 1:
                 return ("explain", top_sc, got[0][1])
             if len(got) > 1:
                 return None
-        if not name_ok:
+        if not name_ok or weak_only:
             return None
         # 2) completion with uncited open items of the party (credit notes first)
         if exact_cur and len(tops) == 1:
@@ -691,9 +718,12 @@ class Solver:
         if not toks:
             return None
         votes = self.global_parties(line.entity, side, toks, line.booking_date, line.amount_abs)
+        words = set(norm_name(" ".join([line.text or "", line.remittance_info or "", line.party_name_raw or ""])).split())
+        # payers named in the text: their items are searched too (number without prefix too ambiguous entity-wide)
+        for p in self.name_parties(line.entity, side, words):
+            votes[p] += 0.5
         if not votes:
             return None
-        words = set(norm_name(" ".join([line.text or "", line.remittance_info or "", line.party_name_raw or ""])).split())
         results = []
         for party, v in votes.most_common(6):
             r = self.solve_party(line, side, party, toks, words)
@@ -733,12 +763,38 @@ class Solver:
 CONF = {"exact": 0.95, "fx": 0.9, "complete": 0.85, "explain": 0.8}
 
 
+def consume(ix, k, amt, exc, fx=False):
+    """book an allocation on the running open amount of item k."""
+    if exc == "RETURNED":
+        ix.open[k] = round(ix.open[k] + amt, 2)
+    elif exc in ("", "PARTIAL", "SHORT_DISPUTE", "DUPLICATE_PAYMENT") and not fx:
+        ix.open[k] = max(0.0, round(ix.open[k] - amt, 2))
+    else:
+        ix.open[k] = 0.0
+
+
 def run(ctx: Ctx):
     sv = Solver(ctx)
     ix = sv.ix
+    pos = {iid: k for k, iid in enumerate(ix.iid)}
+    bdate = dict(zip(ctx.bank.bank_txn_id, ctx.bank.booking_date))
+    # allocations of the matchers that ran before (payment runs, batches, advices, PDF cases) consume open amounts
+    prev = getattr(ctx, "allocations", None)
+    events = []
+    if prev is not None and len(prev):
+        for t, iid, amt, exc in zip(prev.bank_txn_id, prev.item_id, prev.amount, prev.exception.fillna("")):
+            k = pos.get(iid)
+            if k is not None and t in bdate:
+                events.append((bdate[t], k, float(amt), exc))
+        events.sort(key=lambda e: e[0])
+    ev = 0
     bank = ctx.unclaimed().sort_values(["booking_date", "bank_txn_id"])
     rows = []
     for line in bank.itertuples(index=False):
+        while ev < len(events) and events[ev][0] <= line.booking_date:
+            _, k, amt, exc = events[ev]
+            consume(ix, k, amt, exc)
+            ev += 1
         r = sv.solve(line)
         if not r:
             continue
@@ -747,8 +803,5 @@ def run(ctx: Ctx):
             continue
         for k, amt, exc in alloc:
             rows.append((line.bank_txn_id, ix.iid[k], round(float(amt), 2), exc, CONF[how], f"{NAME}:{how}"))
-            if exc in ("", "PARTIAL") and how != "fx":
-                ix.open[k] = round(ix.open[k] - amt, 2)
-            else:
-                ix.open[k] = 0.0
+            consume(ix, k, amt, exc, fx=(how == "fx"))
     return alloc_frame(rows)

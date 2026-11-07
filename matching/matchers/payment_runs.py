@@ -32,7 +32,7 @@ RE_N43_SEQ = re.compile(r"PAGO TRANSFERENCIAS \| \S+ \d{6} (\d{6})")
 RE_RETURN = r"^(?:DEVOLUCION TRANSFERENCIA|RETURN [A-Z]{2}\d{2}) "
 RE_NPROV = re.compile(r"(\d+) PROVEEDORES")
 LAST_HOW: dict[str, str] = {}   # bank_txn_id -> link kind (debugging)
-CLAIM_RETURNS = False          # ap_returned_transfer lines are claimed by another matcher
+CLAIM_RETURNS = True          # ap_returned_transfer lines are claimed by another matcher
 MAX_LAG = 10                    # booking date - execution date, days (implicit matches)
 
 
