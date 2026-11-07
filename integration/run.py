@@ -62,6 +62,14 @@ def exceptions_from_c(alloc, lines, phase, fix_amounts=True):
     return exc
 
 
+def train_entities():
+    from integration.scoring import txns_path
+    return set(pd.read_csv(txns_path("train"), dtype=str, keep_default_na=False, usecols=["entity"]).entity)
+
+
+KEEP_EMPTY_METHODS = {"instalment_last", "settlement"}
+
+
 def drop_wild_overpay(items, lines, phase, ratio):
     from integration.lib.ledger import load_items
     it = load_items(phase).set_index("item_id")
@@ -113,9 +121,18 @@ def main():
             items = drop_wild_overpay(items, lines, a.phase, a.overpay_max)
         log(f"B keeps {len(keep):,}/{len(b_lines):,} of its lines ({len(items):,} rows)")
         if not a.no_c_exceptions:
+            b_exc = items["exception"] if "exception" in items else pd.Series(None, index=items.index)
+            items["b_exc"] = b_exc.astype(object).where(b_exc.notna() & (b_exc.astype(str).str.strip() != ""), None)
             exc = exceptions_from_c(items, lines, a.phase, not a.no_amount_fix)
             if exc is not None:
                 items["exception"] = exc.where(exc.notna(), items.get("exception")) if a.b_exc_fallback else exc
+                # matchers that KNOW the item is cleared (last instalment, dispute settlement): keep their "no
+                # exception" (the ledger misses earlier unmatched payments and would say PARTIAL)
+                if "method" in items:
+                    trust = items.method.astype(str).isin(KEEP_EMPTY_METHODS) & items.b_exc.isna()
+                    items.loc[trust, "exception"] = None
+                    log(f"exceptions: kept the matcher's empty exception on {int(trust.sum()):,} rows "
+                        f"({', '.join(sorted(KEEP_EMPTY_METHODS))})")
         items["category"] = ""
     else:
         items = pd.DataFrame(columns=SUB_COLS)
@@ -130,6 +147,16 @@ def main():
     pc = pd.to_numeric(c.p_items, errors="coerce").reindex(rest.bank_txn_id).values if len(c) else [float("nan")] * len(rest)
     pc = pd.Series(pc, index=rest.index)
     c_says_items = rest.bank_txn_id.isin(c.index) & ~has_c_cat & (pc >= a.unid_p)  # C: settles items; B missed it
+    # entities never seen in train (FINAL: ZA01): C's p_items is not calibrated there → an unclaimed receipt is
+    # UNIDENTIFIED (mock FINAL: 20/20 unknown ZA01 deposits had p_items ≥ 0.9)
+    ent = rest.bank_txn_id.map(dict(zip(lines.bank_txn_id, lines.entity)))
+    new_ent = ~ent.isin(train_entities())
+    if new_ent.any():
+        log(f"{int((new_ent & receipt).sum()):,} unclaimed receipts on entities unseen in train "
+            f"({sorted(set(ent[new_ent]))}) → UNIDENTIFIED")
+        c_says_items &= ~new_ent
+        ccat = ccat.where(~(new_ent & receipt & ccat.isin(["CUSTOMER_ADVANCE"])), None)
+        has_c_cat = ccat.notna() & (ccat != "")
     # Lines nobody explains score as wrong whatever we write, so the only thing that matters is not to emit a false
     # UNIDENTIFIED exception (it costs UNIDENTIFIED precision). No C opinion at all → starter rule.
     default = pd.Series("BANK_FEES", index=rest.index)

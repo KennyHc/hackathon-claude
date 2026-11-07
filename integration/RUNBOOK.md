@@ -42,7 +42,7 @@ After the mock run delete `integration/out/final/`, `matching/out/final/`, `clas
 | Symptom | Do |
 |---|---|
 | classification fails | pipeline continues (integration falls back to defaults); rerun `classification/run.py --phase final` alone to see the error |
-| one stage errors / times out (900 s) | it is skipped; to retry one stage: `.venv/bin/python matching/run.py --phase final --stages batch,refs,party` after the fix; `--timeout 0` disables the limit |
+| one stage errors / times out (1800 s; batch/pr took 559 s on live under heavy machine load) | it is skipped; to retry one stage: `.venv/bin/python matching/run.py --phase final --stages batch,refs,party` after the fix; `--timeout 0` disables the limit |
 | a stage is slow but its own `matching/<stage>/run.py` already wrote `matching/out/final/alloc_<stage>.parquet` | `MATCH_ARGS=--fallback-files integration/pipeline.sh final` |
 | INVALID | `.venv/bin/python integration/validate.py SUB --phase final --repair integration/out/final/submission_fixed.csv.gz`, check the log of fixes, submit the fixed file |
 | masters_final has different column names | `masters.py` keeps base columns + new ones; check `integration/out/masters_merged/final/*.csv` |

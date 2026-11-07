@@ -179,7 +179,7 @@ def main():
     ap.add_argument("--stages", default=",".join(STAGES), help="comma list, in cascade order")
     ap.add_argument("--pkg", default="matching", help="package holding the stage folders (tests use a temp one)")
     ap.add_argument("--out", default=None, help="output dir (default matching/out/<phase>)")
-    ap.add_argument("--timeout", type=int, default=900, help="seconds per stage (0 = none)")
+    ap.add_argument("--timeout", type=int, default=1800, help="seconds per stage (0 = none)")
     ap.add_argument("--fallback-files", action="store_true",
                     help="stage missing/failing → read its own matching/out/P/alloc_<stage>.parquet")
     ap.add_argument("--overclaim", choices=["drop", "dup"], default="drop",

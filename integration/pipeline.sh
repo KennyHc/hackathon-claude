@@ -14,9 +14,10 @@ exec > >(tee "$LOG") 2>&1
 T0=$(date +%s)
 step() { echo; echo "=== [$(( $(date +%s) - T0 ))s] $*"; }
 
-step "data check"
-[ -f "data/$P/bank_transactions.csv.gz" ] || { echo "data/$P/bank_transactions.csv.gz missing"; exit 2; }
-[ "$P" = final ] && { ls data/final/masters_final 2>/dev/null || echo "WARN: no data/final/masters_final"; }
+DATA="${BANKREC_DATA:-data}"
+step "data check ($DATA)"
+[ -f "$DATA/$P/bank_transactions.csv.gz" ] || { echo "$DATA/$P/bank_transactions.csv.gz missing"; exit 2; }
+[ "$P" = final ] && { ls "$DATA/final/masters_final" 2>/dev/null || echo "WARN: no $DATA/final/masters_final"; }
 
 if [ "${SKIP_C:-0}" = 1 ] && [ -f "classification/out/$P/line_labels.parquet" ]; then
   step "classification: reusing classification/out/$P/line_labels.parquet"
