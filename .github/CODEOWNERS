@@ -12,3 +12,6 @@
 /classification/      @OWNER_C
 /integration/         @OWNER_D
 /docs/CONTRACTS.md    @OWNER_D
+
+# Dataset atlas (visual data briefing)
+/atlas/               @KennyHc
