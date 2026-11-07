@@ -94,5 +94,17 @@
   "recall": 0.9219,
   "txn_accuracy": 0.9753,
   "exception_macro_f1": 0.9638
+ },
+ {
+  "run": "LIVE main",
+  "window": "LIVE Jul\u2013Dec 2025",
+  "role": "Team best on main: teammate's new classifier + our sd_noadv (val 96.82; parts not reported)",
+  "lines": 203083,
+  "score": 96.46,
+  "allocation_f1": null,
+  "precision": null,
+  "recall": null,
+  "txn_accuracy": null,
+  "exception_macro_f1": null
  }
 ]

@@ -47,6 +47,8 @@ runs = [
          allocation_f1=0.9562, precision=0.9983, recall=0.9175, txn_accuracy=0.9753, exception_macro_f1=0.9637),
     dict(run="LIVE v6", window="LIVE Jul–Dec 2025", role="Leaderboard (current code, + sd_noadv ranker)", lines=203083, score=96.42,
          allocation_f1=0.9578, precision=0.9966, recall=0.9219, txn_accuracy=0.9753, exception_macro_f1=0.9638),
+    dict(run="LIVE main", window="LIVE Jul–Dec 2025", role="Team best on main: teammate's new classifier + our sd_noadv (val 96.82; parts not reported)",
+         lines=203083, score=96.46, allocation_f1=None, precision=None, recall=None, txn_accuracy=None, exception_macro_f1=None),
 ]
 json.dump(runs, open(f"{OUT}/runs.json", "w"), indent=1)
 
@@ -68,6 +70,7 @@ prog = [
     dict(step=15, label="LIVE v4 (leaderboard)", score=96.05, phase="live", note="Remittance FX + exception fixes, uploaded 15:57"),
     dict(step=16, label="LIVE v5 (leaderboard)", score=96.34, phase="live", note="+ cn_bundles, uploaded 16:38"),
     dict(step=17, label="LIVE v6 (leaderboard)", score=96.42, phase="live", note="+ sd_noadv ranker, uploaded 17:58"),
+    dict(step=18, label="LIVE main (team best)", score=96.46, phase="live", note="Teammate's new classifier + our sd_noadv, main 31d95ae (val 96.82)"),
 ]
 json.dump(prog, open(f"{OUT}/progression.json", "w"), indent=1)
 
