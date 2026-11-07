@@ -8,8 +8,8 @@ a sortable segment table, matcher precision and exception F1 (validation vs hold
 
 - `index.html` is the page. It runs inside the claude.ai Dashboard artifact type, which provides `dash.data`,
   `dash.draw`, `dash.calc`, d3 and the theme tokens, so it does not open on its own in a browser.
-- `data/*.json` are the datasets it reads (uploaded to the artifact as fixed files):
+- `datasets/*.json` are the datasets it reads (uploaded to the artifact as fixed files):
   `runs`, `progression`, `segments`, `matchers`, `exceptions`, `timeline`, `benchmarks`.
 - `build_data.py` regenerates `runs`, `progression`, `segments`, `matchers` and `exceptions` from the pipeline outputs
   (`integration/out/{val,hold}`, the score logs) and the LIVE leaderboard per-segment results in
-  `data/live_v1_segments.json` / `data/live_v2_segments.json`. Run it from its own folder after a new val/hold run.
+  `datasets/live_v1_segments.json`, `live_v2_segments.json`, `live_v3_segments.json` (LIVE v3 = latest, read as `accuracy_live`). Run it from its own folder after a new val/hold run.

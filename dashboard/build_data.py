@@ -3,7 +3,7 @@ R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, R); sys.path.insert(0, R + "/integration")
 import pandas as pd, numpy as np
 import score as SC
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "datasets")
 
 def seg_table(phase):
     bank = pd.read_parquet(f"{R}/ingestion/out/{phase}/bank_lines.parquet")

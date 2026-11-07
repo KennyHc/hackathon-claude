@@ -1,0 +1,6 @@
+[
+ {"approach": "Starter as shipped", "score": 12.5, "range": "~10–15"},
+ {"approach": "Naive: exact amount + reference", "score": 19, "range": "≈ 19"},
+ {"approach": "Well-worked heuristic rules", "score": 61, "range": "≈ 61"},
+ {"approach": "Perfect (the golden)", "score": 100, "range": "100"}
+]

@@ -1,0 +1,42 @@
+[
+ {
+  "at": "2026-11-07T10:00:00+01:00",
+  "event": "LIVE phase opens",
+  "kind": "milestone"
+ },
+ {
+  "at": "2026-11-07T12:38:47+01:00",
+  "event": "LIVE v1 scored 93.73",
+  "kind": "submission"
+ },
+ {
+  "at": "2026-11-07T13:14:14+01:00",
+  "event": "LIVE v2 scored 95.58",
+  "kind": "submission"
+ },
+ {
+  "at": "2026-11-07T14:18:11+01:00",
+  "event": "LIVE v3 scored 95.62",
+  "kind": "submission"
+ },
+ {
+  "at": "2026-11-07T18:00:00+01:00",
+  "event": "FINAL data released",
+  "kind": "deadline"
+ },
+ {
+  "at": "2026-11-07T19:30:00+01:00",
+  "event": "Submissions close (one FINAL shot)",
+  "kind": "deadline"
+ },
+ {
+  "at": "2026-11-07T19:45:00+01:00",
+  "event": "Project delivery: video, repo, description",
+  "kind": "deadline"
+ },
+ {
+  "at": "2026-11-07T20:30:00+01:00",
+  "event": "Final leaderboard reveal",
+  "kind": "milestone"
+ }
+]
