@@ -135,6 +135,47 @@ miss because their run file is in the previous phase (`ap.match(..., use_prior=T
   are dropped. The 0.65 gate itself was chosen from per-method val precision (mild tuning on the judge, not swept).
 - Drift: anything unparseable or ambiguous becomes "no claim", never a crash; untested on ZA01/ZAR and Moncayo camt texts.
 
+### 5b. Iteration 2 (from val 92.94): parallel agents, one segment each
+
+Where the points were at 92.94: allocation precision 99.9 % but recall 86.6 % (98.6k of 735k golden pairs missed), and
+~99 % of the missed pairs sit on lines that NO matcher claims. At this precision one recovered pair is worth ~0.00004 pts.
+Missed pairs by segment: ar_ref_noise 31.6k (~1.2 pts), ar_1toN_credit_note 22.2k (~0.9), ar_short_dispute 18.1k (~0.7, all
+on unclaimed lines), ar_1toN_text 9.6k (~0.4), ar_n_to_m 4.8k (~0.2), ar_fx 2.7k (~0.1 + FX_DIFFERENCE recall 0.83).
+
+Set-up (so agents can't interfere with each other or with the judge):
+- One **git worktree per agent** (`../aa-wt/{refs,netting,dispute,fx}`, branches `wt/<name>`, from `f5d819a`), `data/` a
+  junction to the shared read-only data, own copies of the caches and of the 92.94 allocations as baseline. Each agent owns
+  disjoint files: refs -> `refs.py`, `refs_text.py`, `party.py`; netting -> a new matcher `netting.py` (+ its `ORDER` slot);
+  dispute -> `remittance.py`, `remit_*.py`; fx -> `shortpay*.py`. Agents commit to their branch only; merged and re-measured
+  together afterwards (gains don't simply add up: matchers compete for the same lines).
+- **Memory**: `matching/tools/slot.py` caps heavy python runs at 2 machine-wide (16 GB box, 5 concurrent runs crashed it).
+- **Same guard-rails for every agent**: matcher code never reads the golden of the phase it predicts (val golden only in
+  `matching/tests/` for measurement); labels used for learning only from TRAIN before 2025-01-01 for val (all TRAIN for
+  live/final); no hard-coded ids/names/amounts/dates; every new rule justified by POLICIES or a TRAIN-before-2025 statistic;
+  every emitted method >= 97 % pair-precise on val, weaker tiers below the 0.65 gate; no fine threshold sweeps on val;
+  per-segment comparison against the baseline at each milestone; never crash on live/final.
+- Each agent was to write its own report (`matching/tests/<area>/FINDINGS_<name>.md`).
+
+**Outcome: stopped after ~40 min on a change of objectives, before any full-pipeline val run.** Nothing of iteration 2 is
+in `matias/full-pipeline`; val stays **92.94**. Each agent's work is committed on its own local branch (not pushed) in
+`../aa-wt/<name>`; the last commit on each is labelled `WIP ... UNMEASURED`. Numbers below are the agents' own stand-alone
+measurements (one matcher run on top of the 92.94 allocations), not official scores: gains will be smaller once matchers
+compete for the same lines. No agent wrote its FINDINGS_<name>.md; this is the record.
+
+| agent / branch | what was found / built | measured (stand-alone, val) | state |
+|---|---|---|---|
+| refs `wt/refs` (`d56c68d`) | Credit-note structure in refs' pools: (1) cancellation credit notes ("Anulacion de factura") and the invoices they cancel never reach a bank line (POLICIES s5.7; TRAIN 2024: 0 of 3,126) -> removed from every pool; (2) a credit note enters an UNREFERENCED subset only if quoted or if the invoice it rectifies is in the pool (TRAIN 2024: return credit notes on ar_1toN_credit_note lines come with their own invoice 95.7 %); (3) solutions with a linked credit note must contain its invoice. Fewer candidates -> lower coincidence risk -> more unique solutions pass the gate. Uses `credit_notes.related_document/reason` (inputs, not labels). | **+1,214 lines, +3,798 correct pairs**, emitted precision 99.51 % -> 99.56 % | committed, best candidate to merge first |
+| dispute `wt/dispute` (`e408e86`) | Remittance advices: (1) amount-only 1:1 links of an advice to a bank line when no reference matches, accepted only if every advice line resolves to an open item; (2) the later payment of a disputed deduction (POLICIES s3: "the disputed part stays open, it may be paid later") linked back through the advice line to its unique item. | t1_amt **870/870** pairs right, settle **620/620**; on a TRAIN 2024-Q2 slice 99.8 % / 100 % | committed, second candidate |
+| netting `wt/netting` (`93e552c`, WIP) | New matcher `netting.py` (after refs, before shortpay): a quoted document is mandatory as anchor; quoted invoices + <= 2 unquoted + credit notes netted == cash; a credit note only with its invoice; n-to-m splits at fractions learned from TRAIN before the cut (0.4 / 0.5 / 0.6) -> PARTIAL. | first run: net_fill1 90.6 % (30 lines), net_fill2 96.6 % (7), net_ref_frac 1/3 -> all kept below the gate; the emitted tiers were not yet measured (agent was profiling runtime) | WIP, not ready |
+| fx `wt/fx` (`fcd6e47`, WIP) | Diagnosis of ar_fx: of the unclaimed FX lines, 225 end in `no_solution` — multi-invoice payments (median ~10 golden items, payer pool ~56) quoting **truncated / prefix-less** numbers ("INV 115608 116333 ...", "INV# 10124…"); the payer is usually found (no_party 8 %). 145 lines get `fx_party_subset`. In progress: prefix-token cover set, withholding on a truncated quote list, service-month fix, all on the FX path. | none yet | WIP, not ready |
+
+Lessons from the run: (a) four agents + 2 heavy slots on 16 GB spent much of the time queued (`[slot] all 2 slots busy`
+in every log): with this box, 2 agents is the useful maximum; (b) agents iterate stand-alone (one matcher on a fixed
+prior) quickly, but the official number needs the full pipeline (~9 min, everything re-runs when `matching/lib` changes),
+so measure milestones early; (c) worktrees kept the agents fully isolated (no clashes, no half-edited files measured).
+To resume: merge `wt/refs` (d56c68d only) and `wt/dispute` (e408e86 only) one at a time into `matias/full-pipeline`, full
+val run after each, keep only what raises the official score.
+
 ## 6. Practical notes (Windows box, 16 GB RAM)
 
 - `.venv` from `scripts/setup.sh` came up empty here; rebuilt with `uv venv --clear --python 3.12 .venv` +
@@ -175,9 +216,16 @@ to the sub-agents). Diagnostics (val golden, never fed to matchers): `matching/t
 every shortpay method incl. the ones below the gate, and what the wrong lines really are),
 `matching/tests/shortpay/diag_over_chg.py` (why a golden OVERPAYMENT / SHORT_BANK_CHARGES line was not claimed).
 
-## 8. Suggested next steps, by points
+## 8. Suggested next steps, by points (updated at val 92.94)
 
-1. FX lines in refs (orig_amount) and the one-invoice short/over payments: ~5.5 exception points + allocation.
-2. DUPLICATE_PAYMENT with a ledger that starts from the previous phase: ~1.7.
-3. PDF clauses (instalments, retentions, advances, replaced invoices) + multi-invoice credit-note netting.
-4. `use_prior` for confirming/returns on live/final once memory allows.
+Done since the first version of this list: FX lines and one-invoice short/over payments (shortpay), DUPLICATE_PAYMENT
+(duplicates), PDF clauses (pdf_cases), bank-fee grid and overpayment shapes.
+1. Merge and measure iteration 2's two committed branches (s5b): `wt/refs` credit-note structure (+3.8k pairs stand-alone),
+   `wt/dispute` amount-only advice links + dispute settlements (+1.5k pairs stand-alone).
+2. ar_ref_noise / ar_1toN_text: 41k missed pairs (~1.6 pts), mostly unclaimed multi-invoice lines.
+3. ar_1toN_credit_note / ar_n_to_m: 27k missed pairs (~1.1 pts): finish `wt/netting`.
+4. ar_short_dispute: 18k missed pairs (~0.7 pts), all on unclaimed lines.
+5. FX multi-invoice payments with truncated numbers (225 lines): finish `wt/fx`.
+6. Run-to-run variation (s6) and `use_prior` for confirming/returns on live/final.
+7. LIVE: the last LIVE file (`matching/out/live/allocations.parquet`, 15:04) is from the 91.37 code; a 92.94 LIVE build was
+   started and stopped. Rebuild before handing a file over (~9-10 min alone).
