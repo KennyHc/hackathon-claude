@@ -41,7 +41,7 @@
  },
  {
   "matcher":"refs",
-  "lines_val":43162,
+  "lines_val":43164,
   "precision_val":0.9967,
   "lines_hold":42025,
   "precision_hold":0.9968,
@@ -49,7 +49,7 @@
  },
  {
   "matcher":"subset_sum",
-  "lines_val":39032,
+  "lines_val":39030,
   "precision_val":0.9947,
   "lines_hold":37595,
   "precision_hold":0.9947,
@@ -96,11 +96,19 @@
   "order":12
  },
  {
-  "matcher":"classifier",
-  "lines_val":22040,
-  "precision_val":0.8561,
-  "lines_hold":20603,
-  "precision_hold":0.8584,
+  "matcher":"sd_noadv",
+  "lines_val":204,
+  "precision_val":0.0098,
+  "lines_hold":221,
+  "precision_hold":0.009,
   "order":13
+ },
+ {
+  "matcher":"classifier",
+  "lines_val":21836,
+  "precision_val":0.8641,
+  "lines_hold":20382,
+  "precision_hold":0.8677,
+  "order":14
  }
 ]

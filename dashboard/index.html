@@ -94,14 +94,14 @@
   <header class="mc-head" id="top">
     <div class="mc-eyebrow"><span class="mc-live"><i></i>Talky × Anthropic · Close the Books</span><span>Saturday 7 November 2026 · Madrid</span></div>
     <h1 class="mc-title">Close the Books Mission Control</h1>
-    <p class="mc-take">LIVE v5 scored <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v5" data-fmt="2">—</b>, <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=val_minus_live" data-fmt="2">—</b> points under validation and <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=hold_minus_live" data-fmt="2">—</b> under the untouched holdout. Precision holds (<b data-draw="num" data-source="runs" data-field="precision" data-where="run=LIVE v5" data-fmt="3">—</b> on LIVE vs <b data-draw="num" data-source="runs" data-field="precision" data-where="run=Validation" data-fmt="3">—</b>); the gap is recall (<b data-draw="num" data-source="runs" data-field="recall" data-where="run=LIVE v5" data-fmt="3">—</b> vs <b data-draw="num" data-source="runs" data-field="recall" data-where="run=Validation" data-fmt="3">—</b>): lines we leave unmatched, not wrong matches.</p>
+    <p class="mc-take">LIVE v6 scored <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v6" data-fmt="2">—</b>, <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=val_minus_live" data-fmt="2">—</b> points under validation and <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=hold_minus_live" data-fmt="2">—</b> under the untouched holdout. Precision holds (<b data-draw="num" data-source="runs" data-field="precision" data-where="run=LIVE v6" data-fmt="3">—</b> on LIVE vs <b data-draw="num" data-source="runs" data-field="precision" data-where="run=Validation" data-fmt="3">—</b>); the gap is recall (<b data-draw="num" data-source="runs" data-field="recall" data-where="run=LIVE v6" data-fmt="3">—</b> vs <b data-draw="num" data-source="runs" data-field="recall" data-where="run=Validation" data-fmt="3">—</b>): lines we leave unmatched, not wrong matches.</p>
   </header>
 
   <section class="mc-tiles" aria-label="Headline scores">
     <article class="mc-tile mc-hero mc-reveal">
-      <span class="mc-tlabel">LIVE leaderboard · v5 (best)</span>
-      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v5" data-fmt="2">—</span>
-      <span class="mc-sub"><b class="mc-up" data-draw="num" data-source="gaps" data-field="value" data-where="measure=v5_minus_v4" data-fmt="+2">—</b> vs v4 (<span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v4" data-fmt="2">—</span>) · v3 <span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v3" data-fmt="2">—</span> · Jul–Dec 2025</span>
+      <span class="mc-tlabel">LIVE leaderboard · v6 (best)</span>
+      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v6" data-fmt="2">—</span>
+      <span class="mc-sub"><b class="mc-up" data-draw="num" data-source="gaps" data-field="value" data-where="measure=v6_minus_v5" data-fmt="+2">—</b> vs v5 (<span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v5" data-fmt="2">—</span>) · v4 <span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v4" data-fmt="2">—</span> · Jul–Dec 2025</span>
     </article>
     <article class="mc-tile mc-reveal" style="--mc-tone: var(--cds-chart-axis)">
       <span class="mc-tlabel">Validation · tuned on</span>
@@ -166,7 +166,7 @@
           <h3>Every segment</h3>
           <input id="mc-seg-search" class="mc-search" type="search" placeholder="Filter segments" aria-label="Filter segments">
         </div>
-        <p class="mc-note">Sorted by the points each segment is worth. Click a column to sort. Red: LIVE v5 more than 2 points below validation.</p>
+        <p class="mc-note">Sorted by the points each segment is worth. Click a column to sort. Red: LIVE v5 more than 2 points below validation. LIVE v5 is the last upload with a per-segment breakdown (v6 returned totals only).</p>
         <div class="mc-tablebox">
           <table class="mc-table" data-source="segments" data-row-key="segment">
             <thead><tr>
@@ -191,7 +191,7 @@
     <div class="mc-grid">
       <div class="mc-card mc-reveal">
         <h3>Matchers: lines claimed and precision</h3>
-        <p class="mc-note">Bar: lines claimed on validation. Right: share of those lines fully correct, validation then holdout. <code>cn_bundles</code> runs last and often claims only the invoices a line cites, so most of its lines stay incomplete by design: its pairs are 97–99&nbsp;% right, and those lines were all wrong before it ran.</p>
+        <p class="mc-note">Bar: lines claimed on validation. Right: share of those lines fully correct, validation then holdout. <code>cn_bundles</code> runs last and often claims only the invoices a line cites, so most of its lines stay incomplete by design: its pairs are 97–99&nbsp;% right, and those lines were all wrong before it ran. <code>sd_noadv</code> (the learned ranker for bulk payments without an advice) works the same way: about 73–75&nbsp;% of its pairs are right on both windows, on lines that were all unclaimed before.</p>
         <div class="mc-chart" data-draw="matchers" data-source="matchers" style="min-height: 380px"></div>
       </div>
       <div class="mc-card mc-reveal">
@@ -223,7 +223,7 @@
     const fmts = { '0': d3.format('.0f'), '2': d3.format('.2f'), '3': d3.format('.3f'), '+2': d3.format('+.2f'), 'int': d3.format(','), 'pct': d3.format('.1%') };
     const where = (s) => (s || '').split('&').filter(Boolean).map((p) => p.split('=').map(decodeURIComponent));
     const pick = (rows, s) => rows.find((r) => where(s).every(([k, v]) => String(r[k]) === v));
-    const runColor = { 'Validation': 0, 'Holdout': 1, 'LIVE v1': null, 'LIVE v2': null, 'LIVE v3': null, 'LIVE v4': null, 'LIVE v5': 2 };
+    const runColor = { 'Validation': 0, 'Holdout': 1, 'LIVE v1': null, 'LIVE v2': null, 'LIVE v3': null, 'LIVE v4': null, 'LIVE v5': null, 'LIVE v6': 2 };
     const color = (run) => runColor[run] == null ? 'var(--cds-chart-muted)' : dash.colors[runColor[run]];
     const seen = new WeakSet();
     const first = (el) => { const f = !seen.has(el); seen.add(el); return f && motion; };
@@ -259,13 +259,13 @@
   dash.calc('gaps', {
     inputs: ['runs'],
     title: 'Score gaps between runs',
-    description: 'Differences between run scores: validation and holdout minus the latest LIVE upload (v5), and v5 minus v4.',
+    description: 'Differences between run scores: validation and holdout minus the latest LIVE upload (v6), and v6 minus v5.',
     fn: (runs) => {
       const s = (name) => runs.find((r) => r.run === name).score;
       return [
-        { measure: 'val_minus_live', value: +(s('Validation') - s('LIVE v5')).toFixed(2) },
-        { measure: 'hold_minus_live', value: +(s('Holdout') - s('LIVE v5')).toFixed(2) },
-        { measure: 'v5_minus_v4', value: +(s('LIVE v5') - s('LIVE v4')).toFixed(2) },
+        { measure: 'val_minus_live', value: +(s('Validation') - s('LIVE v6')).toFixed(2) },
+        { measure: 'hold_minus_live', value: +(s('Holdout') - s('LIVE v6')).toFixed(2) },
+        { measure: 'v6_minus_v5', value: +(s('LIVE v6') - s('LIVE v5')).toFixed(2) },
       ];
     },
   });
@@ -357,12 +357,12 @@
     g.append('line').attr('x1', (mm) => x(d3.min(d.data, (r) => r[mm[0]]))).attr('x2', (mm) => x(d3.max(d.data, (r) => r[mm[0]]))).style('stroke', 'var(--cds-chart-axis)').attr('stroke-width', 2).attr('stroke-linecap', 'round');
     const anim = mc.first(el);
     g.each(function (mm) {
-      const dots = d3.select(this).selectAll('circle').data(d.data).join('circle').attr('r', (r) => r.run === 'LIVE v5' ? 7 : 5.5)
+      const dots = d3.select(this).selectAll('circle').data(d.data).join('circle').attr('r', (r) => r.run === 'LIVE v6' ? 7 : 5.5)
         .style('fill', (r) => mc.color(r.run)).style('stroke', 'var(--color-panel)').attr('stroke-width', 2).style('cursor', 'default')
         .attr('cx', anim ? x(lo) : (r) => x(r[mm[0]]));
       if (anim) dots.transition().delay((r, i) => 120 + i * 90).duration(900).ease(d3.easeCubicOut).attr('cx', (r) => x(r[mm[0]]));
       dots.on('mousemove', (event, r) => { d3.select(event.currentTarget).attr('r', 9); tipper.show(event, [[mm[1]], [`${r.run}`, mc.fmts['3'](r[mm[0]])], [r.window]]); })
-        .on('mouseleave', (event, r) => { d3.select(event.currentTarget).attr('r', r.run === 'LIVE v5' ? 7 : 5.5); tipper.hide(); });
+        .on('mouseleave', (event, r) => { d3.select(event.currentTarget).attr('r', r.run === 'LIVE v6' ? 7 : 5.5); tipper.hide(); });
     });
   });
 </script>
@@ -534,7 +534,7 @@
       .attr('width', anim ? 0 : (q) => x(q.lines_val) - m.l);
     if (anim) bars.transition().delay((q, i) => i * 60).duration(800).ease(d3.easeCubicOut).attr('width', (q) => x(q.lines_val) - m.l);
     const tone0 = (v) => v < 0.95 ? 'var(--color-bad)' : v < 0.99 ? 'var(--color-warn)' : 'var(--color-fg)';
-    const muted = new Set(['classifier', 'cn_bundles']);
+    const muted = new Set(['classifier', 'cn_bundles', 'sd_noadv']);
     g.append('text').attr('x', W - 70).attr('y', y.bandwidth() / 2).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', (q) => muted.has(q.matcher) ? 'var(--color-fg-muted)' : tone0(q.precision_val)).style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => mc.fmts.pct(q.precision_val));
     g.append('text').attr('x', W - 4).attr('y', y.bandwidth() / 2).attr('dy', '.35em').attr('text-anchor', 'end').style('fill', (q) => muted.has(q.matcher) ? 'var(--color-fg-muted)' : tone0(q.precision_hold)).style('font-size', 'var(--cds-font-size-caption)').style('font-variant-numeric', 'tabular-nums').text((q) => mc.fmts.pct(q.precision_hold));
     const tipper = mc.tip(el);

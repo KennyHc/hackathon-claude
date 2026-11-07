@@ -4,10 +4,10 @@
   "window": "TRAIN Jan\u2013Jun 2025",
   "role": "Tuned on",
   "lines": 199987,
-  "score": 96.73,
-  "allocation_f1": 0.962,
-  "precision": 0.998,
-  "recall": 0.929,
+  "score": 96.79,
+  "allocation_f1": 0.964,
+  "precision": 0.997,
+  "recall": 0.932,
   "txn_accuracy": 0.977,
   "exception_macro_f1": 0.965
  },
@@ -16,10 +16,10 @@
   "window": "TRAIN Jan\u2013Jun 2024",
   "role": "Never tuned on",
   "lines": 190169,
-  "score": 96.84,
-  "allocation_f1": 0.965,
-  "precision": 0.998,
-  "recall": 0.933,
+  "score": 96.91,
+  "allocation_f1": 0.966,
+  "precision": 0.997,
+  "recall": 0.937,
   "txn_accuracy": 0.978,
   "exception_macro_f1": 0.964
  },
@@ -74,7 +74,7 @@
  {
   "run": "LIVE v5",
   "window": "LIVE Jul\u2013Dec 2025",
-  "role": "Leaderboard (current code, + cn_bundles)",
+  "role": "Leaderboard (+ cn_bundles)",
   "lines": 203083,
   "score": 96.34,
   "allocation_f1": 0.9562,
@@ -82,5 +82,17 @@
   "recall": 0.9175,
   "txn_accuracy": 0.9753,
   "exception_macro_f1": 0.9637
+ },
+ {
+  "run": "LIVE v6",
+  "window": "LIVE Jul\u2013Dec 2025",
+  "role": "Leaderboard (current code, + sd_noadv ranker)",
+  "lines": 203083,
+  "score": 96.42,
+  "allocation_f1": 0.9578,
+  "precision": 0.9966,
+  "recall": 0.9219,
+  "txn_accuracy": 0.9753,
+  "exception_macro_f1": 0.9638
  }
 ]
