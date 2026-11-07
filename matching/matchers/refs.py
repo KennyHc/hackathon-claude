@@ -49,6 +49,7 @@ FULL_CLEAR = {"", "SHORT_DISCOUNT", "SHORT_WITHHOLDING", "SHORT_BANK_CHARGES", "
 TRUNC_SPLIT = re.compile(r" \| |/[A-Z]{2,5}/| /REF\b|\\$")
 DOC_PREFIXES = {"FV", "FA", "FT", "RE", "RF", "INV", "NF", "VTN", "AB", "GS", "NC", "AV", "CRN", "CM", "FAC", "FRA", "ND",
                 "VCN", "FRAS", "FACT"}
+RUN_ID = re.compile(r"PR\d{12}")
 USE_SHARED = os.environ.get("REFS_SHARED") == "1"  # shared explain() only adds wrong lines on sample (fallback)
 STRICT_EXC = {"", "SHORT_DISCOUNT", "SHORT_WITHHOLDING", "FX_DIFFERENCE"}
 INSTAL = re.compile(r"(?:INSTALMENT|PLAZO|ECHEANCE|PRESTACAO|RATE|RATA|VENCIMIENTO|TEILZAHLUNG)\S*\s*(\d{1,2})\s*/\s*(\d{1,2})")
@@ -58,6 +59,51 @@ WHT_COUNTRIES = {"MX", "BR", "MA"}
 WHT_RATES = (0.0125, 0.015, 0.10)
 SEPA = {"ES", "FR", "DE", "IT", "PT", "NL", "BE", "LU", "AT", "IE", "MT", "FI", "GR", "SK", "SI", "EE", "LV", "LT",
         "CY", "HR", "PL", "GB", "CH", "SE", "DK", "NO", "CZ", "HU", "RO", "BG", "IS", "LI", "MC", "SM"}
+
+
+def unique_subset(vals, target, keys, max_states=400_000):
+    """the only subset of vals (cents, signed) summing to target -> [keys] (None if none / several / too big)."""
+    n = len(vals)
+    if n == 0 or n > 80:
+        return None
+    pos_suffix = [0] * (n + 1)
+    neg_suffix = [0] * (n + 1)
+    for i in range(n - 1, -1, -1):
+        pos_suffix[i] = pos_suffix[i + 1] + max(vals[i], 0)
+        neg_suffix[i] = neg_suffix[i + 1] + min(vals[i], 0)
+    ways = {0: 1}
+    parent = {0: None}
+    for i, v in enumerate(vals):
+        hi = target - neg_suffix[i + 1]
+        lo = target - pos_suffix[i + 1]
+        new = {}
+        for sm, w in ways.items():
+            ns = sm + v
+            if ns < lo or ns > hi:
+                continue
+            new[ns] = new.get(ns, 0) + w
+            if ns not in parent:
+                parent[ns] = (sm, i)
+        for ns, w in new.items():
+            ways[ns] = min(2, ways.get(ns, 0) + w)
+        # drop states that can no longer reach the target
+        if len(ways) > max_states:
+            return None
+    if ways.get(target) != 1:
+        return None
+    out = []
+    sm = target
+    seen = set()
+    while sm != 0 or (parent.get(sm) is not None and not out):
+        pr = parent.get(sm)
+        if pr is None or pr[1] in seen:
+            return None
+        seen.add(pr[1])
+        out.append(keys[pr[1]])
+        sm = pr[0]
+        if sm == 0:
+            break
+    return out
 
 
 class Solver:
@@ -78,10 +124,12 @@ class Solver:
         # party names: words + idf (for confirming the payer when cash != documents)
         it = items.drop_duplicates(["side", "party_id"])
         self.pname = {}
+        self.pnorm = {}
         df = Counter()
         for sd, p, nm in zip(it.side, it.party_id, it.party_name_norm.fillna("")):
             ws = [w for w in nm.split() if len(w) >= 2]
             self.pname[(sd, p)] = ws
+            self.pnorm[(sd, p)] = nm
             df.update(set(ws))
         n = max(len(self.pname), 1)
         self.idf = {w: float(np.log(1 + n / c)) for w, c in df.items()}
@@ -93,10 +141,49 @@ class Solver:
         for i, e, d, a in sorted(zip(bk.bank_txn_id, bk.entity, bk.booking_date, bk.amount), key=lambda x: (x[2], x[0])):
             self.receipts[(e, "AR" if a > 0 else "AP")].append((d, round(abs(a), 2), i))
         self.receipt_dates = {k: [x[0] for x in v] for k, v in self.receipts.items()}
+        self.load_payment_runs()
+        self.find_cancelled()
         fx = m["fx_rates"].copy()
         fx["date"] = fx.date.astype(str)
         self.fx = {c: (g.date.tolist(), g.units_per_eur.astype(float).tolist())
                    for c, g in fx.sort_values("date").groupby("currency")}
+
+    def load_payment_runs(self):
+        """AP debits covered by payment-run files belong to the payment_runs matcher; the files also tell which AP
+        documents were already paid (in part) by an earlier run."""
+        self.run_e2e, self.run_ids = set(), set()
+        self.run_docs = defaultdict(list)
+        d = self.ctx.data_path("payment_runs")
+        if not os.path.isdir(d):
+            return
+        parts = []
+        for f in sorted(os.listdir(d)):
+            if f.endswith(".csv"):
+                try:
+                    parts.append(pd.read_csv(os.path.join(d, f), dtype=str,
+                                             usecols=["run_id", "execution_date", "debtor_account_id", "end_to_end_id",
+                                                      "document_number", "beneficiary"]))
+                except Exception:
+                    continue
+        if not parts:
+            return
+        r = pd.concat(parts, ignore_index=True).fillna("")
+        self.run_e2e = set(r.end_to_end_id) - {""}
+        self.run_ids = set(r.run_id) - {""}
+        ent = r.debtor_account_id.str.split("-").str[0]
+        aln = r.document_number.str.upper().str.replace(r"[^A-Z0-9]", "", regex=True)
+        ben = r.beneficiary.map(norm_name)
+        for e, a, b, dt in zip(ent, aln, ben, r.execution_date):
+            self.run_docs[(e, a, b)].append(dt)
+
+    def in_payment_run(self, line):
+        if line.end_to_end_id and line.end_to_end_id in self.run_e2e:
+            return True
+        for v in (line.ref1, line.ref2):
+            if v and v in self.run_ids:
+                return True
+        m = RUN_ID.search(line.text or "")
+        return bool(m and m.group(0) in self.run_ids)
 
     # --- helpers -------------------------------------------------------------------------------------------------
     def rate(self, cur: str, date: str) -> float | None:
@@ -111,11 +198,42 @@ class Solver:
     def party_items(self, side, party, ent, bd):
         ix = self.ix
         return [k for k in ix.by_party.get((side, party), ()) if ix.open[k] > 0.005 and ix.entity[k] == ent
-                and ix.issue[k] <= bd]
+                and ix.issue[k] <= bd and k not in self.cancelled]
+
+    def find_cancelled(self):
+        """invoices cancelled by an 'Anulación' credit note (POLICIES §5.7): neither they nor that credit note are
+        ever settled by bank; a payment citing them pays the replacement invoice issued around the credit note."""
+        ix = self.ix
+        self.cancelled = set()
+        self.replaced = {}  # (side, party, alnum of cancelled invoice) -> credit note issue date
+        it = self.ctx.items
+        reason = it.reason.fillna("").str.upper()
+        cn = it[(it.item_type.isin(["ARC", "APC"])) & reason.str.contains("ANULA|CANCEL")]
+        pos = {iid: k for k, iid in enumerate(ix.iid)}
+        for r in cn.itertuples(index=False):
+            c = pos.get(r.item_id)
+            rel = ix.related[c] if c is not None else ""
+            if c is None or not rel:
+                continue
+            for k in ix.by_party.get((ix.side[c], ix.party[c]), ()):
+                if ix.alnum[k] == rel and ix.sign[k] > 0 and abs(ix.total[k] - ix.total[c]) < 0.011:
+                    self.cancelled |= {k, c}
+                    self.replaced[(ix.side[c], ix.party[c], rel)] = ix.issue[c]
+                    if ix.norm[k]:
+                        self.replaced[(ix.side[c], ix.party[c], ix.norm[k])] = ix.issue[c]
 
     def slot_cands(self, t, P):
         """match one token against the party's items -> (kind, [items])"""
         ix = self.ix
+        if P and self.replaced:
+            side, party = ix.side[P[0]], ix.party[P[0]]
+            dt = self.replaced.get((side, party, t.alnum)) or self.replaced.get((side, party, t.digits.lstrip("0")))
+            if dt:
+                lo = (pd.Timestamp(dt) - pd.Timedelta(days=3)).strftime("%Y-%m-%d")
+                hi = (pd.Timestamp(dt) + pd.Timedelta(days=10)).strftime("%Y-%m-%d")
+                rep = [k for k in P if ix.sign[k] > 0 and lo <= ix.issue[k] <= hi]
+                if rep:
+                    return "T", rep
         d0 = t.digits.lstrip("0")
         x = [k for k in P if ix.alnum[k] == t.alnum or (len(d0) >= 4 and ix.norm[k] == d0 and
                                                           (not t.letters or ix.alnum[k][:len(t.letters)] == t.letters))
@@ -353,11 +471,16 @@ class Solver:
         -> the item was already paid in part, this line pays the remainder."""
         if x <= 0.005:
             return False
+        if side == "AP" and any(dt < line.booking_date for dt in self.run_docs.get((line.entity, self.ix.alnum[k], self.pnorm.get(("AP", party), "")), ())):
+            return True
         lst = self.receipts.get((line.entity, side))
         if not lst:
             return False
         P = [j for j in self.ix.by_party.get((side, party), ()) if j != k and self.ix.open[j] > 0.005]
-        vals = {round(self.ix.sign[j] * self.ix.open[j], 2) for j in P}
+        v1 = [int(round(self.ix.sign[j] * self.ix.open[j] * 100)) for j in P[:150]]
+        vals = set(v1)
+        if len(v1) <= 80:
+            vals |= {a + b for a, b in itertools.combinations(v1, 2)}
         lo = (pd.Timestamp(line.booking_date) - pd.Timedelta(days=150)).strftime("%Y-%m-%d")
         dates = self.receipt_dates[(line.entity, side)]
         end = bisect.bisect_left(dates, line.booking_date)
@@ -367,7 +490,7 @@ class Solver:
             rest = round(amt - x, 2)
             if rest < -0.005:
                 continue
-            if abs(rest) < EPS or rest in vals:
+            if abs(rest) < EPS or int(round(rest * 100)) in vals:
                 if self.name_score(self.line_words(i), side, party) >= NAME_MIN:
                     return True
         return False
@@ -383,7 +506,9 @@ class Solver:
     def truncated(self, line, slots):
         """a field of the text ends with a reference fragment that resolved to nothing ('... FV', '... 250')."""
         used = {t.alnum for _, _, t in slots}
-        for txt in (line.text, line.remittance_info):
+        # the structured remittance field is usually complete when the free text is cut: judge it alone if present
+        srcs = (line.remittance_info,) if tokens(line.remittance_info or "") else (line.text, line.remittance_info)
+        for txt in srcs:
             for chunk in TRUNC_SPLIT.split(clean_text(txt)):
                 ws = WORD.findall(chunk)
                 if not ws:
@@ -391,7 +516,7 @@ class Solver:
                 if re.fullmatch(r"\d{1,2}/\d{1,2}", ws[-1]):
                     continue
                 w = re.sub(r"[^A-Z0-9]", "", ws[-1])
-                if not w or w in used or any(u.startswith(w) or (w.isdigit() and w in u) for u in used):
+                if not w or w in used or (len(w) >= 4 and any(u.startswith(w) or (w.isdigit() and w in u) for u in used)):
                     continue
                 dg = sum(c.isdigit() for c in w)
                 if (dg == 0 and w in DOC_PREFIXES) or (w.isdigit() and len(w) <= 6) or (
@@ -497,7 +622,7 @@ class Solver:
             S = set(tops[0][1])
             rest = [k for k in P if k not in S]
             diff = round(cash - self.value(S), 2)
-            sol = self.complete(S, rest, diff)
+            sol = self.complete(S, rest, diff, deep=self.truncated(line, slots))
             if sol is not None:
                 S2 = S | set(sol)
                 if ix.cur[next(iter(S2))] == line.currency and len({ix.cur[k] for k in S2}) == 1:
@@ -511,7 +636,7 @@ class Solver:
             return ("explain", top_sc, rows)
         return None
 
-    def complete(self, S, rest, diff):
+    def complete(self, S, rest, diff, deep=False):
         """unique smallest set of the party's other items with signed value == diff."""
         ix = self.ix
         if abs(diff) < EPS or not rest:
@@ -550,13 +675,18 @@ class Solver:
                 break
         if len(sols) == 1:
             return sols[0]
-        return None
+        if sols or not deep:
+            return None
+        # 4) cut text: any number of uncited items, accepted only if the subset is the only one
+        return unique_subset([cents[k] for k in rest], target, rest)
 
     # --- per line ------------------------------------------------------------------------------------------------
     def solve(self, line):
         if not line.amount or abs(line.amount) < 0.005:
             return None
         side = "AR" if line.amount > 0 else "AP"
+        if side == "AP" and self.in_payment_run(line):
+            return None
         toks = tokens(line.text, line.remittance_info if line.remittance_info != line.text else "")
         if not toks:
             return None

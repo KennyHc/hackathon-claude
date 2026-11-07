@@ -125,11 +125,23 @@ class Engine:
         self.pr = PartyResolver.get(ctx)
         it = ctx.open_items[ctx.open_items.side == "AR"]
         it = it.sort_values(["issue_date", "document_number", "item_id"])
+        # allocations of earlier matchers (the runner exposes them as ctx.allocations): consume those amounts
+        prior = getattr(ctx, "allocations", None)
+        taken: dict = {}
+        if isinstance(prior, pd.DataFrame) and not prior.empty:
+            p = prior[(prior.item_id.astype(str) != "") & (prior.exception != "RETURNED")]
+            full = p.exception.isin(["SHORT_DISCOUNT", "SHORT_WITHHOLDING", "SHORT_BANK_CHARGES", "OVERPAYMENT",
+                                     "FX_DIFFERENCE", "DUPLICATE_PAYMENT"])
+            taken = p.assign(a=np.where(full, 1e12, p.amount.astype(float))).groupby("item_id").a.sum().to_dict()
         self.pool: dict[str, list] = {}
         for r in it.itertuples(index=False):
+            left = r.open_amount - taken.get(r.item_id, 0.0)
+            if left < 0.005:
+                continue
             self.pool.setdefault(r.party_id, []).append(
-                (r.item_id, r.issue_date, r.due_date or r.issue_date, int(round(r.open_amount * 100)), r.item_type,
-                 r.entity, r.currency, int(round(r.total_amount * 100)), r.payment_terms))
+                (r.item_id, r.issue_date, r.due_date or r.issue_date, int(round(left * 100)), r.item_type,
+                 r.entity, r.currency, int(round(r.total_amount * 100)), r.payment_terms, r.document_number,
+                 r.related_document))
         pt = ctx.masters["payment_terms"]
         self.terms = {c: (float(p), int(d)) for c, p, d in zip(pt.code, pt.early_payment_discount_pct, pt.discount_days)
                       if p}
@@ -138,9 +150,6 @@ class Engine:
         self.diag: dict = {}
         self.conf = 0.8
         self.exc: dict = {}     # item_id -> (amount cents, exception) when not the plain open amount
-        prior = getattr(ctx, "allocations", None)        # allocations of earlier matchers, when the runner exposes them
-        if isinstance(prior, pd.DataFrame) and not prior.empty:
-            self.used |= set(prior.item_id)
         self.rows = {"subset_sum": [], "same_amount": []}
 
     # -- candidates ---------------------------------------------------------------------------------------------------
@@ -199,6 +208,12 @@ class Engine:
                 self.exc[x[0]] = (cents if exc == "PARTIAL" else x[3], exc)
                 return "discount", [x]
             return None
+        # one invoice net of its own credit note (credit_note.related_document = the invoice)
+        by_doc = {x[9]: x for x in inv}
+        pairs = [(by_doc[c[10]], c) for c in its if c[4] == "ARC" and c[10] in by_doc
+                 and by_doc[c[10]][3] - c[3] == cents]
+        if len(pairs) == 1:
+            return "cn_pair", list(pairs[0])
         # FIFO prefix of invoices
         acc = 0
         for k, x in enumerate(inv):
@@ -215,13 +230,13 @@ class Engine:
         for slack in DUE_STAGES:
             lim_due = str(date.fromisoformat(t.booking_date) + timedelta(days=slack))
             cand = [x for x in inv if x[1] >= lim_iss and x[2] <= lim_due and x[3] <= cents][:MITM_MAX]
-            if len(cand) < 2 or sum(x[3] for x in cand) < cents or len(cand) == prev:
+            if not cand or len(cand) + len(cns) < 2 or sum(x[3] for x in cand) < cents or len(cand) == prev:
                 continue
             prev = len(cand)
             cand = cand + cns[:max(0, MITM_MAX + 4 - len(cand))]
             cnt, sols, dens = mitm([-x[3] if x[4] == "ARC" else x[3] for x in cand], cents, max_sols=TIE_MAX)
             self.diag[(t.bank_txn_id, cid)] = (len(cand), cnt, dens)
-            if cnt == 1 and dens <= SPURIOUS_MAX and len(sols[0]) >= 2:
+            if cnt == 1 and dens <= SPURIOUS_MAX and len(sols[0]) >= 2 and any(cand[i][4] == "ARI" for i in sols[0]):
                 self.conf = 0.85 if dens <= 0.01 else 0.75 if dens <= 0.1 else 0.6
                 return "subset", [cand[i] for i in sols[0]]
             if 2 <= cnt <= TIE_MAX and dens <= SPURIOUS_TIE:
@@ -261,7 +276,7 @@ class Engine:
                 continue
             kind, its = res
             method = "same_amount" if kind.startswith("same_amount") else "subset_sum"
-            conf = self.conf if kind == "subset" else {"single": 0.9, "single_ref": 0.95, "fifo": 0.85, "discount": 0.9,
+            conf = self.conf if kind == "subset" else {"single": 0.9, "single_ref": 0.95, "fifo": 0.85, "discount": 0.9, "cn_pair": 0.9,
                                                        "same_amount_month": 0.9, "same_amount_fifo": 0.75}.get(kind, 0.7)
             for x in its:
                 self.used.add(x[0])

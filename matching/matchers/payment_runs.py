@@ -67,6 +67,10 @@ class _Runs:
         self.run_ekeys = first.groupby("rkey").ekey.agg(list).to_dict()
         self.by_run = first.groupby("run_id").rkey.agg(lambda s: sorted(set(s))).to_dict()
         self.run_type = dict(zip(first.rkey, first.run_type))
+        self.by_doc_rows = defaultdict(list)
+        for k, d, e, a, it, al in zip(r.ekey, r.execution_date, r.debtor_entity, r.document_amount.abs(), r.item_id,
+                                      r.doc_alnum):
+            self.by_doc_rows[al].append((k, d, e, a, it))
         tr = first[first.run_type == "transfers"]
         self.by_acc_amt = defaultdict(list)
         for k, acc, a in zip(tr.ekey, tr.debtor_account_id, tr.transfer_amount):
@@ -179,6 +183,8 @@ def run(ctx: Ctx) -> pd.DataFrame:
     cur_of.update(zip(R.closed.item_id, R.closed.currency))
     bank = ctx.bank.set_index("bank_txn_id")
     order = sorted(links, key=lambda bt: (bank.booking_date[bt], bt))
+    linked_e2e: set[str] = set()   # units actually emitted so far (chronological)
+    start = ctx.bank.booking_date.min()
     out = []
     LAST_HOW.clear()
     for bt in order:
@@ -188,6 +194,7 @@ def run(ctx: Ctx) -> pd.DataFrame:
         if how == "agg":   # a whole file: keep the documents we can resolve (pairs count even if one is missing)
             df = df[df.item_id != ""]
         rr = []
+        df_doc = dict(zip(df.item_id, zip(df.doc_alnum, df.execution_date, df.debtor_entity)))
         for iid, dt, da in zip(df.item_id, df.document_type, df.document_amount):
             if not iid:
                 rr = None
@@ -200,7 +207,7 @@ def run(ctx: Ctx) -> pd.DataFrame:
             elif dup:
                 exc = "DUPLICATE_PAYMENT"
             elif dt != "CREDIT_NOTE":
-                if amt < op - max(0.01, 0.005 * op):
+                if amt < op - max(0.01, 0.005 * op) and not _remainder(R, iid, df_doc[iid], amt, op, linked_e2e, start):
                     exc = "PARTIAL"
                 elif cur_of[iid] != bank_cur:
                     exc = "FX_DIFFERENCE"
@@ -214,6 +221,7 @@ def run(ctx: Ctx) -> pd.DataFrame:
                 open_amt[iid] = max(0.0, open_amt.get(iid, 0.0) - amt)
             out.append((bt, iid, amt, exc, conf, NAME))
         LAST_HOW[bt] = how
+        linked_e2e.update(ks)
     out += _direct_debits(ctx, lines[~lines.bank_txn_id.isin(set(LAST_HOW))], open_amt)
     return alloc_frame(out)
 
@@ -281,6 +289,17 @@ def _name_in(party_name: str, text: str) -> bool:
         if i + 1 < len(words) and len(words[i + 1]) >= 2 and toks[1].startswith(words[i + 1]):
             return True
     return False
+
+
+def _remainder(R: _Runs, iid: str, doc: tuple, amt: float, op: float, linked_e2e: set, start: str) -> bool:
+    """True when an earlier run row of this phase that we could not link to a bank line (e.g. a partial payment to a
+    factor whose document was ambiguous) paid exactly the difference: this payment is the remainder, not a partial."""
+    alnum_, exec_date, ent = doc
+    ents = H.FACTORY_SUBS.get(ent, {ent})
+    prev = R.by_doc_rows.get(alnum_, [])
+    paid = [a for k, d, e, a, it in prev
+            if k not in linked_e2e and start <= d < exec_date and e in ents and it in ("", iid)]
+    return any(abs(op - amt - a) <= max(0.01, 0.005 * op) for a in paid)
 
 
 def _amount_ok(t, unit_amount: float, unit_cur: str) -> bool:
