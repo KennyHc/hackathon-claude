@@ -1,6 +1,6 @@
 # Best version: what to submit for FINAL
 
-**Git tag `final-v5-robust`** (same output as `best-live-96.34`) on branch `kenny/full-pipeline` · frozen copy in
+**Git tag `best-live-96.42`** (`final-v5-robust` + the `sd_noadv` add-on stage; LIVE 96.42) on branch `kenny/full-pipeline` · frozen copy in
 `/Users/kenny/Documents/GitHub/hackathon-claude-best` (a separate checkout of the tag; nothing else edits it).
 
 | Where | Score |
