@@ -46,6 +46,7 @@ def resolve_docs(H, D, items, phase=""):
     ent = dict(zip(H.file, H.entity))
     payer = dict(zip(H.file, H.payer_name))
     ids = []
+    cand_cache = {}
     for f, doc, g in zip(D.file, D.document, D.gross):
         e = ent[f]
         want = "ARC" if g < 0 else "ARI"
@@ -63,15 +64,26 @@ def resolve_docs(H, D, items, phase=""):
             ids.append(c[0].item_id)
             continue
         # fallback: payer's (group's) items whose number ends with the advice digits / PO = advice doc
-        ps = set(name2c.get((e, _norm(payer[f])), set()))
-        for p in list(ps):
-            if c2g.get(p):
-                ps |= grp[c2g[p]]
-        cand = [r for p in ps for r in by_party.get(p, []) if r.item_type == want and r.entity == e]
+        key = (f, want)
+        cand = cand_cache.get(key)
+        if cand is None:
+            ps = set(name2c.get((e, _norm(payer[f])), set()))
+            for p in list(ps):
+                if c2g.get(p) and len(grp[c2g[p]]) <= 30:
+                    ps |= grp[c2g[p]]
+            cand = [r for p in ps for r in by_party.get(p, []) if r.item_type == want and r.entity == e]
+            cand = (cand, {}, {})
+            for r in cand[0]:
+                dg = _digits(r.document_number)
+                for k in range(5, len(dg) + 1):
+                    cand[1].setdefault(dg[-k:], []).append(r)
+                if r.po_number:
+                    cand[2].setdefault(r.po_number, []).append(r)
+            cand_cache[key] = cand
         d = _digits(doc)
-        c = [r for r in cand if r.po_number and r.po_number == doc]
+        c = list(cand[2].get(doc, []))
         if not c and len(d) >= 5:
-            c = [r for r in cand if _digits(r.document_number).endswith(d)]
+            c = list(cand[1].get(d, []))
         if len(c) > 1:
             c = [r for r in c if abs(r.total_amount - abs(g)) < 0.01 or abs(r.open_amount - abs(g)) < 0.01]
         ids.append(c[0].item_id if len(c) == 1 else "")
@@ -117,23 +129,48 @@ def match(lines, items, ctx=None):
     L = pd.DataFrame(links, columns=["file", "bank_txn_id", "ccy", "conf", "method"])
     # one advice per line and one line per advice
     L = L[~L.bank_txn_id.duplicated(keep=False)]
+    from integration.lib.masters import read_master
+    pt = read_master("payment_terms.csv", phase)
+    terms = {c: (float(p or 0), int(float(d or 0))) for c, p, d in
+             zip(pt.code, pt.early_payment_discount_pct, pt.discount_days)}
+    item_terms = dict(zip(items.item_id, items.payment_terms))
+    item_issue = dict(zip(items.item_id, items.issue_date))
+    bdate = dict(zip(lines.bank_txn_id, lines.booking_date))
+
+    def discount_ok(it, g, paid, bd):
+        pct, days = terms.get(item_terms.get(it, ""), (0.0, 0))
+        if pct <= 0 or not item_issue.get(it):
+            return False
+        lim = (pd.Timestamp(item_issue[it]) + pd.Timedelta(days=days + 3)).strftime("%Y-%m-%d")
+        return bd <= lim and abs(round(g - g * pct / 100.0, 2) - paid) <= 0.02
+
     rows = []
     for f, bt, ccy, conf, meth in L.itertuples(index=False):
         d = docs_by_file[f]
         if (d.item_id == "").any() or d.item_id.duplicated().any():
             continue
+        bd = bdate.get(bt, "")
         for it, g, ded, reason, paid in zip(d.item_id, d.gross, d.deduction, d.reason, d.paid):
             g = abs(g)
             if it.startswith("ARC"):
                 rows.append((bt, it, g, "", conf, meth))
                 continue
-            exc = ""
-            amt = g
-            if ded > 0.005:
-                if reason and not DISC_RE.search(reason) and not WHT_RE.search(reason):
-                    exc, amt = "SHORT_DISPUTE", paid
-                elif not reason and ded > 0.03 * g:
-                    exc, amt = "PARTIAL", paid
+            exc, amt = "", g
+            short = g - paid if paid == paid else 0.0
+            if short > 0.005:
+                rate = short / g if g else 0
+                if (reason and WHT_RE.search(reason)) or (not (reason and DISC_RE.search(reason))
+                                                         and any(abs(rate - w) < 0.0006 for w in (0.0125, 0.015, 0.10))
+                                                         and not (reason and not WHT_RE.search(reason))):
+                    amt = g                                    # withholding: fully cleared
+                elif reason and not DISC_RE.search(reason):
+                    exc, amt = "SHORT_DISPUTE", paid           # stated dispute reason
+                elif discount_ok(it, g, paid, bd):
+                    amt = g                                    # discount within terms → SHORT_DISCOUNT downstream
+                elif reason or ded > 0.005:
+                    exc, amt = "PARTIAL", paid                 # late discount / unexplained deduction
+                else:
+                    exc, amt = "PARTIAL", paid                 # paid less than the document, no reason
             if item_ccy.get(it, ccy) != ccy and exc == "":
                 exc = "FX_DIFFERENCE"
             rows.append((bt, it, amt, exc, conf, meth))

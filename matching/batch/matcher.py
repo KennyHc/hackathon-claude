@@ -10,7 +10,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from matching.batch import cards_cheques, dd, pr  # noqa: E402
+from matching.batch import apdd, cards_cheques, dd, pr  # noqa: E402
 from matching.batch.common import OUT_COLS, out_frame  # noqa: E402
 
 try:
@@ -18,7 +18,7 @@ try:
 except Exception:  # parser not landed yet
     remit = None
 
-SUBMATCHERS = [("pr", pr), ("dd", dd), ("cards_cheques", cards_cheques), ("remit", remit)]
+SUBMATCHERS = [("pr", pr), ("dd", dd), ("cards_cheques", cards_cheques), ("remit", remit), ("apdd", apdd)]
 
 
 def match(phase: str, lines: pd.DataFrame, items: pd.DataFrame, claimed: pd.DataFrame, **ctx) -> pd.DataFrame:

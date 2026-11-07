@@ -61,6 +61,20 @@ def resolve_receipts(dd, items, phase=""):
     return dd
 
 
+def _full_ar_docs(phase):
+    """(entity, document_number) → item_id over all AR invoice files (train, live, phase): returned receipts can be of
+    items already closed at phase start (not in open items). Input documents, not labels."""
+    import os
+    from matching.batch.common import DATA
+    out = {}
+    for ph in dict.fromkeys(["train", "live", phase]):
+        f = os.path.join(DATA, ph, "ar_invoices.csv.gz")
+        if os.path.exists(f):
+            df = pd.read_csv(f, dtype=str, keep_default_na=False, usecols=["item_id", "entity", "document_number"])
+            out.update(zip(zip(df.entity, df.document_number), df.item_id))
+    return out
+
+
 def match(lines, items, ctx=None):
     phase = (ctx or {}).get("phase")
     dd = load_detail(phase, "direct_debit_batches")
@@ -76,7 +90,9 @@ def match(lines, items, ctx=None):
         by_bid[bid].append(acc)
     # receipts by mandate for returns
     by_mand = defaultdict(list)
-    for r in dd[["batch_id", "collection_date", "account_id", "mandate_id", "amt", "item_id"]].itertuples(index=False):
+    full_doc = _full_ar_docs(phase)
+    for r in dd[["batch_id", "collection_date", "account_id", "mandate_id", "amt", "item_id",
+                 "remittance_info"]].itertuples(index=False):
         by_mand[r.mandate_id].append(r)
     rows = []
     for r in lines.itertuples(index=False):
@@ -106,7 +122,7 @@ def match(lines, items, ctx=None):
                 continue
             lim = (pd.Timestamp(r.booking_date) - pd.Timedelta(days=2)).strftime("%Y-%m-%d")
             cands = [x for x in by_mand.get(mm.group(0), []) if x.collection_date <= lim
-                     and abs(x.amt + amt) <= 0.01 and x.item_id]
+                     and abs(x.amt + amt) <= 0.01]
             bids = set(BATCH_RE.findall(blob))
             if bids:
                 c2 = [x for x in cands if x.batch_id in bids]
@@ -114,5 +130,7 @@ def match(lines, items, ctx=None):
             if not cands:
                 continue
             x = max(cands, key=lambda x: x.collection_date)
-            rows.append((r.bank_txn_id, x.item_id, x.amt, "RETURNED", 0.9, "dd_return"))
+            it = x.item_id or full_doc.get((x.account_id[:4], x.remittance_info), "")
+            if it:
+                rows.append((r.bank_txn_id, it, x.amt, "RETURNED", 0.9, "dd_return"))
     return rows

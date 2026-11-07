@@ -270,12 +270,17 @@ def _index(phase, since_days):
 
 def parse_remittances(phase, since_days=45, cache=True, workers=8):
     od = os.path.join(ROOT, "matching", "out", phase)
-    hp, dp = os.path.join(od, "remit_heads.parquet"), os.path.join(od, "remit_docs.parquet")
-    if cache and os.path.exists(hp) and os.path.exists(dp):
-        return pd.read_parquet(hp), pd.read_parquet(dp)
+    hp, dp = os.path.join(od, "k1_remit_heads.parquet"), os.path.join(od, "k1_remit_docs.parquet")
+    ixf = os.path.join(DATA, phase, "remittance_advices", "index.csv")
+    if (cache and os.path.exists(hp) and os.path.exists(dp)
+            and (not os.path.exists(ixf) or os.path.getmtime(hp) > os.path.getmtime(ixf))):
+        H = pd.read_parquet(hp)
+        if {"sum_paid", "total", "payment_ref"} <= set(H.columns):
+            return H, pd.read_parquet(dp)
     t0 = time.time()
     ix = _index(phase, since_days)
-    with ProcessPoolExecutor(workers) as ex:
+    import multiprocessing as mp
+    with ProcessPoolExecutor(workers, mp_context=mp.get_context("fork")) as ex:
         res = list(ex.map(parse_file, [(p, r.format) for p, r in ix], chunksize=64))
     heads, docs = [], []
     for (p, r), (h, ds) in zip(ix, res):
