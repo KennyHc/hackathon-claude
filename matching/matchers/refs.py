@@ -36,6 +36,11 @@ try:  # shared exception rules (classification/exceptions.py), local rules as fa
     from classification.exceptions import explain as xexplain  # noqa: E402
 except Exception:  # pragma: no cover
     xexplain = None
+try:
+    from classification.exceptions import overpayment_plausible  # noqa: E402
+except Exception:  # pragma: no cover
+    def overpayment_plausible(open_, cash):
+        return 0 < cash - open_ <= OVERPAY_MAX * open_
 
 NAME = "refs"
 EPS = 0.011
@@ -390,12 +395,12 @@ class Solver:
                 pos = {iid: k for iid, k in zip(ix.iid[order], order)}
                 rows = [(pos[iid], amt, exc) for iid, amt, exc in res]
                 if (sum(e == "PARTIAL" for _, _, e in rows) > 1
-                        or any(e == "OVERPAYMENT" for _, _, e in rows) and cash - D > OVERPAY_MAX * D):
+                        or any(e == "OVERPAYMENT" for _, _, e in rows) and not overpayment_plausible(D, cash)):
                     rows = None
         if not rows:
             return None
         excs = {e for _, _, e in rows}
-        if strict and not excs <= STRICT_EXC:
+        if strict and (not excs <= STRICT_EXC or any(a < ix.open[k] - 0.011 for k, a, _ in rows)):
             return None
         # a "partial" that is really the remainder of an earlier partial payment we did not see
         if "PARTIAL" in excs and not INSTAL.search(txt):
@@ -431,7 +436,7 @@ class Solver:
         D = self.value(S)
         bd = line.booking_date
         if cash > D + EPS:
-            if len(inv) == 1 and not cns and cash - D <= OVERPAY_MAX * D:
+            if len(inv) == 1 and not cns and overpayment_plausible(D, cash):
                 return [(inv[0], ix.open[inv[0]], "OVERPAYMENT")]
             return None
         short = round(D - cash, 2)
@@ -488,7 +493,10 @@ class Solver:
                 hits.append((ix.issue[k], k, paid))
         if hits:
             _, k, paid = max(hits)
-            return [(j, paid if j == k else ix.open[j], "PARTIAL" if j == k else "") for j in S]
+            # AR, two invoices, one short: in the data this is mostly the remainder of an earlier partial payment
+            # (val: 72 % '' vs 28 % PARTIAL; with 3+ invoices it is always PARTIAL)
+            code = "" if ix.side[k] == "AR" and len(inv) == 2 else "PARTIAL"
+            return [(j, paid if j == k else ix.open[j], code if j == k else "") for j in S]
         return None
 
     def prior_partial(self, line, party, side, x, k):
@@ -618,7 +626,9 @@ class Solver:
             D = self.value(S)
             if exact_cur:
                 return abs(D - cash) <= EPS
-            return 0.965 * D <= cash <= 1.003 * D
+            # converted at our reference rate (no original amount on the line): only a named payer citing its
+            # documents in full is trusted, the band is too wide otherwise
+            return name_ok and not choice and 0.965 * D <= cash <= 1.003 * D
 
         exact = [c for c in combos if match(c[1])]
         if exact:
@@ -634,8 +644,28 @@ class Solver:
         weak_only = not any(kd in STRONG for kd, _, _ in slots)  # only cut / mistyped references
         top_sc = combos[0][0]
         tops = [c for c in combos if c[0] == top_sc]
+        # 0) credit notes the payer netted without naming them (related to a cited invoice, or one CN == difference)
+        if exact_cur and len(tops) == 1 and name_ok:
+            S = set(tops[0][1])
+            diff = round(cash - self.value(S), 2)
+            if diff < -EPS:
+                cn = [k for k in P if k not in S and ix.sign[k] < 0]
+                rel = {ix.alnum[k] for k in S}
+                cr = [k for k in cn if ix.related[k] in rel]
+                one = [k for k in cn if abs(ix.open[k] + diff) < EPS]
+                pick = None
+                if cr and abs(sum(ix.open[k] for k in cr) + diff) < EPS:
+                    pick = cr
+                elif len(one) == 1:
+                    pick = one
+                if pick:
+                    S2 = S | set(pick)
+                    if len({ix.cur[k] for k in S2}) == 1:
+                        fx = ix.cur[next(iter(S2))] != line.currency
+                        return ("complete", top_sc, [(k, ix.open[k], "FX_DIFFERENCE" if fx and ix.sign[k] > 0 else "")
+                                                     for k in S2])
         # 1) strict explanation (discount in terms, withholding, FX): pins the cash to the cent
-        if (name_ok or all_strong) and not (weak_only and not name_ok):
+        if (name_ok or all_strong) and not (weak_only and not name_ok) and (exact_cur or name_ok):
             got = [(c, self.explain(c[1], line, cash, exact_cur, party, strict=True)) for c in tops[:4]]
             got = [(c, r) for c, r in got if r]
             if len(got) == 1:
@@ -652,8 +682,15 @@ class Solver:
             sol = self.complete(S, rest, diff, deep=self.truncated(line, slots))
             if sol is not None:
                 S2 = S | set(sol)
-                if ix.cur[next(iter(S2))] == line.currency and len({ix.cur[k] for k in S2}) == 1:
-                    return ("complete", top_sc, [(k, ix.open[k], "") for k in S2])
+                if len({ix.cur[k] for k in S2}) == 1:
+                    fx = ix.cur[next(iter(S2))] != line.currency
+                    return ("complete", top_sc, [(k, ix.open[k], "FX_DIFFERENCE" if fx and ix.sign[k] > 0 else "")
+                                                 for k in S2])
+            # 2b) credit notes netted AND a precise deduction (discount in terms / late discount / withholding)
+            if len(tops) == 1:
+                rows = self.cn_and_deduction(set(tops[0][1]), P, line, cash, exact_cur, party)
+                if rows:
+                    return ("complete", top_sc, rows)
         # 3) any explanation (overpayment, partial, bank charges) of the single best set -- not when the text is cut
         #    after an unresolved reference fragment (the uncited documents explain the difference)
         if len(tops) > 1 or self.truncated(line, slots):
@@ -662,6 +699,43 @@ class Solver:
         if rows:
             return ("explain", top_sc, rows)
         return None
+
+    def cn_and_deduction(self, S, P, line, cash, exact_cur, party):
+        ix = self.ix
+        cn = [k for k in P if k not in S and ix.sign[k] < 0]
+        if not cn:
+            return None
+        rel = {ix.alnum[k] for k in S}
+        groups = [[k for k in cn if ix.related[k] in rel]]
+        if len(cn) <= 12:
+            groups.append(cn)
+        groups += [[k] for k in cn[:30]]
+        seen, found = set(), []
+        for gr in groups:
+            key = frozenset(gr)
+            if not gr or key in seen:
+                continue
+            seen.add(key)
+            S2 = S | set(gr)
+            if self.value(S2) <= cash + EPS:
+                continue  # documents must exceed the cash: a deduction explains the rest
+            rows = self.explain(S2, line, cash, exact_cur, party, strict=False)
+            if rows and self.precise(rows):
+                found.append(rows)
+        return found[0] if len(found) == 1 else None
+
+    def precise(self, rows):
+        """deductions pinned to the cent: discount, withholding, FX, or a PARTIAL that is exactly a late discount."""
+        ix = self.ix
+        for k, amt, e in rows:
+            if e in STRICT_EXC:
+                continue
+            if e != "PARTIAL":
+                return False
+            tm = self.terms.get(ix.terms[k])
+            if not tm or abs(round(ix.open[k] - amt, 2) - round(tm[0] / 100.0 * ix.total[k], 2)) > 0.011:
+                return False
+        return True
 
     def complete(self, S, rest, diff, deep=False):
         """unique smallest set of the party's other items with signed value == diff."""
