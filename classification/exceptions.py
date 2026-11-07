@@ -31,6 +31,8 @@ from __future__ import annotations
 import bisect
 import os
 import sys
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from fractions import Fraction
 
 import numpy as np
 import pandas as pd
@@ -50,7 +52,8 @@ SEPA_EURO = {"ES", "PT", "FR", "IT", "DE", "NL", "LU", "BE", "AT", "IE", "MT", "
              "LT", "CY", "HR", "MC", "SM", "AD", "VA"}
 CREDIT_TYPES = {"ARC", "APC"}
 FULL_CLEAR_CODES = {"", "SHORT_DISCOUNT", "SHORT_WITHHOLDING", "SHORT_BANK_CHARGES", "FX_DIFFERENCE", "OVERPAYMENT"}
-PARTIAL_FRACTIONS = (0.5, 0.3, 0.7, 0.25, 0.4, 0.6, 1 / 3, 2 / 3, 1 / 6, 0.2, 0.75, 0.8, 0.9, 0.95)
+PARTIAL_FRACTIONS = tuple(Fraction(x) for x in ("1/2", "3/10", "7/10", "1/4", "2/5", "3/5", "1/3", "2/3", "1/6", "1/5",
+                                                  "3/4", "4/5", "9/10", "19/20"))
 CARD_FEE_MAX = 0.03                 # card acquirer fee (net settlement) tolerated on card orders
 ROUND_FRACTIONS = (0.5, 0.3, 0.7, 0.25, 0.75, 1 / 3, 2 / 3, 0.4, 0.6, 0.2, 0.8, 0.1, 0.9, 0.05, 0.95, 0.15, 0.85)
 
@@ -158,6 +161,27 @@ def _cents(x: float) -> int:
     return int(round(x * 100))
 
 
+_CENT = Decimal("0.01")
+
+
+def _dec(x) -> Decimal:
+    """Exact decimal of an amount / rate (via its shortest repr: 0.0125 -> Decimal('0.0125'))."""
+    return x if isinstance(x, Decimal) else Decimal(repr(float(x)))
+
+
+def deduction(total: float, rate) -> float:
+    """Deduction (discount, withholding) = rate x total rounded HALF-UP to the cent, from the cent-exact total
+    (the golden's rounding; Python round() is banker's on floats)."""
+    return float((_dec(round(total, 2)) * _dec(rate)).quantize(_CENT, rounding=ROUND_HALF_UP))
+
+
+def part_of(base: float, frac) -> float:
+    """Partial payment = frac x base TRUNCATED to the cent (the golden's rounding of partial payments)."""
+    f = frac if isinstance(frac, Fraction) else Fraction(repr(float(frac)))
+    q = Fraction(_cents(base)) * f                      # in cents, exact
+    return float((Decimal(q.numerator) / Decimal(q.denominator)).quantize(Decimal(1), rounding=ROUND_DOWN)) / 100
+
+
 def _roundness(frac: float) -> float:
     return min(abs(frac - f) for f in ROUND_FRACTIONS)
 
@@ -194,11 +218,11 @@ def _alt_options(it: dict, booking: str, masters) -> list[tuple[float, str, bool
     if t:
         pct, dd = t
         in_time = bool(booking) and _days_late(it["issue_date"], booking, dd) <= 0
-        for cc in sorted({round(total - round(pct * total, 2), 2), round(total - pct * total, 2)}):
-            out.append((cc, "SHORT_DISCOUNT" if in_time else "PARTIAL", in_time))
+        cc = round(total - deduction(total, pct), 2)
+        out.append((cc, "SHORT_DISCOUNT" if in_time else "PARTIAL", in_time))
     if _party_country(masters).get(it["party_id"], "") in WITHHOLDING_COUNTRIES:
         for r in WITHHOLDING_RATES:
-            out.append((round(total - round(r * total, 2), 2), "SHORT_WITHHOLDING", True))
+            out.append((round(total - deduction(total, r), 2), "SHORT_WITHHOLDING", True))
     return out
 
 
@@ -279,14 +303,15 @@ def _subset_match(alts: list[list[tuple[int, str]]], need: int, tol: int):
 
 
 def _fraction_alts(rows, inv_idx) -> list[list[tuple[int, int, float]]]:
-    """Per invoice: candidate partial payments round(f × open | total) -> (delta_cents, alt_cents, amount)."""
+    """Per invoice: candidate partial payments f × (open | total) truncated to the cent
+    -> (delta_cents, amount)."""
     out = [[] for _ in rows]
     for i in inv_idx:
         op, tot = rows[i]["open"], rows[i]["total"]
         seen = set()
         for f in PARTIAL_FRACTIONS:
             for base in (op, tot):
-                amt = round(f * base, 2)
+                amt = part_of(base, f)
                 if 0.005 < amt < op - 0.005 and amt not in seen:
                     seen.add(amt)
                     out[i].append((_cents(amt) - _cents(op), amt))
@@ -346,7 +371,7 @@ def _snap(amount: float, open_: float, total: float) -> float:
     err = 0.02
     for f in PARTIAL_FRACTIONS:
         for base in (open_, total):
-            c = round(f * base, 2)
+            c = part_of(base, f)
             if c > 0 and abs(c / amount - 1) < err:
                 best, err = c, abs(c / amount - 1)
     return best
