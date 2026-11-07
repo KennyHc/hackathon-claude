@@ -355,7 +355,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display
   <div class="stats" role="list">
     <div class="stat lead" role="listitem"><b data-count="96.79" data-dec="2">96.79</b><span>score on val (Jan–Jun 2025), honest run</span></div>
     <div class="stat" role="listitem"><b data-count="96.91" data-dec="2">96.91</b><span>score on an untouched holdout (Jan–Jun 2024)</span></div>
-    <div class="stat" role="listitem"><b data-count="96.42" data-dec="2">96.42</b><span>LIVE leaderboard, v6 (current best)</span></div>
+    <div class="stat" role="listitem"><b data-count="96.46" data-dec="2">96.46</b><span>LIVE leaderboard, team best (main: new classifier + our pipeline; ours alone 96.42)</span></div>
     <div class="stat" role="listitem"><b data-count="99.7" data-dec="1" data-suf="%">99.7%</b><span>precision of submitted invoice pairs (val and LIVE)</span></div>
     <div class="stat" role="listitem"><b data-count="89" data-dec="0" data-suf="%">89%</b><span>of lines decided by 13 matchers (12 rule-based)</span></div>
     <div class="stat" role="listitem"><b data-count="2" data-dec="0">2</b><span>small learned models (logistic regressions)</span></div>
@@ -1043,11 +1043,11 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display
   <div class="head rv">
     <span class="eyebrow"><b>8</b> · Score progression</span>
     <h2>From 12.72 to 96.79</h2>
-    <p class="answer">The jump came from building every side-file matcher in parallel; the last six points came from exception rules and a second wave of targeted matchers. Moving the UNIDENTIFIED threshold to 0.97 added 0.05, and an afternoon round (remittance FX and exception fixes, the cn_bundles matcher, then the sd_noadv ranker) another 0.38. On LIVE, the current code scores 96.42. The organisers' reference points: about 19 for a naive baseline and about 61 for well-worked rules.</p>
+    <p class="answer">The jump came from building every side-file matcher in parallel; the last six points came from exception rules and a second wave of targeted matchers. Moving the UNIDENTIFIED threshold to 0.97 added 0.05, and an afternoon round (remittance FX and exception fixes, the cn_bundles matcher, then the sd_noadv ranker) another 0.38. On LIVE, our code scores 96.42, and 96.46 on main with a teammate's new classifier on top. The organisers' reference points: about 19 for a naive baseline and about 61 for well-worked rules.</p>
   </div>
   <figure class="panel rv chart" id="progchart">
     <div class="legend"><span><i style="background:var(--s1);border-radius:50%"></i>val (Jan–Jun 2025)</span><span><i style="background:var(--s3);border-radius:50%"></i>untouched holdout</span><span><i style="background:var(--s2);border-radius:50%"></i>LIVE leaderboard</span></div>
-    <div class="scroll-x"><svg viewBox="0 0 820 360" style="min-width:600px" role="img" aria-label="Score by milestone: baseline 12.72, first full pipeline 90.04, UNIDENTIFIED threshold 90.81, second-wave matchers 96.40, leak fixed 96.36, threshold 0.97 96.41, remittance FX and exception fixes 96.46, cn_bundles 96.73, sd_noadv ranker 96.79; holdout 96.91; LIVE v1 93.73, v2 95.58, v3 95.62, v4 96.05, v5 96.34, v6 96.42" id="progsvg"></svg></div>
+    <div class="scroll-x"><svg viewBox="0 0 820 360" style="min-width:600px" role="img" aria-label="Score by milestone: baseline 12.72, first full pipeline 90.04, UNIDENTIFIED threshold 90.81, second-wave matchers 96.40, leak fixed 96.36, threshold 0.97 96.41, remittance FX and exception fixes 96.46, cn_bundles 96.73, sd_noadv ranker 96.79; holdout 96.91; LIVE v1 93.73, v2 95.58, v3 95.62, v4 96.05, v5 96.34, v6 96.42, main 96.46" id="progsvg"></svg></div>
     <div class="scroll-x" style="margin-top:6px"><svg viewBox="0 0 820 215" style="min-width:600px" role="img" aria-label="Zoom of the same scores between 89 and 97" id="zoomsvg"></svg></div>
     <figcaption>Top: the full 0–100 scale. Bottom: the same points zoomed to 89–97. Hover or focus a point for what moved it.</figcaption>
   </figure>
@@ -1212,9 +1212,9 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);display
     {x:172,v:90.81,n:['UNID','p < 0.9'],d:'p_items < 0.9 and a bad fallback dropped'},{x:230,v:96.40,n:['Second','wave'],d:'Duplicates, refunds, refs, subset-sum, half-up rounding, short payments'},
     {x:288,v:96.36,n:['Leak','fixed'],d:'Start state rebuilt from payments before the window only'},{x:346,v:96.41,n:['Thresh.','0.97'],d:'UNIDENTIFIED threshold 0.9 → 0.97, the best value in both windows'},
     {x:404,v:96.46,n:['Remit FX','+ exc.'],d:'Currency-less advices read in their invoices\' currency, voucher discount grace, PARTIAL / bank-charge refinements, ZA01 fixes'},{x:462,v:96.73,n:['CN','bundles'],d:'cn_bundles: cited invoices + their own credit notes on unclaimed lines, unique completion or the cited part only'},{x:520,v:96.79,n:['sd_noadv','ranker'],d:'Learned ranker for bulk customer payments without an advice: claims the likely invoices, trained on the other window only'}];
-  var EXTRA=[{x:586,v:96.91,n:['Holdout','2024 H1'],d:'Untouched window, never tuned on (same v6 code)',c:'h'}];
-  var LIVES=[{x:630,v:93.73,n:['LIVE','v1'],d:'First upload; an older file',c:'l'},{x:664,v:95.58,n:['LIVE','v2'],d:'Second-wave matchers',c:'l'},{x:698,v:95.62,n:['LIVE','v3'],d:'Threshold 0.97',c:'l',lb:1},
-    {x:732,v:96.05,n:['LIVE','v4'],d:'Remittance FX + exception fixes',c:'l'},{x:766,v:96.34,n:['LIVE','v5'],d:'+ cn_bundles',c:'l',lb:1},{x:800,v:96.42,n:['LIVE','v6'],d:'+ sd_noadv ranker; current best',c:'l'}];
+  var EXTRA=[{x:584,v:96.91,n:['Holdout','2024 H1'],d:'Untouched window, never tuned on (same v6 code)',c:'h'}];
+  var LIVES=[{x:622,v:93.73,n:['LIVE','v1'],d:'First upload; an older file',c:'l'},{x:652,v:95.58,n:['LIVE','v2'],d:'Second-wave matchers',c:'l'},{x:682,v:95.62,n:['LIVE','v3'],d:'Threshold 0.97',c:'l',lb:1},
+    {x:712,v:96.05,n:['LIVE','v4'],d:'Remittance FX + exception fixes',c:'l'},{x:742,v:96.34,n:['LIVE','v5'],d:'+ cn_bundles',c:'l',lb:1},{x:772,v:96.42,n:['LIVE','v6'],d:'+ sd_noadv ranker',c:'l'},{x:802,v:96.46,n:['LIVE','main'],d:'Team best: a teammate\'s new classifier on top of v6 (val 96.82)',c:'l',lb:1}];
   function chart(svgId,y0,y1,top,bot,ticks,refs,labels){
     var svg=document.getElementById(svgId); var Y=function(v){return bot-(v-y0)*(bot-top)/(y1-y0);};
     ticks.forEach(function(t){ el('line',{class:'gl',x1:44,x2:808,y1:Y(t),y2:Y(t)},svg); el('text',{class:'ax',x:36,y:Y(t)+4,'text-anchor':'end'},svg,String(t)); });

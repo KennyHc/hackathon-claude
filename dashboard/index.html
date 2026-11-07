@@ -94,14 +94,14 @@
   <header class="mc-head" id="top">
     <div class="mc-eyebrow"><span class="mc-live"><i></i>Talky × Anthropic · Close the Books</span><span>Saturday 7 November 2026 · Madrid</span></div>
     <h1 class="mc-title">Close the Books Mission Control</h1>
-    <p class="mc-take">LIVE v6 scored <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v6" data-fmt="2">—</b>, <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=val_minus_live" data-fmt="2">—</b> points under validation and <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=hold_minus_live" data-fmt="2">—</b> under the untouched holdout. Precision holds (<b data-draw="num" data-source="runs" data-field="precision" data-where="run=LIVE v6" data-fmt="3">—</b> on LIVE vs <b data-draw="num" data-source="runs" data-field="precision" data-where="run=Validation" data-fmt="3">—</b>); the gap is recall (<b data-draw="num" data-source="runs" data-field="recall" data-where="run=LIVE v6" data-fmt="3">—</b> vs <b data-draw="num" data-source="runs" data-field="recall" data-where="run=Validation" data-fmt="3">—</b>): lines we leave unmatched, not wrong matches.</p>
+    <p class="mc-take">The team's best on LIVE is <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE main" data-fmt="2">—</b> (main: a teammate's new classifier plus our sd_noadv). Our own LIVE v6 scored <b data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v6" data-fmt="2">—</b>, <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=val_minus_live" data-fmt="2">—</b> points under validation and <b data-draw="num" data-source="gaps" data-field="value" data-where="measure=hold_minus_live" data-fmt="2">—</b> under the untouched holdout. Precision holds (<b data-draw="num" data-source="runs" data-field="precision" data-where="run=LIVE v6" data-fmt="3">—</b> on LIVE vs <b data-draw="num" data-source="runs" data-field="precision" data-where="run=Validation" data-fmt="3">—</b>); the gap is recall (<b data-draw="num" data-source="runs" data-field="recall" data-where="run=LIVE v6" data-fmt="3">—</b> vs <b data-draw="num" data-source="runs" data-field="recall" data-where="run=Validation" data-fmt="3">—</b>): lines we leave unmatched, not wrong matches.</p>
   </header>
 
   <section class="mc-tiles" aria-label="Headline scores">
     <article class="mc-tile mc-hero mc-reveal">
-      <span class="mc-tlabel">LIVE leaderboard · v6 (best)</span>
-      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v6" data-fmt="2">—</span>
-      <span class="mc-sub"><b class="mc-up" data-draw="num" data-source="gaps" data-field="value" data-where="measure=v6_minus_v5" data-fmt="+2">—</b> vs v5 (<span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v5" data-fmt="2">—</span>) · v4 <span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v4" data-fmt="2">—</span> · Jul–Dec 2025</span>
+      <span class="mc-tlabel">LIVE leaderboard · team best (main)</span>
+      <span class="mc-num" data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE main" data-fmt="2">—</span>
+      <span class="mc-sub"><b class="mc-up" data-draw="num" data-source="gaps" data-field="value" data-where="measure=main_minus_v6" data-fmt="+2">—</b> vs our v6 (<span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v6" data-fmt="2">—</span>) · v5 <span data-draw="num" data-source="runs" data-field="score" data-where="run=LIVE v5" data-fmt="2">—</span> · Jul–Dec 2025</span>
     </article>
     <article class="mc-tile mc-reveal" style="--mc-tone: var(--cds-chart-axis)">
       <span class="mc-tlabel">Validation · tuned on</span>
@@ -134,7 +134,7 @@
     <div class="mc-grid">
       <div class="mc-card mc-reveal">
         <h3>Score components by run</h3>
-        <p class="mc-note">Allocation precision and recall make up allocation F1 (half the score); transaction accuracy is 30 %, exception macro-F1 20 %.</p>
+        <p class="mc-note">Allocation precision and recall make up allocation F1 (half the score); transaction accuracy is 30 %, exception macro-F1 20 %. LIVE main (team best) reported only its total, so it has no dots here.</p>
         <ul class="mc-legend" data-draw="runlegend" data-source="runs"></ul>
         <div class="mc-chart" data-draw="components" data-source="runs" style="min-height: 280px"></div>
       </div>
@@ -223,7 +223,7 @@
     const fmts = { '0': d3.format('.0f'), '2': d3.format('.2f'), '3': d3.format('.3f'), '+2': d3.format('+.2f'), 'int': d3.format(','), 'pct': d3.format('.1%') };
     const where = (s) => (s || '').split('&').filter(Boolean).map((p) => p.split('=').map(decodeURIComponent));
     const pick = (rows, s) => rows.find((r) => where(s).every(([k, v]) => String(r[k]) === v));
-    const runColor = { 'Validation': 0, 'Holdout': 1, 'LIVE v1': null, 'LIVE v2': null, 'LIVE v3': null, 'LIVE v4': null, 'LIVE v5': null, 'LIVE v6': 2 };
+    const runColor = { 'Validation': 0, 'Holdout': 1, 'LIVE v1': null, 'LIVE v2': null, 'LIVE v3': null, 'LIVE v4': null, 'LIVE v5': null, 'LIVE v6': 2, 'LIVE main': 3 };
     const color = (run) => runColor[run] == null ? 'var(--cds-chart-muted)' : dash.colors[runColor[run]];
     const seen = new WeakSet();
     const first = (el) => { const f = !seen.has(el); seen.add(el); return f && motion; };
@@ -259,13 +259,14 @@
   dash.calc('gaps', {
     inputs: ['runs'],
     title: 'Score gaps between runs',
-    description: 'Differences between run scores: validation and holdout minus the latest LIVE upload (v6), and v6 minus v5.',
+    description: 'Differences between run scores: validation and holdout minus the latest LIVE upload with all score parts (v6), v6 minus v5, and the team best (main) minus v6.',
     fn: (runs) => {
       const s = (name) => runs.find((r) => r.run === name).score;
       return [
         { measure: 'val_minus_live', value: +(s('Validation') - s('LIVE v6')).toFixed(2) },
         { measure: 'hold_minus_live', value: +(s('Holdout') - s('LIVE v6')).toFixed(2) },
         { measure: 'v6_minus_v5', value: +(s('LIVE v6') - s('LIVE v5')).toFixed(2) },
+        { measure: 'main_minus_v6', value: +(s('LIVE main') - s('LIVE v6')).toFixed(2) },
       ];
     },
   });
@@ -337,9 +338,10 @@
 <script>
   // Score components: one row per metric, a dot per run on a shared axis.
   dash.draw('components', (el) => {
-    const d = dash.data('runs');
+    const d0 = dash.data('runs');
     el.replaceChildren();
-    if (d.status !== 'ok') { el.textContent = '—'; return; }
+    if (d0.status !== 'ok') { el.textContent = '—'; return; }
+    const d = { ...d0, data: d0.data.filter((r) => r.allocation_f1 != null) };   // LIVE main reported the total only
     const metrics = [['allocation_f1', 'Allocation F1'], ['precision', 'Allocation precision'], ['recall', 'Allocation recall'], ['txn_accuracy', 'Transaction accuracy'], ['exception_macro_f1', 'Exception macro-F1']];
     const W = el.clientWidth || 500, row = 48;
     const svg0 = d3.select(el).append('svg').attr('width', '100%');
