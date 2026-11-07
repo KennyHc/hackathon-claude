@@ -75,6 +75,19 @@ $PY integration/validate.py --phase final || { echo "VALIDATION FAILED — do no
 say "drift vs LIVE"
 $PY integration/drift.py --phase final --ref live || echo ">>> drift flags above: look at them before submitting"
 
+say "add-on: sd_noadv on top (LIVE 96.42 with it vs 96.34 without; the safe file is kept)"
+cp integration/out/final/submission.csv.gz integration/out/final/submission_safe.csv.gz
+cp integration/out/final/methods.parquet integration/out/final/methods_safe.parquet
+if $PY matching/addon.py --phase final --stages sd_noadv \
+   && ALLOC_FILE=allocations_plus.parquet $PY integration/run.py --phase final \
+   && $PY integration/validate.py --phase final; then
+  echo "submission.csv.gz = WITH sd_noadv (fallback: submission_safe.csv.gz)"
+else
+  cp integration/out/final/submission_safe.csv.gz integration/out/final/submission.csv.gz
+  cp integration/out/final/methods_safe.parquet integration/out/final/methods.parquet
+  echo ">>> ADD-ON FAILED: submission.csv.gz = the safe file"
+fi
+
 say "ready"
 ls -la integration/out/final/submission.csv.gz
 cat <<EOF

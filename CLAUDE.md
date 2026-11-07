@@ -6,8 +6,9 @@ reconciliation** hackathon. For every bank line, say which open items it settles
 
 ## What `main` is now
 
-`main` = Kenny's full pipeline v5 (`kenny/full-pipeline` @ 63de44d) plus the LR + LightGBM line classifier from
-`luigi-classifier`. It is the **best version: LIVE 96.38** (Kenny v5 alone: 96.34). On val it scores 96.76 (Kenny v5: 96.73).
+`main` = Kenny's full pipeline v5 + FINAL robustness (`kenny/full-pipeline` @ 6f6b7b5), plus the LR + LightGBM line
+classifier from `luigi-classifier`, plus Kenny's `sd_noadv` ranker add-on (`kenny/ranker`). It is the **best version:
+LIVE 96.46** (classifier without ranker 96.38, Kenny v5 + ranker 96.42, Kenny v5 alone 96.34). On val: 96.82.
 - `BEST.md`: the scores and tags of each version.
 - `PIPELINE.md`: how the pipeline is built and run.
 - `insights.md`: what we learned.
@@ -50,6 +51,8 @@ Phases are defined in `ingestion/lib.py`:
 FINAL: `PY=.venv/bin/python integration/final.sh`.
 - It wipes old `final` artefacts, then runs ingestion, the pipeline, validation and the drift report, and prints the
   submit command.
+- After the safe run it applies the `sd_noadv` add-on (`matching/addon.py`). The file without it is kept as
+  `integration/out/final/submission_safe.csv.gz`, and it is used automatically if the add-on fails.
 - It never submits.
 - Set `PY`: the default `python3` has no LightGBM, and the classifier would fall back to the plain LR.
 
