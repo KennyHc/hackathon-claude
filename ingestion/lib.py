@@ -106,7 +106,7 @@ def golden_train() -> pd.DataFrame:
 
 def open_at(items: pd.DataFrame, golden: pd.DataFrame, txn_dates: pd.Series, cutoff: str) -> pd.Series:
     """Open amount per item at `cutoff`, replaying golden allocations booked before it (RETURNED re-opens)."""
-    g = golden[golden.item_id != ""]
+    g = golden[(golden.item_id != "") & (golden.exception != "DUPLICATE_PAYMENT")]
     g = g[g.bank_txn_id.map(txn_dates) < cutoff]
     delta = pd.Series(np.where(g.exception == "RETURNED", g.amount, -g.amount), index=g.item_id.values).groupby(level=0).sum()
     total = items.set_index("item_id").total_amount
@@ -120,7 +120,8 @@ def open_at_backward(items: pd.DataFrame, golden: pd.DataFrame, txn_dates: pd.Se
     (items paid before TRAIN starts, or never settled by bank, are not open)."""
     oi = read_csv(os.path.join(DATA, "live", "open_items_at_start.csv.gz"))
     base = pd.Series(oi.open_amount.astype(float).values, index=oi.item_id.values)
-    g = golden[golden.item_id != ""]
+    # a DUPLICATE_PAYMENT never reduced the open amount (the item was already settled): don't undo it
+    g = golden[(golden.item_id != "") & (golden.exception != "DUPLICATE_PAYMENT")]
     d = g.bank_txn_id.map(txn_dates)
     g = g[(d >= cutoff) & (d < "2025-07-01")]
     delta = pd.Series(np.where(g.exception == "RETURNED", -g.amount, g.amount), index=g.item_id.values).groupby(level=0).sum()
