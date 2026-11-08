@@ -10,7 +10,7 @@ data.
 | | Starter baseline | **Our pipeline** |
 |---|---|---|
 | FINAL leaderboard (Jan–Jun 2026, unseen) | not submitted | **96.71** |
-| LIVE leaderboard (Jul–Dec 2025) | ≈11.5 | **96.46** |
+| LIVE leaderboard (Jul–Dec 2025) | 11.02 | **96.46** |
 | val (Jan–Jun 2025, local answer key) | 11.22 | **96.83** |
 | Organisers' reference points | naive ≈19, well-worked rules ≈61 | |
 
@@ -243,7 +243,7 @@ That's almost exactly val. The weak segments also landed where val predicted:
 
 | Step | val | LIVE |
 |---|---|---|
-| Starter | 11.22 | ≈11.5 |
+| Starter | 11.22 | 11.02 |
 | First full pipeline (8 parallel matcher agents) | 90.04 | 93.73 (first upload) |
 | Second-wave matchers, exception rules, honest start state | 96.36 | 95.58 |
 | UNIDENTIFIED threshold 0.97 | 96.41 | 95.62 |
