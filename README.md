@@ -1,7 +1,5 @@
 # Close the Books: bank reconciliation (Talky × Anthropic hackathon, 7 Nov 2026)
 
-Team **Overfitters**: four people working with many Claude Code agents in parallel.
-
 🏆 **Winners of the hackathon, among about 80 participants.**
 
 **FINAL score 96.71 / 100**, first on the FINAL board. The organisers' starter scores **11.22** on the same kind of
