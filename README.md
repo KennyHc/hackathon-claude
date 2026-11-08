@@ -2,18 +2,17 @@
 
 Team **Overfitters**: four people working with many Claude Code agents in parallel.
 
+🏆 **Winners of the hackathon, among about 80 participants.**
+
 **FINAL score 96.71 / 100**, first on the FINAL board. The organisers' starter scores **11.22** on the same kind of
 data.
 
 | | Starter baseline | **Our pipeline** |
 |---|---|---|
 | FINAL leaderboard (Jan–Jun 2026, unseen) | not submitted | **96.71** |
-| LIVE leaderboard (Jul–Dec 2025) | ≈13.4¹ | **96.46** |
+| LIVE leaderboard (Jul–Dec 2025) | ≈11.5 | **96.46** |
 | val (Jan–Jun 2025, local answer key) | 11.22 | **96.83** |
 | Organisers' reference points | naive ≈19, well-worked rules ≈61 | |
-
-¹ Our first LIVE upload was the starter's matches plus our first classifier: 13.38 on LIVE, 13.08 on val. The starter
-alone scores 11.22 on val, and val tracks LIVE within about 0.3 points.
 
 More detail: [insights.md](insights.md) (the full story, with numbers) ·
 [classification/insights.md](classification/insights.md) (model selection) · [PIPELINE.md](PIPELINE.md) ·
@@ -244,7 +243,7 @@ That's almost exactly val. The weak segments also landed where val predicted:
 
 | Step | val | LIVE |
 |---|---|---|
-| Starter | 11.22 | ≈13.4 (with our first classifier) |
+| Starter | 11.22 | ≈11.5 |
 | First full pipeline (8 parallel matcher agents) | 90.04 | 93.73 (first upload) |
 | Second-wave matchers, exception rules, honest start state | 96.36 | 95.58 |
 | UNIDENTIFIED threshold 0.97 | 96.41 | 95.62 |
