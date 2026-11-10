@@ -8,8 +8,8 @@
 
 <p align="center">🏆 <b>1st of 16 teams</b> (about 80 participants). Our pipeline matches ~200k bank lines to invoices<br>
 and scored <b>96.71 / 100 on the unseen FINAL set</b>. The organisers' starter scores 11.22.<br>
-We held first place for <b>6 h 04 min</b> (64 % of the competition): 12:39–18:00 on LIVE, then 18:47 to the close on FINAL.<br>
-We were only ever first or last on the board, never in between.</p>
+We went from <b>last to first in one submission</b> (score 0 → 93.73 at 12:39) and held first place for <b>6 h 04 min</b><br>
+(64 % of the competition: 12:39–18:00 on LIVE, then 18:47 to the close on FINAL), never anywhere in between.</p>
 
 | | Starter baseline | **Our pipeline** |
 |---|---|---|
