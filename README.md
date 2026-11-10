@@ -1,9 +1,15 @@
-# Close the Books: bank reconciliation (Talky × Anthropic hackathon, 7 Nov 2026)
+<p align="center">
+  <img src="assets/claude.svg" alt="Claude" height="64">
+</p>
 
-🏆 **Winners of the hackathon, among about 80 participants.**
+<h1 align="center">Close the Books</h1>
 
-**FINAL score 96.71 / 100**, first on the FINAL board. The organisers' starter scores **11.22** on the same kind of
-data.
+<p align="center"><b>Bank reconciliation · Talky × Anthropic hackathon · Madrid, 7 Nov 2026</b></p>
+
+<p align="center">🏆 <b>1st of 16 teams</b> (about 80 participants). Our pipeline matches ~200k bank lines to invoices<br>
+and scored <b>96.71 / 100 on the unseen FINAL set</b>. The organisers' starter scores 11.22.<br>
+We held first place for <b>6 h 04 min</b> (64 % of the competition): 12:39–18:00 on LIVE, then 18:47 to the close on FINAL.<br>
+We were only ever first or last on the board, never in between.</p>
 
 | | Starter baseline | **Our pipeline** |
 |---|---|---|
