@@ -2,7 +2,7 @@
   <img src="assets/claude.svg" alt="Claude" height="64">
 </p>
 
-<h1 align="center">Talky × Anthropic hackathon</h1>
+<h1 align="center">Talky × Claude Community hackathon</h1>
 
 <p align="center"><b>Bank reconciliation · Close The Books · Madrid, 7 Nov 2026</b></p>
 
