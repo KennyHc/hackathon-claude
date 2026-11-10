@@ -2,9 +2,9 @@
   <img src="assets/claude.svg" alt="Claude" height="64">
 </p>
 
-<h1 align="center">Close the Books</h1>
+<h1 align="center">Talky × Anthropic hackathon</h1>
 
-<p align="center"><b>Bank reconciliation · Talky × Anthropic hackathon · Madrid, 7 Nov 2026</b></p>
+<p align="center"><b>Bank reconciliation · Close The Books · Madrid, 7 Nov 2026</b></p>
 
 <p align="center">🏆 <b>1st of 16 teams</b> (about 80 participants). Our pipeline matches ~200k bank lines to invoices<br>
 and scored <b>96.71 / 100 on the unseen FINAL set</b>. The organisers' starter scores 11.22.<br>
