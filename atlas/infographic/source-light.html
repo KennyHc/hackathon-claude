@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en" class="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080">
+<title>Overfitters Win</title>
+<style>
+  :root {
+    --serif: "New York", ui-serif, "Iowan Old Style", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    --accent: #D97757;
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  :root.dark {
+    --bg: #121211;
+    --ink: #F4F0E8;
+    --soft: #CFC9BD;
+    --muted: #9A958A;
+    --hair: rgba(244, 240, 232, .16);
+    --axis: rgba(244, 240, 232, .18);
+    --track: rgba(244, 240, 232, .10);
+    --accent-text: #D97757;
+    --glow-a: rgba(217, 119, 87, .16);
+    --glow-b: rgba(217, 119, 87, .07);
+    --chip: rgba(244, 240, 232, .05);
+    --s1: #A44A2A; --s2: #D97757; --s3: #EDA586; --s4: #F6D3C2;
+  }
+  :root.light {
+    --bg: #F8F5EF;
+    --ink: #141413;
+    --soft: #3B3934;
+    --muted: #67635B;
+    --hair: rgba(20, 20, 19, .16);
+    --axis: rgba(20, 20, 19, .20);
+    --track: rgba(20, 20, 19, .09);
+    --accent-text: #AD4E2B;
+    --glow-a: rgba(217, 119, 87, .13);
+    --glow-b: rgba(217, 119, 87, .06);
+    --chip: rgba(20, 20, 19, .035);
+    --s1: #9A4424; --s2: #D97757; --s3: #E9A283; --s4: #F0C4AE;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1350px; background: var(--bg); }
+  body {
+    overflow: hidden; color: var(--ink); font-family: var(--sans); font-size: 24px; line-height: 1.3;
+    -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(720px 520px at 92% -4%, var(--glow-a), transparent 70%),
+      radial-gradient(600px 500px at -10% 108%, var(--glow-b), transparent 70%),
+      var(--bg);
+  }
+  .page { width: 1080px; height: 1350px; padding: 58px 80px 44px; display: flex; flex-direction: column; }
+  .gap { flex: 1 1 0; min-height: 20px; }
+
+  .label { font-size: 22px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--accent-text); }
+  .head { display: flex; justify-content: space-between; align-items: baseline; padding-top: 18px; margin-bottom: 18px;
+    border-top: 1px solid var(--hair); }
+  .head .aside { font-size: 22px; color: var(--muted); letter-spacing: .02em; }
+
+  /* Header */
+  .top { display: flex; align-items: center; gap: 30px; }
+  .trophy { width: 118px; height: 118px; flex: none; margin-left: -10px; }
+  .kicker { display: flex; align-items: center; font-size: 22px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  .kicker .cmark { width: 32px; height: 32px; margin: 0 10px 0 2px; flex: none; }
+  h1 { font-family: var(--serif); font-weight: 400; font-size: 88px; line-height: .98; letter-spacing: -.025em; margin-top: 6px; }
+  h1 em { font-style: normal; color: var(--accent); }
+  .sub { margin-top: 18px; font-size: 26px; color: var(--soft); }
+  .sub b { color: var(--ink); font-weight: 600; }
+  .sub .dot { color: var(--accent); padding: 0 10px; }
+
+  /* Result */
+  .result { display: flex; align-items: flex-end; justify-content: space-between; }
+  .hero .num { font-family: var(--serif); font-weight: 400; font-size: 138px; line-height: .8; letter-spacing: -.04em; color: var(--accent); }
+  .hero .cap { margin-top: 20px; font-size: 24px; color: var(--soft); }
+  .hero .cap b { color: var(--ink); font-weight: 600; }
+  .bars { width: 420px; display: flex; flex-direction: column; gap: 10px; padding-bottom: 4px; }
+  .bar .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .bar .name { font-size: 22px; color: var(--muted); }
+  .bar .val { font-family: var(--serif); font-size: 32px; line-height: 1; font-variant-numeric: tabular-nums; }
+  .bar .track { height: 4px; background: var(--track); margin-top: 8px; border-radius: 2px; }
+  .bar .fill { height: 100%; border-radius: 2px; }
+  .score-note { margin-top: 22px; font-size: 22px; color: var(--muted); }
+  .score-note b { color: var(--soft); font-weight: 600; }
+
+  /* Bank-line flow */
+  .task { font-size: 24px; color: var(--soft); }
+  .task b { color: var(--ink); font-weight: 600; }
+  .sample-row { display: flex; align-items: center; gap: 22px; }
+  .sample { font-family: var(--mono); font-size: 22px; letter-spacing: .01em; padding: 9px 16px; border: 1px solid var(--hair);
+    border-radius: 6px; background: var(--chip); color: var(--ink); white-space: nowrap; }
+  .sample-cap { font-size: 22px; color: var(--muted); line-height: 1.3; }
+  .split { display: flex; gap: 3px; height: 14px; margin-top: 20px; }
+  .split div { min-width: 0; }
+  .split div:first-child { border-radius: 7px 0 0 7px; }
+  .split div:last-child { border-radius: 0 7px 7px 0; }
+  .split-cap { font-size: 22px; color: var(--muted); margin-top: 10px; }
+  .legend { display: grid; grid-template-columns: 1.36fr 1.2fr 1fr 1.04fr; margin-top: 18px; }
+  .lg { padding: 0 16px; border-left: 1px solid var(--hair); }
+  .lg:first-child { padding-left: 0; border-left: 0; }
+  .lg:last-child { padding-right: 0; }
+  .lg .sh { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 34px; line-height: 1; white-space: nowrap; }
+  .lg .sh small { font-family: var(--sans); font-size: 22px; font-weight: 600; color: var(--accent-text); margin-left: 2px; }
+  .lg .sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+  .lg .t { font-size: 24px; font-weight: 600; margin-top: 6px; }
+  .lg .d { font-size: 22px; color: var(--muted); line-height: 1.3; margin-top: 2px; }
+  .lg .p { font-size: 22px; color: var(--accent-text); margin-top: 6px; font-weight: 600; }
+  .exc { margin-top: 16px; font-size: 22px; color: var(--soft); display: flex; justify-content: space-between; gap: 16px; white-space: nowrap; }
+  .exc .cap { color: var(--muted); }
+  .head .key { color: var(--accent-text); font-weight: 600; }
+  .exc b { color: var(--ink); font-weight: 600; }
+  .quote { margin-top: 18px; display: flex; align-items: baseline; justify-content: space-between; gap: 24px; }
+  .quote q { font-family: var(--serif); font-style: italic; font-size: 32px; line-height: 1.15; quotes: "“" "”"; color: var(--ink); }
+  .quote .stat { font-size: 22px; color: var(--muted); white-space: nowrap; text-align: right; line-height: 1.35; }
+  .quote .stat b { color: var(--ink); font-weight: 600; }
+  .built { font-size: 22px; color: var(--muted); margin-bottom: 14px; }
+  .built b { color: var(--soft); font-weight: 600; }
+
+  /* Leaderboard */
+  .big-stat { font-family: var(--serif); font-size: 40px; line-height: 1; color: var(--accent); white-space: nowrap; }
+  .big-stat span { font-family: var(--sans); font-size: 22px; color: var(--muted); margin-left: 6px; }
+  .lb { display: block; }
+
+  footer { display: flex; justify-content: space-between; align-items: center; padding-top: 20px;
+    border-top: 1px solid var(--hair); font-size: 22px; color: var(--muted); letter-spacing: .02em; }
+  footer .made { display: flex; align-items: center; gap: 10px; color: var(--soft); }
+  footer svg { width: 24px; height: 24px; flex: none; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="top">
+      <svg class="trophy" viewBox="0 0 64 64" aria-label="Trophy">
+        <defs>
+          <linearGradient id="tg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#F6C2A8"/>
+            <stop offset=".5" stop-color="#D97757"/>
+            <stop offset="1" stop-color="#9E4729"/>
+          </linearGradient>
+        </defs>
+        <path d="M17 13H9.5c0 9.5 3.6 14.6 10.8 16.2" fill="none" stroke="url(#tg)" stroke-width="3" stroke-linecap="round"/>
+        <path d="M47 13h7.5c0 9.5-3.6 14.6-10.8 16.2" fill="none" stroke="url(#tg)" stroke-width="3" stroke-linecap="round"/>
+        <path d="M15.5 7.5h33v13.5c0 10.6-7.3 18-16.5 18s-16.5-7.4-16.5-18z" fill="url(#tg)"/>
+        <path d="M29 38.8h6l1.2 7.7h-8.4z" fill="url(#tg)"/>
+        <rect x="22" y="46.5" width="20" height="3.6" rx="1" fill="url(#tg)"/>
+        <rect x="17.5" y="51.4" width="29" height="6.4" rx="1.6" fill="url(#tg)"/>
+        <path d="M20.5 11.5v9c0 4.6 1.7 8.4 4.6 10.8" fill="none" stroke="#FFFFFF" stroke-opacity=".35" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="kicker">Talky ×&nbsp;<svg class="cmark" viewBox="0 0 24 24" role="img" aria-label="Claude"><path fill="#D97757" d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg>Claude Community · Madrid · 7 Nov 2026</div>
+        <h1>1st of 16 teams<em>.</em></h1>
+      </div>
+    </div>
+    <div class="sub"><b>Team Overfitters</b><span class="dot">·</span>“Close the Books” bank reconciliation<span class="dot">·</span>~80 participants</div>
+  </header>
+
+  <div class="gap"></div>
+
+  <section>
+    <div class="head"><div class="label">Result</div><div class="aside">Score = 50% allocation F1 · 30% transaction accuracy · 20% exception F1</div></div>
+    <div class="result">
+      <div class="hero">
+        <div class="num">96.71</div>
+        <div class="cap"><b>out of 100</b> on the unseen FINAL set</div>
+      </div>
+      <div class="bars">
+        <div class="bar"><div class="row"><span class="name">FINAL, unseen</span><span class="val" style="color:var(--accent)">96.71</span></div><div class="track"><div class="fill" style="width:96.71%;background:var(--accent)"></div></div></div>
+        <div class="bar"><div class="row"><span class="name">LIVE leaderboard</span><span class="val">96.46</span></div><div class="track"><div class="fill" style="width:96.46%;background:var(--ink)"></div></div></div>
+        <div class="bar"><div class="row"><span class="name">Organisers’ starter</span><span class="val" style="color:var(--muted)">11.22</span></div><div class="track"><div class="fill" style="width:11.22%;background:var(--muted)"></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="gap"></div>
+
+  <section>
+    <div class="head"><div class="label">How we matched every payment</div><div class="aside">share of lines · <span class="key">% matched right</span></div></div>
+    <div class="task"><b>The task:</b> for each bank line, find the invoices it pays, or say what it is.</div>
+    <!-- val run, insights.md §2.1: 83,847 / 89,550 / 3,480 / 23,110 of 199,987 lines -->
+    <div class="split">
+      <div style="flex: 83847 1 0; background: var(--s1)"></div>
+      <div style="flex: 89550 1 0; background: var(--s2)"></div>
+      <div style="flex: 3480 1 0; background: var(--s3)"></div>
+      <div style="flex: 23110 1 0; background: var(--s4)"></div>
+    </div>
+    <div class="legend">
+      <div class="lg"><div class="sh"><span class="sw" style="background:var(--s1)"></span>42 %<small>99.6–100 %</small></div><div class="t">Payment files</div><div class="d">a remittance advice, card or cheque batch names the invoices</div></div>
+      <div class="lg"><div class="sh"><span class="sw" style="background:var(--s2)"></span>45 %<small>98–99.5 %</small></div><div class="t">Text &amp; amounts</div><div class="d">invoice number in the text, or invoices that sum to the payment</div></div>
+      <div class="lg"><div class="sh"><span class="sw" style="background:var(--s3)"></span>2 %<small>98–100 %</small></div><div class="t">Edge cases</div><div class="d">short payments, refunds, invoices paid twice</div></div>
+      <div class="lg"><div class="sh"><span class="sw" style="background:var(--s4)"></span>12 %</div><div class="t">No invoice</div><div class="d">ML model picks one of 21 labels: fees, payroll, tax…</div></div>
+    </div>
+    <div class="exc"><span><b>+ flags for anomalies:</b> partial payment, FX gap, discount…</span><span class="cap">199,987 lines, Jan–Jun 2025 test run</span></div>
+    <div class="quote">
+      <q>A wrong match costs more than a missing one.</q>
+      <div class="stat"><b>99.6 %</b> of matches right<br><b>93.0 %</b> of matches found</div>
+    </div>
+  </section>
+
+  <div class="gap"></div>
+
+  <section>
+    <div class="head"><div class="label">Leaderboard</div><div class="big-stat">6 h 04 min<span>in first place</span></div></div>
+    <!-- 12:00 → 19:30 = 450 min over 920 px: 12:39 → 80, 18:00 → 736, 18:47 → 832 -->
+    <svg class="lb" width="920" height="108" viewBox="0 0 920 108" aria-label="Time in first place">
+      <line x1="0" y1="41" x2="920" y2="41" style="stroke:var(--axis)" stroke-width="1"/>
+      <rect x="80" y="36" width="656" height="10" rx="5" fill="#D97757"/>
+      <rect x="832" y="36" width="88" height="10" rx="5" fill="#D97757"/>
+      <g style="stroke:var(--ink)" stroke-width="1.5"><line x1="80" y1="30" x2="80" y2="52"/><line x1="736" y1="30" x2="736" y2="52"/><line x1="832" y1="30" x2="832" y2="52"/></g>
+      <g font-family="-apple-system, Helvetica Neue, Arial, sans-serif" font-size="22">
+        <text x="408" y="22" text-anchor="middle" style="fill:var(--muted)">first place until the LIVE board closed</text>
+        <text x="920" y="22" text-anchor="end" style="fill:var(--muted)">back on top until 19:30</text>
+        <text x="80" y="77" style="fill:var(--ink)" font-weight="600">12:39</text>
+        <text x="736" y="77" text-anchor="end" style="fill:var(--ink)" font-weight="600">18:00</text>
+        <text x="832" y="77" style="fill:var(--ink)" font-weight="600">18:47</text>
+        <text x="80" y="105" style="fill:var(--soft)">0 → 93.73: last to first in one submission</text>
+        <text x="784" y="105" text-anchor="middle" style="fill:var(--muted)">FINAL reset</text>
+      </g>
+    </svg>
+  </section>
+
+  <div class="gap"></div>
+
+  <div class="built"><b>Built by 4 people on Claude Code:</b> master → nested sessions → 4–8 parallel subagents</div>
+  <footer>
+    <div>github.com/KennyHc/hackathon-claude</div>
+    <div class="made"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#D97757" d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg>Claude Code</div>
+  </footer>
+</div>
+</body>
+</html>
