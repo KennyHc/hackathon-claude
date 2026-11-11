@@ -3,20 +3,25 @@
 A one-page visual briefing on the hackathon dataset for the team (and the project video): the task, phases and drift,
 how the files connect, where the score points are, exceptions, items per line, entities and formats.
 
-- **View:** open `atlas/index.html` in a browser (self-contained, ~75 KB; fonts from Google Fonts).
-  Published copy: https://claude.ai/artifact/ACHuugFCU13rUYNaWD4m29 (private; ask Kenny to share).
+- **Live:** https://kennyhc.github.io/hackathon-claude/atlas/ (GitHub Pages, `gh-pages` branch: a copy of `index.html`
+  and `og.png`). Locally: open `atlas/index.html` in a browser (self-contained, ~110 KB; fonts from Google Fonts).
 - **Glossary:** 73 finance, banking and scoring terms, defined at the end of the page; every occurrence in the text has a dotted underline with the definition on hover/tap.
-- **Every number is computed from `data/`.** Only FINAL's ~220k lines is the organisers' announced figure.
+- **Every number is computed from `data/`.** FINAL figures come from the FINAL input files (no answers); the results
+  (96.71, per-case-type accuracy) come from the official leaderboard breakdown and `insights.md`.
   The "LIVE-like window" is TRAIN bank lines booked 2025-01-01 → 2025-06-30 (199,987 lines, 735,474 pairs).
 
 ## Rebuild
 
 ```bash
 python3 atlas/compute.py   # needs data/ incl. data/cache/*.parquet; writes atlas/agg.json (~1 min)
-python3 atlas/build.py     # injects agg.json into atlas.src.html -> atlas/index.html
+python3 atlas/compute_final.py   # FINAL inputs only -> atlas/agg_final.json (~10 s)
+python3 atlas/build.py     # injects both into atlas.src.html -> atlas/index.html (head above <!--/HEAD-->)
 ```
 
-`agg.json` is committed so `build.py` works without the data.
+`agg.json` and `agg_final.json` are committed so `build.py` works without the data. `og.png` (the 1200×630 link
+preview) is a screenshot of `og.html` at 1200×630.
+
+**Publish:** copy `index.html` and `og.png` to `atlas/` on the `gh-pages` branch and push.
 
 ## Takeaways
 
