@@ -32,3 +32,8 @@ https://kennyhc.github.io/hackathon-claude/guide/. It is hand-written HTML with 
 1. Remittance advices + collection batches: 4 % of lines, 38 % of (line, item) pairs (≈ 20 of 100 points).
 2. Customer transfers (≈ 27 pts) and supplier payments (≈ 23 pts) are still the biggest block; `ar_ref_noise` alone ≈ 12.7.
 3. Exception macro-F1 weighs every code equally: 171 `SHORT_BANK_CHARGES` rows = 15,793 `FX_DIFFERENCE` rows = 2 points each.
+
+**Infographic** (`infographic/`): the one-page LinkedIn summary (1080×1350, shown at 2×), live at
+https://kennyhc.github.io/hackathon-claude/infographic/. `index.html` shows `infographic-light.png` or `-dark.png` by
+colour scheme; `source-*.html` are the HTML sources the PNGs were rendered from. Publish by copying `index.html` and both
+PNGs to `infographic/` on the `gh-pages` branch.
