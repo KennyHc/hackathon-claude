@@ -23,6 +23,10 @@ preview) is a screenshot of `og.html` at 1200×630.
 
 **Publish:** copy `index.html` and `og.png` to `atlas/` on the `gh-pages` branch and push.
 
+**Solution guide** (`guide/`): a companion page on how the pipeline works (matchers, classifier, ranker, FINAL day), live at
+https://kennyhc.github.io/hackathon-claude/guide/. It is hand-written HTML with no build step: edit `guide/index.html`;
+`guide/og.html` is the source of `guide/og.png`. Publish by copying both to `guide/` on the `gh-pages` branch.
+
 ## Takeaways
 
 1. Remittance advices + collection batches: 4 % of lines, 38 % of (line, item) pairs (≈ 20 of 100 points).

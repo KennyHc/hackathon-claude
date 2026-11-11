@@ -384,7 +384,7 @@ footer .btn{margin-top:0}
   <div class="result rv" style="--d:.12s">
     <span class="medal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v5a5 5 0 0 1-10 0V3Z" fill="var(--f-batches)"/><path d="M7 5H4v1.5A3.5 3.5 0 0 0 7.5 10M17 5h3v1.5A3.5 3.5 0 0 1 16.5 10" fill="none" stroke="var(--f-batches)" stroke-width="1.6"/><path d="M10.5 13h3v3.5h-3zM8 17.5h8V21H8z" fill="var(--f-batches)"/></svg>1st of 16 teams</span>
     <span>Team <b>Overfitters</b> · <b>96.71</b> / 100 on the unseen FINAL set (organisers' starter: 11.22)</span>
-    <a href="https://github.com/KennyHc/hackathon-claude">Code and write-up on GitHub →</a>
+    <span style="margin-left:auto;display:flex;flex-wrap:wrap;gap:6px 16px"><a href="https://kennyhc.github.io/hackathon-claude/guide/" style="margin-left:0">How we solved it →</a><a href="https://github.com/KennyHc/hackathon-claude" style="margin-left:0">Code on GitHub →</a></span>
   </div>
   <div class="stats rv" style="--d:.15s" id="stats">
     <div class="stat"><b>1.49 M</b><span>TRAIN bank lines, Jul 2021 → Jun 2025</span></div>
@@ -583,7 +583,7 @@ footer .btn{margin-top:0}
       <div class="nm">Invoices minus a credit note<small>ar_1toN_credit_note</small></div><div class="r">76.7 %</div><div class="r">75.9 %</div><div class="why">several invoice + credit-note sets fit the amount</div>
       <div class="nm">Several lines ↔ several invoices<small>ar_n_to_m</small></div><div class="r">72.6 %</div><div class="r">72.5 %</div><div class="why">ambiguous by design; we leave it rather than guess</div>
     </div>
-    <p class="note" style="margin-top:12px">“·” = not in the official FINAL breakdown. Overall: <b class="ink">96.71</b> on FINAL, allocation precision 99.6 %, recall 93.0 %. Full story in <a href="https://github.com/KennyHc/hackathon-claude/blob/main/insights.md">insights.md</a>.</p>
+    <p class="note" style="margin-top:12px">“·” = not in the official FINAL breakdown. Overall: <b class="ink">96.71</b> on FINAL, allocation precision 99.6 %, recall 93.0 %. How each matcher works: <a href="https://kennyhc.github.io/hackathon-claude/guide/">the solution guide</a>. Full story in <a href="https://github.com/KennyHc/hackathon-claude/blob/main/insights.md">insights.md</a>.</p>
   </div>
 </section>
 
@@ -663,7 +663,7 @@ footer .btn{margin-top:0}
 
 <footer>
   <div><b class="ink">How these numbers were made.</b> Every figure is counted from the hackathon data. The LIVE-like window is TRAIN bank lines booked 2025-01-01 → 2025-06-30, joined to the answer key (<code>golden_allocations</code>). FINAL figures come from the FINAL input files, which carry no answers. Family groupings and plain-language names are ours; the codes in grey are the real <code>segment</code> values. “≈ points” is an upper bound that ignores precision and the exception part. Results come from the official leaderboard breakdown and our write-up.</div>
-  <div class="actions"><span>Made by team <b class="ink">Overfitters</b> (1st of 16) with Claude Code.</span><a href="https://github.com/KennyHc/hackathon-claude">Repository</a><a href="https://github.com/KennyHc/hackathon-claude/blob/main/insights.md">Full write-up</a><button class="btn" id="copylink" type="button">Copy link</button></div>
+  <div class="actions"><span>Made by team <b class="ink">Overfitters</b> (1st of 16) with Claude Code.</span><a href="https://kennyhc.github.io/hackathon-claude/guide/">How we solved it</a><a href="https://github.com/KennyHc/hackathon-claude">Repository</a><a href="https://github.com/KennyHc/hackathon-claude/blob/main/insights.md">Full write-up</a><button class="btn" id="copylink" type="button">Copy link</button></div>
 </footer>
 </div>
 <div id="tip" role="tooltip"></div>
